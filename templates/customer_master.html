@@ -1,0 +1,582 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Master - Account Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="fas fa-users me-2"></i>Customer Master</h1>
+            <p class="text-muted">Manage customer information and Account details</p>
+        </div>
+    </div>
+
+    <!-- Customer List Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-list me-2"></i>Customer List</h5>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="filterBtn">
+                            <i class="fas fa-filter me-1"></i>Filters
+                        </button>
+                        {% if current_user.role in ['admin', 'data_entry'] %}
+                        <button type="button" class="btn btn-primary" id="addCustomerBtn">
+                            <i class="fas fa-plus me-2"></i>Add Customer
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Advanced Filters (Initially Hidden) -->
+                <div class="card-body border-bottom bg-light" id="filterSection" style="display: none;">
+                    <form id="filterForm" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="filterStatus" class="form-label">Status</label>
+                            <select class="form-select form-select-sm" id="filterStatus">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filterInterestType" class="form-label">Interest Type</label>
+                            <select class="form-select form-select-sm" id="filterInterestType">
+                                <option value="">All Types</option>
+                                <option value="simple">Simple Interest</option>
+                                <option value="compound">Compound Interest</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filterTDS" class="form-label">TDS</label>
+                            <select class="form-select form-select-sm" id="filterTDS">
+                                <option value="">All</option>
+                                <option value="yes">TDS Applicable</option>
+                                <option value="no">No TDS</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filterDateRange" class="form-label">Date Range</label>
+                            <select class="form-select form-select-sm" id="filterDateRange">
+                                <option value="">All Dates</option>
+                                <option value="last30">Last 30 Days</option>
+                                <option value="last90">Last 90 Days</option>
+                                <option value="thisYear">This Year</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-secondary btn-sm" id="clearFilters">
+                                <i class="fas fa-times me-1"></i>Clear Filters
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm" id="applyFilters">
+                                <i class="fas fa-check me-1"></i>Apply Filters
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Always show the table structure to prevent column count issues -->
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="customersTable">
+                            <thead>
+                                <tr>
+                                    <th>ICL No</th>
+                                    <th>Customer Name</th>
+                                    <th>Contact</th>
+                                    <th class="currency">Annual Rate</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th class="currency">Current Balance</th>
+                                    <th>Interest Type</th>
+                                    <th>TDS</th>
+                                    <th>Status</th>
+                                    <th class="no-sort">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if customers %}
+                                    {% for customer in customers %}
+                                    <tr data-customer-id="{{ customer.id }}">
+                                        <td class="fw-bold">{{ customer.icl_no }}</td>
+                                        <td><a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
+                                                   class="text-decoration-none" title="View Profile">
+                                                    {{ customer.name }}
+                                                </a></td>
+                                        <td>{{ customer.contact_details or '-' }}</td>
+                                        <td class="percentage">{{ customer.get_safe_annual_rate() }}%</td>
+                                        <td>{{ customer.icl_start_date.strftime('%d-%m-%Y') if customer.icl_start_date else '-' }}</td>
+                                        <td>{{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else '-' }}</td>
+                                        <td class="currency">
+                                            {% set balance = customer.get_current_balance() %}
+                                            {% if balance > 0 %}
+                                                <span class="transaction-positive">{{ balance|safe_currency }}</span>
+                                            {% elif balance < 0 %}
+                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
+                                            {% else %}
+                                                <span class="transaction-neutral">{{ balance|safe_currency }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'info' if customer.interest_type == 'compound' else 'secondary' }}">
+                                                {{ customer.interest_type.title() }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if customer.tds_applicable %}
+                                                <span class="badge bg-warning">TDS</span>
+                                            {% else %}
+                                                <span class="badge bg-light text-dark">No TDS</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if customer.is_active %}
+                                                <span class="badge bg-success">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Inactive</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
+                                                   class="btn btn-outline-primary" title="View Profile">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                {% if current_user.role in ['admin', 'data_entry'] %}
+                                                <a href="{{ url_for('customer_master') }}?edit={{ customer.id }}" 
+                                                   class="btn btn-outline-warning" title="Edit Customer">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                <a href="{{ url_for('transactions', customer_id=customer.id) }}" 
+                                                   class="btn btn-outline-success" title="Transactions">
+                                                    <i class="fas fa-exchange-alt"></i>
+                                                </a>
+                                                {% endif %}
+                                                {% if current_user.role == 'admin' %}
+                                                <button class="btn btn-outline-danger" 
+                                                        onclick="confirmDelete({{ customer.id }}, '{{ customer.name }}')" title="Delete Customer">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <!-- Empty state row with proper column count -->
+                                    <tr>
+                                        <td colspan="11" class="text-center py-5">
+                                            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                                            <h5 class="text-muted">No customers found</h5>
+                                            <p class="text-muted">Start by adding your first customer to the system.</p>
+                                            {% if current_user.role in ['admin', 'data_entry'] %}
+                                            <button type="button" class="btn btn-primary" id="addCustomerBtnEmpty">
+                                                <i class="fas fa-plus me-2"></i>Add First Customer
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Customer Modal -->
+    <div class="modal fade" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addCustomerModalLabel">
+                        <i class="fas fa-plus me-2"></i>Add New Customer
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="POST" id="customerForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="icl_no" class="form-label">ICL No <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="icl_no" name="icl_no" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">Customer Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="name" name="name" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Address</label>
+                            <textarea class="form-control" id="address" name="address" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="contact_details" class="form-label">Contact Details</label>
+                            <input type="text" class="form-control" id="contact_details" name="contact_details">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="annual_rate" class="form-label">Annual Rate (%) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="annual_rate" name="annual_rate" 
+                                           step="0.01" min="0" max="100" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="icl_start_date" class="form-label">ICL Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="icl_start_date" name="icl_start_date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="icl_end_date" class="form-label">ICL End Date</label>
+                                    <input type="date" class="form-control" id="icl_end_date" name="icl_end_date">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="icl_extension" class="form-label">ICL Extension</label>
+                            <input type="text" class="form-control" id="icl_extension" name="icl_extension">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="tds_applicable" name="tds_applicable">
+                                        <label class="form-check-label" for="tds_applicable">
+                                            TDS Applicable
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3" id="tds_percentage_group" style="display: none;">
+                                    <label for="tds_percentage" class="form-label">TDS Percentage (%)</label>
+                                    <input type="number" class="form-control" id="tds_percentage" name="tds_percentage" step="0.01" min="0" max="100">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="interest_type" class="form-label">Interest Type</label>
+                                    <select class="form-select" id="interest_type" name="interest_type">
+                                        <option value="simple">Simple Interest</option>
+                                        <option value="compound">Compound Interest</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3" id="compound_frequency_group" style="display: none;">
+                                    <label for="compound_frequency" class="form-label">Compound Frequency</label>
+                                    <select class="form-select" id="compound_frequency" name="compound_frequency">
+                                        <option value="">Select Frequency</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="quarterly">Quarterly</option>
+                                        <option value="yearly">Yearly</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3" id="first_compounding_date_group" style="display: none;">
+                            <label for="first_compounding_date" class="form-label">First Compounding Date</label>
+                            <input type="date" class="form-control" id="first_compounding_date" name="first_compounding_date">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="submit" form="customerForm" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Customer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Form (shown when edit mode is active) -->
+    {% if edit_mode and customer %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-edit me-2"></i>Edit Customer: {{ customer.name }}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('edit_customer', customer_id=customer.id) }}">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit_icl_no" class="form-label">ICL No <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="edit_icl_no" name="icl_no" value="{{ customer.icl_no }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit_name" class="form-label">Customer Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="edit_name" name="name" value="{{ customer.name }}" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="edit_address" class="form-label">Address</label>
+                            <textarea class="form-control" id="edit_address" name="address" rows="3">{{ customer.address or '' }}</textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="edit_contact_details" class="form-label">Contact Details</label>
+                            <input type="text" class="form-control" id="edit_contact_details" name="contact_details" value="{{ customer.contact_details or '' }}">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="edit_annual_rate" class="form-label">Annual Rate (%) <span class="text-danger">*</span></label>
+                                    <input type="number" class="form-control" id="edit_annual_rate" name="annual_rate" 
+                                           step="0.01" min="0" max="100" value="{{ customer.get_safe_annual_rate() }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="edit_icl_start_date" class="form-label">ICL Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="edit_icl_start_date" name="icl_start_date" 
+                                           value="{{ customer.icl_start_date.strftime('%Y-%m-%d') if customer.icl_start_date else '' }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="edit_icl_end_date" class="form-label">ICL End Date</label>
+                                    <input type="date" class="form-control" id="edit_icl_end_date" name="icl_end_date" 
+                                           value="{{ customer.icl_end_date.strftime('%Y-%m-%d') if customer.icl_end_date else '' }}">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="edit_icl_extension" class="form-label">ICL Extension</label>
+                            <input type="text" class="form-control" id="edit_icl_extension" name="icl_extension" value="{{ customer.icl_extension or '' }}">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="edit_tds_applicable" name="tds_applicable" 
+                                               {{ 'checked' if customer.tds_applicable else '' }}>
+                                        <label class="form-check-label" for="edit_tds_applicable">
+                                            TDS Applicable
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3" id="edit_tds_percentage_group" style="{{ 'display: block;' if customer.tds_applicable else 'display: none;' }}">
+                                        <label for="edit_tds_percentage" class="form-label">TDS Percentage (%)</label>
+                                        <input type="number" class="form-control" id="edit_tds_percentage" name="tds_percentage" step="0.01" min="0" max="100" value="{{ customer.tds_percentage or '' }}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="edit_interest_type" class="form-label">Interest Type</label>
+                                    <select class="form-select" id="edit_interest_type" name="interest_type">
+                                        <option value="simple" {{ 'selected' if customer.interest_type == 'simple' else '' }}>Simple Interest</option>
+                                        <option value="compound" {{ 'selected' if customer.interest_type == 'compound' else '' }}>Compound Interest</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3" id="edit_compound_frequency_group" style="{{ 'display: block;' if customer.interest_type == 'compound' else 'display: none;' }}">
+                                    <label for="edit_compound_frequency" class="form-label">Compound Frequency</label>
+                                    <select class="form-select" id="edit_compound_frequency" name="compound_frequency">
+                                        <option value="">Select Frequency</option>
+                                        <option value="monthly" {{ 'selected' if customer.compound_frequency == 'monthly' else '' }}>Monthly</option>
+                                        <option value="quarterly" {{ 'selected' if customer.compound_frequency == 'quarterly' else '' }}>Quarterly</option>
+                                        <option value="yearly" {{ 'selected' if customer.compound_frequency == 'yearly' else '' }}>Yearly</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3" id="edit_first_compounding_date_group" style="{{ 'display: block;' if customer.interest_type == 'compound' else 'display: none;' }}">
+                            <label for="edit_first_compounding_date" class="form-label">First Compounding Date</label>
+                            <input type="date" class="form-control" id="edit_first_compounding_date" name="first_compounding_date" 
+                                   value="{{ customer.first_compounding_date.strftime('%Y-%m-%d') if customer.first_compounding_date else '' }}">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save me-2"></i>Update Customer
+                        </button>
+                        <a href="{{ url_for('customer_master') }}" class="btn btn-secondary">
+                            <i class="fas fa-times me-2"></i>Cancel
+                        </a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Customer Master Page JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize modal
+    const addCustomerModal = new bootstrap.Modal(document.getElementById('addCustomerModal'));
+    
+    // Add Customer Button Event Listeners
+    document.getElementById('addCustomerBtn')?.addEventListener('click', function() {
+        addCustomerModal.show();
+    });
+    
+    document.getElementById('addCustomerBtnEmpty')?.addEventListener('click', function() {
+        addCustomerModal.show();
+    });
+    document.getElementById('tds_applicable')?.addEventListener('change', function() {
+    const tdsPercentageGroup = document.getElementById('tds_percentage_group');
+    if (this.checked) {
+        tdsPercentageGroup.style.display = 'block';
+    } else {
+        tdsPercentageGroup.style.display = 'none';
+        document.getElementById('tds_percentage').value = ''; // Clear value when hidden
+    }
+});
+
+// TDS Applicable Change Handler for Edit Modal
+document.getElementById('edit_tds_applicable')?.addEventListener('change', function() {
+    const editTdsPercentageGroup = document.getElementById('edit_tds_percentage_group');
+    if (this.checked) {
+        editTdsPercentageGroup.style.display = 'block';
+    } else {
+        editTdsPercentageGroup.style.display = 'none';
+        document.getElementById('edit_tds_percentage').value = ''; // Clear value when hidden
+    }
+});
+    
+    // Filter Section Toggle
+    document.getElementById('filterBtn')?.addEventListener('click', function() {
+        const filterSection = document.getElementById('filterSection');
+        const isVisible = filterSection.style.display !== 'none';
+        filterSection.style.display = isVisible ? 'none' : 'block';
+        
+        // Update button text
+        const icon = this.querySelector('i');
+        if (isVisible) {
+            icon.className = 'fas fa-filter me-1';
+        } else {
+            icon.className = 'fas fa-filter-circle-xmark me-1';
+        }
+    });
+    
+    // Clear Filters
+    document.getElementById('clearFilters')?.addEventListener('click', function() {
+        document.getElementById('filterForm').reset();
+        // Reset DataTable search if it exists
+        if ($.fn.DataTable.isDataTable('#customersTable')) {
+            $('#customersTable').DataTable().search('').columns().search('').draw();
+        }
+    });
+    
+    // Apply Filters
+    document.getElementById('applyFilters')?.addEventListener('click', function() {
+        applyCustomFilters();
+    });
+    
+    // Interest Type Change Handler for Add Modal
+    document.getElementById('interest_type')?.addEventListener('change', function() {
+        const compoundGroup = document.getElementById('compound_frequency_group');
+        const compoundDateGroup = document.getElementById('first_compounding_date_group');
+        
+        if (this.value === 'compound') {
+            compoundGroup.style.display = 'block';
+            compoundDateGroup.style.display = 'block';
+        } else {
+            compoundGroup.style.display = 'none';
+            compoundDateGroup.style.display = 'none';
+        }
+    });
+    
+    // Interest Type Change Handler for Edit Modal
+    document.getElementById('edit_interest_type')?.addEventListener('change', function() {
+        const compoundGroup = document.getElementById('edit_compound_frequency_group');
+        const compoundDateGroup = document.getElementById('edit_first_compounding_date_group');
+        
+        if (this.value === 'compound') {
+            compoundGroup.style.display = 'block';
+            compoundDateGroup.style.display = 'block';
+        } else {
+            compoundGroup.style.display = 'none';
+            compoundDateGroup.style.display = 'none';
+        }
+    });
+});
+
+// Apply custom filters to DataTable
+function applyCustomFilters() {
+    if (!$.fn.DataTable.isDataTable('#customersTable')) return;
+    
+    const table = $('#customersTable').DataTable();
+    const status = document.getElementById('filterStatus').value;
+    const interestType = document.getElementById('filterInterestType').value;
+    const tds = document.getElementById('filterTDS').value;
+    const dateRange = document.getElementById('filterDateRange').value;
+    
+    // Reset all column filters
+    table.columns().search('');
+    
+    // Apply status filter (column 9)
+    if (status) {
+        table.column(9).search(status === 'active' ? 'Active' : 'Inactive');
+    }
+    
+    // Apply interest type filter (column 7)
+    if (interestType) {
+        table.column(7).search(interestType === 'simple' ? 'Simple' : 'Compound');
+    }
+    
+    // Apply TDS filter (column 8)
+    if (tds) {
+        table.column(8).search(tds === 'yes' ? 'TDS' : 'No TDS');
+    }
+    
+    // Redraw table
+    table.draw();
+}
+
+// Confirm delete function
+function confirmDelete(customerId, customerName) {
+    if (confirm(`Are you sure you want to delete customer "${customerName}"? This action cannot be undone and will also delete all associated transactions.`)) {
+        // Create a form to submit the delete request
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/customer/${customerId}/delete`;
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name=csrf-token]');
+        if (csrfToken) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken.getAttribute('content');
+            form.appendChild(csrfInput);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}3

@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - {{ customer.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-exchange-alt me-2"></i>Transactions</h1>
+                    <p class="text-muted">Customer: {{ customer.name }} ({{ customer.icl_no }})</p>
+                </div>
+                <div>
+                    <span class="badge bg-primary fs-6">Current Balance: {{ customer.get_current_balance() | safe_currency }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Transaction Form -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-plus me-2"></i>Add New Transaction</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="transactionForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="date" class="form-label">Transaction Date <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="date" name="date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="amount_paid" class="form-label">Amount Paid (₹)</label>
+                                    <input type="number" class="form-control" id="amount_paid" name="amount_paid" 
+                                           step="0.01" min="0" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label for="amount_repaid" class="form-label">Amount Repaid (₹)</label>
+                                    <input type="number" class="form-control" id="amount_repaid" name="amount_repaid" 
+                                           step="0.01" min="0" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Current Balance</label>
+                                    <input type="text" class="form-control" id="current_balance_display" 
+                                           value="{{ customer.current_balance | safe_currency }}" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr>
+                        
+                        <h6><i class="fas fa-percent me-2"></i>Interest Calculation (Optional)</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="period_from" class="form-label">Period From</label>
+                                    <input type="date" class="form-control" id="period_from" name="period_from">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="period_to" class="form-label">Period To</label>
+                                    <input type="date" class="form-control" id="period_to" name="period_to">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Interest Rate</label>
+                                    <input type="text" class="form-control" 
+                                           value="{{ customer.annual_rate | safe_percentage }}" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Interest Type</label>
+                                    <input type="text" class="form-control" 
+                                           value="{{ customer.interest_type.title() }}" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">TDS Applicable</label>
+                                    <input type="text" class="form-control" 
+                                           value="{% if customer.tds_applicable %}Yes{% else %}No{% endif %}" readonly>
+                                </div>
+                            </div>
+			<div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">TDS Rate</label>
+                                    <input type="text" class="form-control" 
+                                           value="{{ customer.tds_percentage | safe_percentage }}" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>Add Transaction
+                            </button>
+                            <button type="reset" class="btn btn-secondary">
+                                <i class="fas fa-undo me-2"></i>Reset
+                            </button>
+                            <a href="{{ url_for('customer_profile', customer_id=customer.id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to Profile
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+	<!-- Edit Transaction Modal -->
+<div class="modal fade" id="editTransactionModal" tabindex="-1" aria-labelledby="editTransactionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editTransactionModalLabel">Edit Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" id="editTransactionForm">
+                    <!-- Hidden input for transaction ID -->
+                    <input type="hidden" id="edit_transaction_id" name="transaction_id">
+                    <div class="mb-3">
+                        <label for="edit_date" class="form-label">Transaction Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="edit_date" name="date" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="edit_amount_paid" class="form-label">Amount Paid (Deposit)</label>
+                                <input type="number" class="form-control" id="edit_amount_paid" name="amount_paid" step="0.01" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="edit_amount_repaid" class="form-label">Amount Repaid (Withdrawal)</label>
+                                <input type="number" class="form-control" id="edit_amount_repaid" name="amount_repaid" step="0.01" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="edit_period_from" class="form-label">Interest Period From</label>
+                                <input type="date" class="form-control" id="edit_period_from" name="period_from">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="edit_period_to" class="form-label">Interest Period To</label>
+                                <input type="date" class="form-control" id="edit_period_to" name="period_to">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="editTransactionForm" class="btn btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- Transaction History -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history me-2"></i>Transaction History</h5>
+                </div>
+                <div class="card-body">
+                    {% if transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="transactionsTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Amount Paid</th>
+                                    <th>Amount Repaid</th>
+                                    <th>Balance</th>
+                                    <th>Period From</th>
+                                    <th>Period To</th>
+                                    <th>Days</th>
+                                    <th>Interest Rate</th>
+                                    <th>Interest Amount</th>
+                                    <th>TDS</th>
+                                    <th>Net Amount</th>
+				    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}</td>
+                                    <td class="text-end">
+                                        {% if transaction.amount_paid %}
+                                            <span class="text-success">{{ transaction.amount_paid | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.amount_repaid %}
+                                            <span class="text-danger">{{ transaction.amount_repaid | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.balance %}
+                                            <strong>{{ transaction.balance | safe_currency }}</strong>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else '-' }}</td>
+                                    <td>{{ transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else '-' }}</td>
+                                    <td class="text-center">{{ transaction.no_of_days if transaction.no_of_days else '-' }}</td>
+                                    <td class="text-center">{{ transaction.int_rate | safe_percentage if transaction.int_rate else '-' }}</td>
+                                    <td class="text-end">{{ transaction.int_amount | safe_currency if transaction.int_amount else '-' }}</td>
+                                    <td class="text-end">{{ transaction.tds_amount | safe_currency if transaction.tds_amount else '-' }}</td>
+                                    <td class="text-end">
+                                        {% if transaction.net_amount %}
+                                            <strong class="text-primary">{{ transaction.net_amount | safe_currency }}</strong>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+				    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            {% if current_user.role == 'admin' %}
+                                            <button type="button" class="btn btn-outline-warning edit-transaction-btn"
+                                                    data-bs-toggle="modal" data-bs-target="#editTransactionModal"
+                                                    data-transaction-id="{{ transaction.id }}"
+                                                    data-date="{{ transaction.date.strftime('%Y-%m-%d') if transaction.date else '' }}"
+                                                    data-amount-paid="{{ transaction.get_safe_amount_paid() }}"
+                                                    data-amount-repaid="{{ transaction.get_safe_amount_repaid() }}"
+                                                    data-period-from="{{ transaction.period_from.strftime('%Y-%m-%d') if transaction.period_from else '' }}"
+                                                    data-period-to="{{ transaction.period_to.strftime('%Y-%m-%d') if transaction.period_to else '' }}"
+                                                    title="Edit Transaction">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger delete-transaction-btn"
+                                                    onclick="confirmDeleteTransaction({{ transaction.id }}, '{{ transaction.date.strftime('%d-%m-%Y') }}')" title="Delete Transaction">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No transactions found</h5>
+                        <p class="text-muted">Add the first transaction using the form above.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Set today's date as default
+    $('#date').val(new Date().toISOString().split('T')[0]);
+    
+    // Initialize DataTable
+    $('#transactionsTable').DataTable({
+        "pageLength": 10,
+        "responsive": true,
+        "order": [[0, "desc"]], // Sort by date descending
+        "language": {
+            "search": "Search transactions:"
+        }
+    });
+    
+    // Calculate days when dates are selected
+    $('#period_from, #period_to').change(function() {
+        var fromDate = $('#period_from').val();
+        var toDate = $('#period_to').val();
+        
+        if (fromDate && toDate) {
+            var from = new Date(fromDate);
+            var to = new Date(toDate);
+            var diffTime = Math.abs(to - from);
+            var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            // Display calculated days (you can add a field to show this)
+            console.log('Days calculated:', diffDays);
+        }
+    });
+    
+    // Form validation
+    $('#transactionForm').submit(function(e) {
+        var amountPaid = parseFloat($('#amount_paid').val()) || 0;
+        var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
+        
+        if (amountPaid === 0 && amountRepaid === 0) {
+            e.preventDefault();
+            alert('Please enter either amount paid or amount repaid.');
+            return false;
+        }
+        
+        // Validate date ranges
+        var fromDate = $('#period_from').val();
+        var toDate = $('#period_to').val();
+        
+        if ((fromDate && !toDate) || (!fromDate && toDate)) {
+            e.preventDefault();
+            alert('Please select both period from and period to dates, or leave both empty.');
+            return false;
+        }
+        
+        if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+            e.preventDefault();
+            alert('Period from date cannot be later than period to date.');
+            return false;
+        }
+    });
+    
+    // Update balance display on amount changes
+    $('#amount_paid, #amount_repaid').on('input', function() {
+        var currentBalance = {{ customer.current_balance | safe_decimal }};
+        var amountPaid = parseFloat($('#amount_paid').val()) || 0;
+        var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
+        
+        var newBalance = currentBalance + amountPaid - amountRepaid;
+        $('#current_balance_display').val('₹' + newBalance.toFixed(2));
+    });
+	const editTransactionForm = document.getElementById('editTransactionForm');
+
+    document.querySelectorAll('.edit-transaction-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const transactionId = this.dataset.transactionId;
+            const transactionDate = this.dataset.date;
+            const amountPaid = this.dataset.amountPaid;
+            const amountRepaid = this.dataset.amountRepaid;
+            const periodFrom = this.dataset.periodFrom;
+            const periodTo = this.dataset.periodTo;
+
+            // Set form action dynamically
+            editTransactionForm.action = `/edit_transaction/${transactionId}`;
+
+            // Populate form fields
+            document.getElementById('edit_transaction_id').value = transactionId;
+            document.getElementById('edit_date').value = transactionDate;
+            document.getElementById('edit_amount_paid').value = amountPaid;
+            document.getElementById('edit_amount_repaid').value = amountRepaid;
+            document.getElementById('edit_period_from').value = periodFrom;
+            document.getElementById('edit_period_to').value = periodTo;
+
+            // Auto-fill Period From for Edit Transaction Modal if Transaction Date changes
+            const editTransactionDateInput = document.getElementById('edit_date');
+            const editPeriodFromInput = document.getElementById('edit_period_from');
+
+            // Remove previous listener to prevent multiple bindings if modal is opened multiple times
+            const existingListener = editTransactionDateInput.dataset.listener;
+            if (existingListener && window[existingListener]) {
+                editTransactionDateInput.removeEventListener('change', window[existingListener]);
+            }
+            const newEditListener = function() {
+                editPeriodFromInput.value = this.value;
+            };
+            const listenerName = `editDateChangeListener_${transactionId}`; // Unique name
+            window[listenerName] = newEditListener; // Store globally
+            editTransactionDateInput.addEventListener('change', newEditListener);
+            editTransactionDateInput.dataset.listener = listenerName; // Store reference to remove later
+        });
+    });
+
+    // Calculate days when dates are selected for EDIT transaction form
+    $('#edit_period_from, #edit_period_to').change(function() {
+        var fromDate = $('#edit_period_from').val();
+        var toDate = $('#edit_period_to').val();
+        
+        if (fromDate && toDate) {
+            var from = new Date(fromDate);
+            var to = new Date(toDate);
+            var diffTime = Math.abs(to - from);
+            var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            console.log('Edit Form Days calculated:', diffDays);
+        }
+    });
+    
+    // Form validation for EDIT transaction form
+    $('#editTransactionForm').submit(function(e) {
+        var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
+        var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
+        
+        if (amountPaid === 0 && amountRepaid === 0) {
+            e.preventDefault();
+            showCustomMessage('Please enter either amount paid or amount repaid.', 'danger');
+            return false;
+        }
+        
+        var fromDate = $('#edit_period_from').val();
+        var toDate = $('#edit_period_to').val();
+        
+        if ((fromDate && !toDate) || (!fromDate && toDate)) {
+            e.preventDefault();
+            showCustomMessage('Please select both period from and period to dates, or leave both empty.', 'danger');
+            return false;
+        }
+        
+        if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+            e.preventDefault();
+            showCustomMessage('Period from date cannot be later than period to date.', 'danger');
+            return false;
+        }
+    });
+    
+    // Update balance display on amount changes for EDIT form (simplified projection)
+    $('#edit_amount_paid, #edit_amount_repaid').on('input', function() {
+        console.log('Edit Form - Projected New Balance: This is a simplified client-side projection.');
+        var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
+        var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
+        
+        console.log('Edit Form - Amount Paid:', amountPaid, 'Amount Repaid:', amountRepaid);
+    });
+
+    // Confirm Delete Transaction function
+    function confirmDeleteTransaction(transactionId, transactionDate) {
+        if (confirm(`Are you sure you want to delete the transaction on ${transactionDate}? This action cannot be undone.`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/delete_transaction/${transactionId}`;
+
+            // Add CSRF token
+            const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
+            if (csrfTokenElement) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrf_token';
+                csrfInput.value = csrfTokenElement.getAttribute('content');
+                form.appendChild(csrfInput);
+            } else {
+                console.error("CSRF token meta tag not found. Delete operation might fail.");
+                showCustomMessage("Security error: CSRF token missing. Delete operation aborted.", "danger");
+                return; // Prevent form submission if CSRF token is missing
+            }
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+    // Make confirmDeleteTransaction globally accessible as it's called from onclick
+    window.confirmDeleteTransaction = confirmDeleteTransaction;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Account Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h1>
+            <p class="text-muted">Welcome back, {{ current_user.username }}!</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Total Customers</h5>
+                            <h2 class="mb-0">{{ total_customers }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Total Outstanding</h5>
+                            <h2 class="mb-0">{{ total_balance | safe_currency }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-rupee-sign fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-Active Loans">Active Loans </h5>
+                            <h2 class="mb-0">{{ customers | length }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-handshake fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history me-2"></i>Recent Transactions</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Customer</th>
+                                    <th>Amount Paid</th>
+                                    <th>Amount Repaid</th>
+                                    <th>Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in recent_transactions %}
+                                <tr>
+                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date }}</td>
+                                    <td>
+                                        <a href="{{ url_for('customer_profile', customer_id=transaction.customer_id) }}" class="text-decoration-none">
+                                            {{ transaction.customer.name if transaction.customer }}
+                                        </a>
+                                    </td>
+                                    <td>{{ transaction.amount_paid | safe_currency if transaction.amount_paid else '-' }}</td>
+                                    <td>{{ transaction.amount_repaid | safe_currency if transaction.amount_repaid else '-' }}</td>
+                                    <td>{{ transaction.balance | safe_currency if transaction.balance else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No recent transactions found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-pie me-2"></i>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        {% if current_user.role in ['admin', 'data_entry'] %}
+                        <a href="{{ url_for('customer_master') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-plus me-2"></i>Add Customer
+                        </a>
+                        {% endif %}
+                        
+                        <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-chart-bar me-2"></i>View Reports
+                        </a>
+                        
+                        {% if current_user.role == 'admin' %}
+                        <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning">
+                            <i class="fas fa-cog me-2"></i>Admin Panel
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer List -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-users me-2"></i>Active Customers</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="dashboardCustomersTable">
+                            <thead>
+                                <tr>
+                                    <th>ICL No</th>
+                                    <th>Name</th>
+                                    <th>Annual Rate</th>
+                                    <th>Current Balance</th>
+                                    <th>TDS</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if customers %}
+                                    {% for customer in customers %}
+                                    <tr>
+                                        <td>{{ customer.icl_no }}</td>
+                                        <td><a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
+                                               class="text-decoration-none">
+                                                {{ customer.name }}
+                                            </a></td>
+                                        <td>{{ customer.annual_rate | safe_percentage }}</td>
+                                        <td class="Dcurrency">
+                                            {% set balance = customer.get_current_balance() %}
+                                            {% if balance > 0 %}
+                                                <span class="transaction-positive">{{ balance|safe_currency }}</span>
+                                            {% elif balance < 0 %}
+                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
+                                            {% else %}
+                                                <span class="transaction-neutral">{{ balance|safe_currency }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if customer.tds_applicable %}
+                                                <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">No</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            {% if current_user.role in ['admin', 'data_entry'] %}
+                                            <a href="{{ url_for('transactions', customer_id=customer.id) }}" 
+                                               class="btn btn-sm btn-outline-success">
+                                                <i class="fas fa-plus"></i>
+                                            </a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <!-- Empty state row with proper column count -->
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">
+                                            <i class="fas fa-users fa-2x text-muted mb-3"></i>
+                                            <h6 class="text-muted">No customers found</h6>
+                                            <p class="text-muted mb-0">Start by adding your first customer to the system.</p>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize dashboard customer table with proper cleanup
+    const dashboardTable = document.getElementById('dashboardCustomersTable');
+    if (dashboardTable && $.fn.DataTable) {
+        const tbody = dashboardTable.querySelector('tbody');
+        const hasEmptyState = tbody && tbody.innerHTML.includes('No customers found');
+        
+        // Don't initialize DataTable if empty state is showing
+        if (hasEmptyState) {
+            console.log('Skipping dashboard DataTable initialization - empty state detected');
+            return;
+        }
+        
+        try {
+            // Ensure proper cleanup before initialization
+            if ($.fn.DataTable.isDataTable('#dashboardCustomersTable')) {
+                $('#dashboardCustomersTable').DataTable().clear().destroy(true);
+            }
+            
+            // Clean up any cell indexes
+            $('#dashboardCustomersTable').find('td, th').each(function() {
+                delete this._DT_CellIndex;
+            });
+            
+            // Simple configuration to avoid errors
+            $('#dashboardCustomersTable').DataTable({
+                destroy: true,
+                pageLength: 10,
+                responsive: true,
+                language: {
+                    search: "Search customers:",
+                    emptyTable: "No customers available"
+                },
+                columnDefs: [
+                    { targets: [5], orderable: false } // Actions column
+                ]
+            });
+            
+            console.log('Dashboard DataTable initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize dashboard DataTable:', error);
+        }
+    }
+});
+</script>
+{% endblock %}

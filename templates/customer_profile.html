@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }} - Customer Profile{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Customer Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-user me-2"></i>{{ customer.name }}</h1>
+                    <p class="text-muted">ICL No: {{ customer.icl_no }}</p>
+                </div>
+                <div>
+                    {% if current_user.role in ['admin', 'data_entry'] %}
+                    <a href="{{ url_for('transactions', customer_id=customer.id) }}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>Add Transaction
+                    </a>
+                    <a href="{{ url_for('edit_customer', customer_id=customer.id) }}" class="btn btn-warning">
+                        <i class="fas fa-edit me-2"></i>Edit Customer
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('export_customer_report', customer_id=customer.id) }}" class="btn btn-info">
+                        <i class="fas fa-download me-2"></i>Export Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Details -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle me-2"></i>Customer Information</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-4">ICL No:</dt>
+                        <dd class="col-sm-8">{{ customer.icl_no }}</dd>
+                        
+                        <dt class="col-sm-4">Name:</dt>
+                        <dd class="col-sm-8">{{ customer.name }}</dd>
+                        
+                        <dt class="col-sm-4">Address:</dt>
+                        <dd class="col-sm-8">{{ customer.address or 'Not provided' }}</dd>
+                        
+                        <dt class="col-sm-4">Contact:</dt>
+                        <dd class="col-sm-8">{{ customer.contact_details or 'Not provided' }}</dd>
+                        
+                        <dt class="col-sm-4">Annual Rate:</dt>
+                        <dd class="col-sm-8">{{ customer.annual_rate | safe_percentage }}</dd>
+                        
+                        <dt class="col-sm-4">Interest Type:</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge bg-info">{{ customer.interest_type.title() }}</span>
+                            {% if customer.interest_type == 'compound' and customer.compound_frequency %}
+                                <small class="text-muted">({{ customer.compound_frequency.title() }})</small>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">TDS Applicable:</dt>
+                        <dd class="col-sm-8">
+                            {% if customer.tds_applicable %}
+                                <span class="badge bg-success">Yes</span>
+				<dt class="col-sm-4">TDS %: </dt>
+				<dd class="col-sm-8">{{ customer.tds_percentage | safe_percentage }} </dd>
+                            {% else %}
+                                <span class="badge bg-secondary">No</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-calendar me-2"></i>Account Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-4">Start Date:</dt>
+                        <dd class="col-sm-8">{{ customer.icl_start_date.strftime('%d-%m-%Y') if customer.icl_start_date else 'Not set' }}</dd>
+                        
+                        <dt class="col-sm-4">End Date:</dt>
+                        <dd class="col-sm-8">{{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else 'Not set' }}</dd>
+                        
+                        <dt class="col-sm-4">Extension:</dt>
+                        <dd class="col-sm-8">{{ customer.icl_extension or 'None' }}</dd>
+                        
+                        {% if customer.first_compounding_date %}
+                        <dt class="col-sm-4">First Compounding:</dt>
+                        <dd class="col-sm-8">{{ customer.first_compounding_date.strftime('%d-%m-%Y') }}</dd>
+                        {% endif %}
+                        
+                        <dt class="col-sm-4">Created:</dt>
+                        <dd class="col-sm-8">{{ customer.created_at.strftime('%d-%m-%Y') if customer.created_at else 'Unknown' }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Balance Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="card-title">Current Outstanding Balance</h5>
+                            <h2 class="mb-0">{{ current_balance | safe_currency }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-balance-scale fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction History -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history me-2"></i>Transaction History</h5>
+                </div>
+                <div class="card-body">
+                    {% if transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="transactionsTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Amount Paid</th>
+                                    <th>Amount Repaid</th>
+                                    <th>Balance</th>
+                                    <th>Period From</th>
+                                    <th>Period To</th>
+                                    <th>Days</th>
+                                    <th>Interest Rate</th>
+                                    <th>Interest Amount</th>
+                                    <th>TDS</th>
+                                    <th>Net Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr>
+                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}</td>
+                                    <td>{{ transaction.amount_paid | safe_currency if transaction.amount_paid else '-' }}</td>
+                                    <td>{{ transaction.amount_repaid | safe_currency if transaction.amount_repaid else '-' }}</td>
+                                    <td>{{ transaction.balance | safe_currency if transaction.balance else '-' }}</td>
+                                    <td>{{ transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else '-' }}</td>
+                                    <td>{{ transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else '-' }}</td>
+                                    <td>{{ transaction.no_of_days | safe_number if transaction.no_of_days else '-' }}</td>
+                                    <td>{{ transaction.int_rate | safe_percentage if transaction.int_rate else '-' }}</td>
+                                    <td>{{ transaction.int_amount | safe_currency if transaction.int_amount else '-' }}</td>
+                                    <td>{{ transaction.tds_amount | safe_currency if transaction.tds_amount else '-' }}</td>
+                                    <td>{{ transaction.net_amount | safe_currency if transaction.net_amount else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No transactions found</h5>
+                        <p class="text-muted">No transactions have been recorded for this customer yet.</p>
+                        {% if current_user.role in ['admin', 'data_entry'] %}
+                        <a href="{{ url_for('transactions', customer_id=customer.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Add First Transaction
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    $('#transactionsTable').DataTable({
+        "pageLength": 10,
+        "responsive": true,
+        "order": [[0, "desc"]], // Sort by date descending
+        "language": {
+            "search": "Search transactions:"
+        },
+        "columnDefs": [
+            {
+                "targets": [1, 2, 3, 8, 9, 10], // Amount columns
+                "className": "text-end"
+            },
+            {
+                "targets": [6, 7], // Number columns
+                "className": "text-center"
+            }
+        ]
+    });
+});
+</script>
+{% endblock %}

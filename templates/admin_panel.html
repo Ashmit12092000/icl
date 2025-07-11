@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Account Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="fas fa-cog me-2"></i>Admin Panel</h1>
+            <p class="text-muted">System administration and configuration</p>
+        </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-users me-2"></i>User Management</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Add User Form -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6>Add New User</h6>
+                            <form method="POST" action="{{ url_for('create_user') }}" id="createUserForm">
+                                <div class="mb-3">
+                                    <label for="username" class="form-label">Username <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="username" name="username" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                                    <input type="email" class="form-control" id="email" name="email" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password <span class="text-danger">*</span></label>
+                                    <input type="password" class="form-control" id="password" name="password" required minlength="6">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="role" class="form-label">Role <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="role" name="role" required>
+                                        <option value="">Select Role</option>
+                                        <option value="normal_user">Normal User</option>
+                                        <option value="data_entry">Data Entry</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-plus me-2"></i>Create User
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- User List -->
+                        <div class="col-md-6">
+                            <h6>Existing Users</h6>
+                            {% if users %}
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for user in users %}
+                                        <tr>
+                                            <td>{{ user.username }}</td>
+                                            <td>{{ user.email }}</td>
+                                            <td>
+                                                <span class="badge bg-{% if user.role == 'admin' %}danger{% elif user.role == 'data_entry' %}warning{% else %}secondary{% endif %}">
+                                                    {{ user.role.replace('_', ' ').title() }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% if user.is_active %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted">No users found.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interest Rate Management -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-percent me-2"></i>Interest Rate Management</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Add Interest Rate Form -->
+                    <form method="POST" action="{{ url_for('update_interest_rate') }}" id="interestRateForm">
+                        <div class="mb-3">
+                            <label for="interest_rate" class="form-label">Interest Rate (%) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="interest_rate" name="rate" 
+                                   step="0.01" min="0" max="100" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="interest_effective_date" class="form-label">Effective Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="interest_effective_date" name="effective_date" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="interest_description" class="form-label">Description</label>
+                            <textarea class="form-control" id="interest_description" name="description" rows="2"></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-save me-2"></i>Update Interest Rate
+                        </button>
+                    </form>
+
+                    <!-- Interest Rate History -->
+                    <h6 class="mt-4">Rate History</h6>
+                    {% if interest_rates %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Rate</th>
+                                    <th>Effective Date</th>
+                                    <th>Status</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rate in interest_rates %}
+                                <tr>
+                                    <td>{{ rate.rate | safe_percentage }}</td>
+                                    <td>{{ rate.effective_date.strftime('%d-%m-%Y') if rate.effective_date }}</td>
+                                    <td>
+                                        {% if rate.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ rate.description or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No interest rates configured.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- TDS Rate Management -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-receipt me-2"></i>TDS Rate Management</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Add TDS Rate Form -->
+                    <form method="POST" action="{{ url_for('update_tds_rate') }}" id="tdsRateForm">
+                        <div class="mb-3">
+                            <label for="tds_rate" class="form-label">TDS Rate (%) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="tds_rate" name="rate" 
+                                   step="0.01" min="0" max="100" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="tds_effective_date" class="form-label">Effective Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="tds_effective_date" name="effective_date" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="tds_description" class="form-label">Description</label>
+                            <textarea class="form-control" id="tds_description" name="description" rows="2"></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save me-2"></i>Update TDS Rate
+                        </button>
+                    </form>
+
+                    <!-- TDS Rate History -->
+                    <h6 class="mt-4">Rate History</h6>
+                    {% if tds_rates %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Rate</th>
+                                    <th>Effective Date</th>
+                                    <th>Status</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rate in tds_rates %}
+                                <tr>
+                                    <td>{{ rate.rate | safe_percentage }}</td>
+                                    <td>{{ rate.effective_date.strftime('%d-%m-%Y') if rate.effective_date }}</td>
+                                    <td>
+                                        {% if rate.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ rate.description or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No TDS rates configured.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle me-2"></i>System Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ users | length }}</h4>
+                                <p class="text-muted">Total Users</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success">
+                                    {% set active_users = users | selectattr('is_active') | list %}
+                                    {{ active_users | length }}
+                                </h4>
+                                <p class="text-muted">Active Users</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">
+                                    {% set current_rate = interest_rates | selectattr('is_active') | first %}
+                                    {{ current_rate.rate | safe_percentage if current_rate else 'Not Set' }}
+                                </h4>
+                                <p class="text-muted">Current Interest Rate</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-warning">
+                                    {% set current_tds = tds_rates | selectattr('is_active') | first %}
+                                    {{ current_tds.rate | safe_percentage if current_tds else 'Not Set' }}
+                                </h4>
+                                <p class="text-muted">Current TDS Rate</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Back to Dashboard -->
+    <div class="row">
+        <div class="col-12">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Set today's date as default for effective dates
+    const today = new Date().toISOString().split('T')[0];
+    $('#interest_effective_date').val(today);
+    $('#tds_effective_date').val(today);
+    
+    // Form validation for user creation
+    $('#createUserForm').submit(function(e) {
+        const password = $('#password').val();
+        if (password.length < 6) {
+            e.preventDefault();
+            alert('Password must be at least 6 characters long.');
+            return false;
+        }
+        
+        const username = $('#username').val();
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            e.preventDefault();
+            alert('Username can only contain letters, numbers, and underscores.');
+            return false;
+        }
+    });
+    
+    // Form validation for interest rate
+    $('#interestRateForm').submit(function(e) {
+        const rate = parseFloat($('#interest_rate').val());
+        if (rate < 0 || rate > 100) {
+            e.preventDefault();
+            alert('Interest rate must be between 0% and 100%.');
+            return false;
+        }
+        
+        if (!confirm('Are you sure you want to update the interest rate? This will affect future calculations.')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+    
+    // Form validation for TDS rate
+    $('#tdsRateForm').submit(function(e) {
+        const rate = parseFloat($('#tds_rate').val());
+        if (rate < 0 || rate > 100) {
+            e.preventDefault();
+            alert('TDS rate must be between 0% and 100%.');
+            return false;
+        }
+        
+        if (!confirm('Are you sure you want to update the TDS rate? This will affect future TDS calculations.')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+    
+    // Auto-populate descriptions
+    $('#interest_rate').on('input', function() {
+        const rate = $(this).val();
+        if (rate && !$('#interest_description').val()) {
+            $('#interest_description').val(`Interest rate updated to ${rate}%`);
+        }
+    });
+    
+    $('#tds_rate').on('input', function() {
+        const rate = $(this).val();
+        if (rate && !$('#tds_description').val()) {
+            $('#tds_description').val(`TDS rate updated to ${rate}%`);
+        }
+    });
+});
+</script>
+{% endblock %}
