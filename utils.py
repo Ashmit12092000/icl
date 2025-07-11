@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter # <--- Added this import
-
+from sqlalchemy import and_
 # Configure logging for utils.py
 logging.basicConfig(level=logging.DEBUG)
 
@@ -269,12 +269,14 @@ def export_to_excel(customer, transactions):
         wb.save(output)
         output.seek(0)
         return output
-
 def get_period_report(start_date, end_date):
-    """Generate period-based report for all customers - Fixed NaN display issues"""
+    """Generate period-based report for all customers - Fixed SQLAlchemy import"""
     output = io.BytesIO()
     
     try:
+        # Import here to avoid circular imports
+        from models import Transaction, Customer
+        
         logging.debug(f"get_period_report called with start_date: {start_date} (type: {type(start_date)}) and end_date: {end_date} (type: {type(end_date)})")
         
         # Get all transactions in the period
@@ -314,7 +316,6 @@ def get_period_report(start_date, end_date):
             output.seek(0)
             return output
 
-
         # Create workbook
         wb = Workbook()
         ws = wb.active
@@ -353,101 +354,99 @@ def get_period_report(start_date, end_date):
         for transaction in transactions:
             row += 1
             
-            # Safely format transaction data
-            data = [
-                transaction.customer.icl_no if transaction.customer else '',
-                transaction.customer.name if transaction.customer else '',
-                transaction.date.strftime('%Y-%m-%d') if transaction.date else '',
-                transaction.get_safe_amount_paid(),
-                transaction.get_safe_amount_repaid(),
-                transaction.get_safe_balance(),
-                transaction.period_from.strftime('%Y-%m-%d') if transaction.period_from else '',
-                transaction.period_to.strftime('%Y-%m-%d') if transaction.period_to else '',
-                transaction.get_safe_no_of_days(),
-                transaction.get_safe_int_rate(),
-                transaction.get_safe_int_amount(),
-                transaction.get_safe_tds_amount(),
-                transaction.get_safe_net_amount()
-            ]
+            # Customer details
+            ws.cell(row=row, column=1, value=transaction.customer.icl_no)
+            ws.cell(row=row, column=2, value=transaction.customer.name)
             
-            for col, value in enumerate(data, 1):
-                cell = ws.cell(row=row, column=col, value=value)
-                cell.border = border
-                
-                # Apply number formats to numeric columns
-                if col in [4, 5, 6, 11, 12, 13]: # Amount Paid, Amount Repaid, Balance, Int Amount, TDS, Net Amount
-                    cell.number_format = currency_format
-                elif col == 10: # Interest Rate
-                    cell.number_format = percentage_format
-                # Date columns (3, 7, 8) are already strings for direct display
-
-                # Align numbers to right (if they are numbers)
-                if isinstance(value, (Decimal, int, float)):
-                    cell.alignment = Alignment(horizontal='right')
-                elif col in [3,7,8] and value: # Dates which are strings
-                    cell.alignment = Alignment(horizontal='center')
-                else: # Default alignment for other text
-                    cell.alignment = Alignment(horizontal='left')
+            # Transaction date
+            date_cell = ws.cell(row=row, column=3, value=transaction.date)
+            date_cell.number_format = date_format
+            
+            # Amount paid
+            amount_paid_cell = ws.cell(row=row, column=4, value=transaction.get_safe_amount_paid())
+            amount_paid_cell.number_format = currency_format
+            
+            # Amount repaid
+            amount_repaid_cell = ws.cell(row=row, column=5, value=transaction.get_safe_amount_repaid())
+            amount_repaid_cell.number_format = currency_format
+            
+            # Balance
+            balance_cell = ws.cell(row=row, column=6, value=transaction.get_safe_balance())
+            balance_cell.number_format = currency_format
+            
+            # Period From
+            if transaction.period_from:
+                period_from_cell = ws.cell(row=row, column=7, value=transaction.period_from)
+                period_from_cell.number_format = date_format
+            
+            # Period To
+            if transaction.period_to:
+                period_to_cell = ws.cell(row=row, column=8, value=transaction.period_to)
+                period_to_cell.number_format = date_format
+            
+            # No of Days
+            ws.cell(row=row, column=9, value=transaction.get_safe_no_of_days())
+            
+            # Interest Rate
+            rate_cell = ws.cell(row=row, column=10, value=transaction.get_safe_int_rate() / 100)
+            rate_cell.number_format = percentage_format
+            
+            # Interest Amount
+            int_amount_cell = ws.cell(row=row, column=11, value=transaction.get_safe_int_amount())
+            int_amount_cell.number_format = currency_format
+            
+            # TDS Amount
+            tds_amount_cell = ws.cell(row=row, column=12, value=transaction.get_safe_tds_amount())
+            tds_amount_cell.number_format = currency_format
+            
+            # Net Amount
+            net_amount_cell = ws.cell(row=row, column=13, value=transaction.get_safe_net_amount())
+            net_amount_cell.number_format = currency_format
+            
+            # Add to totals
+            total_int_amount += transaction.get_safe_int_amount()
+            total_tds += transaction.get_safe_tds_amount()
+            total_net += transaction.get_safe_net_amount()
+            
+            # Apply border to all cells
+            for col in range(1, 14):
+                ws.cell(row=row, column=col).border = border
         
-            # Add to totals (with safe decimal handling)
-            total_int_amount += safe_decimal_conversion(transaction.int_amount)
-            total_tds += safe_decimal_conversion(transaction.tds_amount)
-            total_net += safe_decimal_conversion(transaction.net_amount)
+        # Add totals row
+        row += 2
+        ws.cell(row=row, column=10, value="TOTALS:").font = header_font
         
-        # Totals row
-        row += 1
-        ws[f'A{row}'] = 'Total'
-        ws[f'A{row}'].font = header_font
-        ws.merge_cells(f'A{row}:J{row}') # Merge 'Total' label across first few columns
-        ws[f'K{row}'] = total_int_amount
-        ws[f'L{row}'] = total_tds
-        ws[f'M{row}'] = total_net
+        total_int_cell = ws.cell(row=row, column=11, value=total_int_amount)
+        total_int_cell.number_format = currency_format
+        total_int_cell.font = header_font
         
-        # Apply borders and formatting to totals
-        for col_idx in range(1, 14): # Iterate through relevant columns for totals
-            cell = ws.cell(row=row, column=col_idx)
-            cell.border = border
-            cell.font = header_font
-            if col_idx in [11, 12, 13]: # Int Amount, TDS, Net Amount
-                cell.number_format = currency_format
-                cell.alignment = Alignment(horizontal='right')
-            elif col_idx == 1: # 'Total' label
-                cell.alignment = Alignment(horizontal='left')
-
-
-        # Auto-adjust column widths
-        for col_idx in range(1, ws.max_column + 1):
-            max_length = 0
+        total_tds_cell = ws.cell(row=row, column=12, value=total_tds)
+        total_tds_cell.number_format = currency_format
+        total_tds_cell.font = header_font
+        
+        total_net_cell = ws.cell(row=row, column=13, value=total_net)
+        total_net_cell.number_format = currency_format
+        total_net_cell.font = header_font
+        
+        # Apply border to totals row
+        for col in range(10, 14):
+            ws.cell(row=row, column=col).border = border
+        
+        # Auto-adjust column widths - simplified to avoid merged cell issues
+        from openpyxl.utils import get_column_letter
+        column_widths = [15, 20, 12, 15, 15, 15, 12, 12, 10, 12, 15, 15, 15]  # Predefined widths
+        
+        for col_idx in range(1, min(len(column_widths) + 1, ws.max_column + 1)):
             column_letter = get_column_letter(col_idx)
-            for cell in ws[column_letter]:
-                try:
-                    # Use the formatted value if number_format is set, otherwise string value
-                    if cell.number_format and isinstance(cell.value, (Decimal, int, float)):
-                        # Estimate length based on common formats
-                        if cell.number_format == currency_format:
-                            length = len(f"₹{cell.value:,.2f}")
-                        elif cell.number_format == percentage_format:
-                            length = len(f"{cell.value:.2f}%")
-                        else:
-                            length = len(str(cell.value))
-                    elif isinstance(cell.value, datetime) or isinstance(cell.value, date):
-                        length = len(cell.value.strftime(date_format))
-                    else:
-                        length = len(str(cell.value))
-                    max_length = max(max_length, length)
-                except Exception as e:
-                    logging.warning(f"Error calculating column width for cell {cell.coordinate}: {e}")
-                    pass # Continue if there's an error with a specific cell
-            adjusted_width = min(max_length + 2, 40) # Max width to prevent overly wide columns
-            ws.column_dimensions[column_letter].width = adjusted_width
+            ws.column_dimensions[column_letter].width = column_widths[col_idx - 1]
         
         wb.save(output)
         output.seek(0)
-        logging.debug("Period report generated and saved to BytesIO successfully.")
+        logging.debug("Period report Excel generated successfully.")
         return output
         
     except Exception as e:
-        logging.error(f"Critical Error generating period report: {e}", exc_info=True) # Log full traceback
+        logging.error(f"Critical Error in get_period_report: {e}", exc_info=True)
         # Return empty workbook if error
         wb = Workbook()
         wb.save(output)
