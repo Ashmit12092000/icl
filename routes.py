@@ -49,16 +49,16 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        
+
         user = User.query.filter_by(username=username).first()
-        
+
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             flash('Login successful!', 'success')
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password.', 'error')
-    
+
     return render_template('login.html')
 
 @app.route('/logout')
@@ -73,7 +73,7 @@ def logout():
 def dashboard():
     customers = Customer.query.filter_by(is_active=True).all()
     total_customers = len(customers)
-    
+
     # Calculate total outstanding balance - Fixed NaN issue
     total_balance = Decimal('0')
     for customer in customers:
@@ -82,10 +82,10 @@ def dashboard():
             total_balance += balance
         except Exception as e:
             logging.warning(f"Error calculating balance for customer {customer.id}: {e}")
-    
+
     # Recent transactions
     recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
-    
+
     return render_template('dashboard.html',
                          customers=customers,
                          total_customers=total_customers,
@@ -131,25 +131,25 @@ def customer_master():
                 first_compounding_date=first_compounding_date,
                 created_by=current_user.id
             )
-            
+
             db.session.add(customer)
             db.session.commit()
             flash('Customer created successfully!', 'success')
             return redirect(url_for('customer_master'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error creating customer: {str(e)}', 'error')
-    
+
     # Check if edit mode is requested
     edit_id = request.args.get('edit')
     edit_mode = False
     customer = None
-    
+
     if edit_id:
         customer = Customer.query.get_or_404(edit_id)
         edit_mode = True
-    
+
     customers = Customer.query.filter_by(is_active=True).all()
     return render_template('customer_master.html', customers=customers, edit_mode=edit_mode, customer=customer)
 
@@ -159,7 +159,7 @@ def customer_profile(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
     current_balance = customer.get_current_balance()
-    
+
     return render_template('customer_profile.html',
                          customer=customer,
                          transactions=transactions,
@@ -169,7 +169,7 @@ def customer_profile(customer_id):
 @data_entry_required
 def edit_customer(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    
+
     if request.method == 'POST':
         try:
             # Update customer data
@@ -177,7 +177,7 @@ def edit_customer(customer_id):
             customer.name = request.form['name']
             customer.address = request.form['address']
             customer.contact_details = request.form['contact_details']
-            
+
             # Only admin can modify interest rates
             if current_user.role == 'admin':
                 customer.annual_rate = safe_decimal_conversion(request.form.get('annual_rate', '0'))
@@ -191,15 +191,15 @@ def edit_customer(customer_id):
                 customer.interest_type = request.form.get('interest_type', 'simple')
                 customer.compound_frequency = request.form.get('compound_frequency', '')
                 customer.first_compounding_date = datetime.strptime(request.form['first_compounding_date'], '%Y-%m-%d').date() if request.form.get('first_compounding_date') else None
-            
+
             db.session.commit()
             flash('Customer updated successfully!', 'success')
             return redirect(url_for('customer_profile', customer_id=customer_id))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error updating customer: {str(e)}', 'error')
-    
+
     return render_template('customer_master.html', customer=customer, edit_mode=True)
 
 @app.route('/customer/<int:customer_id>/delete', methods=['POST'])
@@ -267,9 +267,9 @@ def transactions(customer_id):
                     if amount_paid > Decimal('0'):
                         # Deposit — interest on previous balance + current paid
                         principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
-                    elif amount_repaid > Decimal('0') and amount_paid==Decimal('0'):
-                        # Repayment — interest on balance before this txn (exclude this repayment)
-                        principal_for_interest_calculation = current_balance_before_this_txn
+                    elif amount_repaid > Decimal('0'):
+                        # Repayment — interest on the reduced principal (outstanding balance minus repayment)
+                        principal_for_interest_calculation = current_balance_before_this_txn - amount_repaid
                     else:
                         # Passive period — interest on previous balance
                         principal_for_interest_calculation = current_balance_before_this_txn
@@ -330,7 +330,7 @@ def transactions(customer_id):
 @login_required
 def reports():
     customers = Customer.query.filter_by(is_active=True).all()
-    
+
     # Calculate statistics in backend for reliability
     total_outstanding = 0
     active_loans = 0
@@ -339,16 +339,16 @@ def reports():
         total_outstanding += balance
         if balance > 0:
             active_loans += 1
-    
+
     avg_balance = (total_outstanding / len(customers)) if customers else 0
-    
+
     stats = {
         'total_customers': len(customers),
         'total_outstanding': total_outstanding,
         'active_loans': active_loans,
         'avg_balance': avg_balance
     }
-    
+
     return render_template('reports.html', customers=customers, stats=stats)
 
 @app.route('/export_customer_report/<int:customer_id>')
@@ -356,12 +356,12 @@ def reports():
 def export_customer_report(customer_id):
     customer = Customer.query.get_or_404(customer_id)
     transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date).all()
-    
+
     output = export_to_excel(customer, transactions)
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     response.headers['Content-Disposition'] = f'attachment; filename=customer_report_{customer.icl_no}.xlsx'
-    
+
     return response
 
 @app.route('/export_period_report', methods=['POST'])
@@ -369,12 +369,12 @@ def export_customer_report(customer_id):
 def export_period_report():
     start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
     end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d').date()
-    
+
     output = get_period_report(start_date, end_date)
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     response.headers['Content-Disposition'] = f'attachment; filename=period_report_{start_date}_{end_date}.xlsx'
-    
+
     return response
 
 @app.route('/admin_panel')
@@ -383,7 +383,7 @@ def admin_panel():
     users = User.query.all()
     interest_rates = InterestRate.query.order_by(InterestRate.effective_date.desc()).all()
     tds_rates = TDSRate.query.order_by(TDSRate.effective_date.desc()).all()
-    
+
     return render_template('admin_panel.html', users=users, interest_rates=interest_rates, tds_rates=tds_rates)
 
 @app.route('/create_user', methods=['POST'])
@@ -394,28 +394,28 @@ def create_user():
         email = request.form['email']
         password = request.form['password']
         role = request.form['role']
-        
+
         # Check if user exists
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already exists!', 'error')
             return redirect(url_for('admin_panel'))
-        
+
         user = User(
             username=username,
             email=email,
             password_hash=generate_password_hash(password),
             role=role
         )
-        
+
         db.session.add(user)
         db.session.commit()
         flash('User created successfully!', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         flash(f'Error creating user: {str(e)}', 'error')
-    
+
     return redirect(url_for('admin_panel'))
 
 @app.route('/update_interest_rate', methods=['POST'])
@@ -425,10 +425,10 @@ def update_interest_rate():
         rate = safe_decimal_conversion(request.form['rate'])
         effective_date = datetime.strptime(request.form['effective_date'], '%Y-%m-%d').date()
         description = request.form['description']
-        
+
         # Deactivate current rates
         InterestRate.query.filter_by(is_active=True).update({'is_active': False})
-        
+
         # Create new rate
         interest_rate = InterestRate(
             rate=rate,
@@ -436,15 +436,15 @@ def update_interest_rate():
             description=description,
             created_by=current_user.id
         )
-        
+
         db.session.add(interest_rate)
         db.session.commit()
         flash('Interest rate updated successfully!', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         flash(f'Error updating interest rate: {str(e)}', 'error')
-    
+
     return redirect(url_for('admin_panel'))
 
 @app.route('/update_tds_rate', methods=['POST'])
@@ -454,10 +454,10 @@ def update_tds_rate():
         rate = safe_decimal_conversion(request.form['rate'])
         effective_date = datetime.strptime(request.form['effective_date'], '%Y-%m-%d').date()
         description = request.form['description']
-        
+
         # Deactivate current rates
         TDSRate.query.filter_by(is_active=True).update({'is_active': False})
-        
+
         # Create new rate
         tds_rate = TDSRate(
             rate=rate,
@@ -465,15 +465,15 @@ def update_tds_rate():
             description=description,
             created_by=current_user.id
         )
-        
+
         db.session.add(tds_rate)
         db.session.commit()
         flash('TDS rate updated successfully!', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         flash(f'Error updating TDS rate: {str(e)}', 'error')
-    
+
     return redirect(url_for('admin_panel'))
 @app.route('/edit_transaction/<int:transaction_id>', methods=['POST'])
 @login_required # Ensure user is logged in
@@ -484,16 +484,16 @@ def edit_transaction(transaction_id):
     """
     transaction = Transaction.query.get_or_404(transaction_id)
     customer_id = transaction.customer_id
-    
+
     try:
         # Update transaction fields from form data
         transaction.date = datetime.strptime(request.form['date'], '%Y-%m-%d').date()
         transaction.amount_paid = safe_decimal_conversion(request.form.get('amount_paid'))
         transaction.amount_repaid = safe_decimal_conversion(request.form.get('amount_repaid'))
-        
+
         transaction.period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
         transaction.period_to = datetime.strptime(request.form['period_to'], '%Y-%m-%d').date() if request.form.get('period_to') else None
-        
+
         # Recalculate no_of_days for this specific transaction
         if transaction.period_from and transaction.period_to:
             transaction.no_of_days = (transaction.period_to - transaction.period_from).days + 1
@@ -517,7 +517,7 @@ def edit_transaction(transaction_id):
         db.session.rollback()
         flash(f'Error editing transaction: {str(e)}', 'danger')
         logging.error(f"Error editing transaction {transaction_id}: {e}", exc_info=True)
-    
+
     return redirect(url_for('transactions', customer_id=customer_id))
 
 
@@ -531,7 +531,7 @@ def delete_transaction(transaction_id):
     transaction = Transaction.query.get_or_404(transaction_id)
     customer_id = transaction.customer_id
     transaction_date = transaction.date # Get date before deleting
-    
+
     try:
         db.session.delete(transaction) # Mark for deletion
         db.session.commit() # Commit deletion first
@@ -549,7 +549,7 @@ def delete_transaction(transaction_id):
         db.session.rollback()
         flash(f'Error deleting transaction: {str(e)}', 'danger')
         logging.error(f"Error deleting transaction {transaction_id}: {e}", exc_info=True)
-    
+
     return redirect(url_for('transactions', customer_id=customer_id))
 def recalculate_customer_transactions(customer_id, start_date=None):
     """
@@ -562,7 +562,7 @@ def recalculate_customer_transactions(customer_id, start_date=None):
                                               If None, all transactions for the customer are recalculated.
     """
     logging.debug(f"Starting recalculation for customer {customer_id} from date {start_date}")
-    
+
     customer = Customer.query.get(customer_id)
     if not customer:
         logging.error(f"Recalculation failed: Customer with ID {customer_id} not found.")
@@ -580,7 +580,7 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             Transaction.customer_id == customer_id,
             Transaction.date < start_date
         ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
-        
+
         current_running_balance = previous_transactions.get_safe_balance() if previous_transactions else Decimal('0')
         logging.debug(f"Starting recalculation with initial running balance: {current_running_balance} (from last transaction before {start_date})")
     else:
@@ -598,16 +598,22 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             # Determine principal for interest calculation for *this specific transaction's period*
             # Different logic for simple vs compound interest
             principal_for_interest_calculation = Decimal('0')
-            
+
             if customer.interest_type == 'simple':
-                # For simple interest, use net outstanding balance (deposits minus withdrawals)
-                # Calculate net outstanding balance up to and including this transaction
-                net_outstanding_balance = Decimal('0')
-                for prev_txn in Transaction.query.filter_by(customer_id=customer_id).filter(Transaction.date <= transaction.date).all():
-                    net_outstanding_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-                
-                principal_for_interest_calculation = net_outstanding_balance
-                logging.debug(f"  Simple Interest - Principal for interest (net outstanding balance including current): {principal_for_interest_calculation}")
+                # For simple interest, calculate based on transaction type
+                if transaction.get_safe_amount_paid() > Decimal('0'):
+                    # Deposit — interest on previous balance + current paid amount
+                    principal_for_interest_calculation = current_running_balance + transaction.get_safe_amount_paid()
+                    logging.debug(f"  Simple Interest - Deposit - Principal for interest (previous balance + deposit): {principal_for_interest_calculation}")
+                elif transaction.get_safe_amount_repaid() > Decimal('0'):
+                    # Repayment — interest on the reduced principal (outstanding balance minus repayment)
+                    # This assumes the repayment reduces the principal for interest calculation
+                    principal_for_interest_calculation = current_running_balance - transaction.get_safe_amount_repaid()
+                    logging.debug(f"  Simple Interest - Repayment - Principal for interest (reduced principal): {principal_for_interest_calculation}")
+                else:
+                    # Passive period — interest on previous balance
+                    principal_for_interest_calculation = current_running_balance
+                    logging.debug(f"  Simple Interest - Passive - Principal for interest (previous balance): {principal_for_interest_calculation}")
             else:
                 # For compound interest, use cumulative balance logic
                 if current_running_balance == Decimal('0') and transaction.amount_paid and transaction.amount_paid > Decimal('0'):
@@ -654,7 +660,7 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             # AND the net interest accrued from *this* transaction.
             current_running_balance += transaction.get_safe_amount_paid() - transaction.get_safe_amount_repaid()
             current_running_balance += transaction.net_amount # Add the net interest to the running balance
-            
+
             # Set the balance field for the current transaction record itself
             # This 'balance' field is typically the balance *after* this transaction's principal movement
             # but *before* its own interest is added. However, for consistency with get_current_balance,
