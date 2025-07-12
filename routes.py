@@ -267,9 +267,9 @@ def transactions(customer_id):
                     if amount_paid > Decimal('0'):
                         # Deposit — interest on previous balance + current paid
                         principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
-                    elif amount_repaid > Decimal('0'):
+                    elif amount_repaid > Decimal('0') and amount_paid==Decimal('0'):
                         # Repayment — interest on balance before this txn (exclude this repayment)
-                        principal_for_interest_calculation = net_outstanding_balance
+                        principal_for_interest_calculation = current_balance_before_this_txn
                     else:
                         # Passive period — interest on previous balance
                         principal_for_interest_calculation = current_balance_before_this_txn
