@@ -223,64 +223,78 @@ def delete_customer(customer_id):
 @data_entry_required
 def transactions(customer_id):
     customer = Customer.query.get_or_404(customer_id)
-    
+
     if request.method == 'POST':
         try:
-            # Get transaction data with safe conversion
             transaction_date = datetime.strptime(request.form['date'], '%Y-%m-%d').date()
             amount_paid = safe_decimal_conversion(request.form.get('amount_paid'))
             amount_repaid = safe_decimal_conversion(request.form.get('amount_repaid'))
-            current_balance_before_this_principal = safe_decimal_conversion(customer.get_current_balance())
-            
-            # Calculate new balance (ensure all types are Decimal)
-            current_balance = safe_decimal_conversion(customer.get_current_balance())
 
-	        
-            new_balance = current_balance + amount_paid - amount_repaid
-            
-            # Calculate interest if period is specified
+            # Only include transactions before this one to calculate correct principal
+            previous_txns = Transaction.query.filter(
+                Transaction.customer_id == customer_id,
+                Transaction.date < transaction_date
+            ).all()
+
+            # Include same-date earlier transactions if any
+            same_day_txns = Transaction.query.filter(
+                Transaction.customer_id == customer_id,
+                Transaction.date == transaction_date
+            ).order_by(Transaction.id.asc()).all()
+
+            net_outstanding_balance = Decimal('0')
+            for txn in previous_txns + same_day_txns:
+                net_outstanding_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+
+            current_balance_before_this_txn = net_outstanding_balance
+
+            # New balance after this transaction
+            new_balance = current_balance_before_this_txn + amount_paid - amount_repaid
+
+            # Interest calculation
             period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
             period_to = datetime.strptime(request.form['period_to'], '%Y-%m-%d').date() if request.form.get('period_to') else None
-            
-            int_amount = None
-            tds_amount = None
-            net_amount = None
-            no_of_days = None
-            
-            if period_from and period_to:
-                no_of_days = (period_to - period_from).days+1
-                principal_for_interest_calculation = Decimal('0')
-                if current_balance_before_this_principal == Decimal('0') and amount_paid > Decimal('0'):
-                        principal_for_interest_calculation = amount_paid
-                        logging.debug(f"Principal for interest (initial deposit): {principal_for_interest_calculation}")
-                else:
-                        # For all other subsequent transactions, interest is calculated on the balance
-                        # *before* this transaction's principal change.
-                        principal_for_interest_calculation = current_balance_before_this_principal
-                        logging.debug(f"Principal for interest (subsequent period): {principal_for_interest_calculation}")
 
-                logging.debug(f"Principal for interest calculation (final value passed to calculate_interest): {principal_for_interest_calculation}")
-                logging.debug(f"Annual Rate: {customer.annual_rate}")		        
-                
+            int_amount = tds_amount = net_amount = None
+            no_of_days = None
+
+            if period_from and period_to:
+                no_of_days = (period_to - period_from).days + 1
+                principal_for_interest_calculation = Decimal('0')
+
+                if customer.interest_type == 'simple':
+                    # Simple Interest Calculation Logic
+                    if amount_paid > Decimal('0'):
+                        # Deposit — interest on previous balance + current paid
+                        principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
+                    elif amount_repaid > Decimal('0'):
+                        # Repayment — interest on balance before this txn (exclude this repayment)
+                        principal_for_interest_calculation = net_outstanding_balance
+                    else:
+                        # Passive period — interest on previous balance
+                        principal_for_interest_calculation = current_balance_before_this_txn
+                else:
+                    # Compound interest logic — unchanged
+                    if current_balance_before_this_txn == Decimal('0') and amount_paid > Decimal('0'):
+                        principal_for_interest_calculation = amount_paid
+                    else:
+                        principal_for_interest_calculation = current_balance_before_this_txn
+
                 if customer.interest_type == 'simple':
                     int_amount = calculate_interest(principal_for_interest_calculation, customer.annual_rate, no_of_days)
                 else:
                     int_amount = calculate_compound_interest(principal_for_interest_calculation, customer.annual_rate, no_of_days, customer.compound_frequency)
-                
-                # Calculate TDS if applicable
+
+                # TDS
                 if customer.tds_applicable and int_amount:
-                    tds_rate_to_use = customer.tds_percentage # Use customer's specific TDS percentage
-                    
-                    if tds_rate_to_use is not None and tds_rate_to_use > Decimal('0'):
-                        tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
-                    else:
-                        tds_amount = Decimal('0') # No TDS if percentage is 0 or None
+                    tds_rate_to_use = customer.tds_percentage or Decimal('0.00')
+                    tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
                     net_amount = int_amount - tds_amount
                 else:
                     tds_amount = Decimal('0')
                     net_amount = int_amount
-            
-            # Create transaction
+
+            # Save transaction
             transaction = Transaction(
                 customer_id=customer_id,
                 date=transaction_date,
@@ -296,19 +310,21 @@ def transactions(customer_id):
                 net_amount=net_amount,
                 created_by=current_user.id
             )
-            
+
             db.session.add(transaction)
             db.session.commit()
             flash('Transaction added successfully!', 'success')
             return redirect(url_for('transactions', customer_id=customer_id))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error adding transaction: {str(e)}', 'error')
             logging.error(f"Transaction error: {e}")
-    
+
     transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
     return render_template('transactions.html', customer=customer, transactions=transactions)
+
+
 
 @app.route('/reports')
 @login_required
@@ -580,18 +596,27 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             logging.debug(f"Recalculating transaction {transaction.id} (Date: {transaction.date})")
 
             # Determine principal for interest calculation for *this specific transaction's period*
-            # This logic mirrors what's in the transactions route for adding new ones.
+            # Different logic for simple vs compound interest
             principal_for_interest_calculation = Decimal('0')
             
-            # If the running balance is 0 AND there's an amount_paid in this transaction,
-            # then interest is on the amount_paid. This covers the very first deposit in the sequence.
-            if current_running_balance == Decimal('0') and transaction.amount_paid and transaction.amount_paid > Decimal('0'):
-                principal_for_interest_calculation = transaction.get_safe_amount_paid()
-                logging.debug(f"  Principal for interest (initial deposit in sequence): {principal_for_interest_calculation}")
+            if customer.interest_type == 'simple':
+                # For simple interest, use net outstanding balance (deposits minus withdrawals)
+                # Calculate net outstanding balance up to and including this transaction
+                net_outstanding_balance = Decimal('0')
+                for prev_txn in Transaction.query.filter_by(customer_id=customer_id).filter(Transaction.date <= transaction.date).all():
+                    net_outstanding_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+                
+                principal_for_interest_calculation = net_outstanding_balance
+                logging.debug(f"  Simple Interest - Principal for interest (net outstanding balance including current): {principal_for_interest_calculation}")
             else:
-                # For all other transactions, interest is calculated on the running balance
-                principal_for_interest_calculation = current_running_balance
-                logging.debug(f"  Principal for interest (running balance): {principal_for_interest_calculation}")
+                # For compound interest, use cumulative balance logic
+                if current_running_balance == Decimal('0') and transaction.amount_paid and transaction.amount_paid > Decimal('0'):
+                    principal_for_interest_calculation = transaction.get_safe_amount_paid()
+                    logging.debug(f"  Compound Interest - Principal for interest (initial deposit in sequence): {principal_for_interest_calculation}")
+                else:
+                    # For compound interest, use the cumulative running balance
+                    principal_for_interest_calculation = current_running_balance
+                    logging.debug(f"  Compound Interest - Principal for interest (running balance): {principal_for_interest_calculation}")
 
             # Recalculate no_of_days (if period dates are present)
             if transaction.period_from and transaction.period_to:
