@@ -53,14 +53,14 @@
                                 <div class="mb-3">
                                     <label class="form-label">Current Balance</label>
                                     <input type="text" class="form-control" id="current_balance_display" 
-                                           value="{{ customer.current_balance | safe_currency }}" readonly>
+                                           value="{{ customer.get_current_balance() | safe_currency }}" readonly>
                                 </div>
                             </div>
                         </div>
 
                         <hr>
                         
-                        <h6><i class="fas fa-percent me-2"></i>Interest Calculation (Optional)</h6>
+                        <h6><i class="fas fa-percent me-2"></i>Interest Calculation Period</h6>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -98,9 +98,9 @@
                                            value="{% if customer.tds_applicable %}Yes{% else %}No{% endif %}" readonly>
                                 </div>
                             </div>
-			<div class="col-md-4">
+			                <div class="col-md-4">
                                 <div class="mb-3">
-                                    <label class="form-label">TDS Rate</label>
+                                    <label class="form-label">TDS Rate</labe l>
                                     <input type="text" class="form-control" 
                                            value="{{ customer.tds_percentage | safe_percentage }}" readonly>
                                 </div>
@@ -201,7 +201,7 @@
                                     <th>Interest Amount</th>
                                     <th>TDS</th>
                                     <th>Net Amount</th>
-				    <th>Actions</th>
+				                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -285,9 +285,36 @@
 {% block extra_scripts %}
 <script>
 $(document).ready(function() {
-    // Set today's date as default
-    $('#date').val(new Date().toISOString().split('T')[0]);
+    const transactionDateInput = $('#date');
+    const periodFromInput = $('#period_from');
+    const periodToInput = $('#period_to');
+
+    // Set today's date as default for Transaction Date if not already set
+    const today = new Date().toISOString().split('T')[0];
+    if (!transactionDateInput.val()) {
+        transactionDateInput.val(today);
+    }
     
+    // Set initial Period From using the value passed from Flask
+    // This ensures JS controls the initial value and can be more resilient
+    const defaultPeriodFromValue = "{{ default_period_from }}";
+    if (defaultPeriodFromValue) {
+        periodFromInput.val(defaultPeriodFromValue);
+        console.log('Initial Period From set to:', periodFromInput.val());
+    }
+
+    // Period To always mirrors Transaction Date
+    periodToInput.val(transactionDateInput.val()); // Initial set
+    transactionDateInput.on('change', function() {
+        periodToInput.val($(this).val()); // Update when transaction date changes
+        console.log('Period To updated to:', periodToInput.val(), 'due to Transaction Date change.');
+    });
+
+    // Add a change listener to Period From for debugging purposes
+    periodFromInput.on('change', function() {
+        console.log('User manually changed Period From to:', $(this).val());
+    });
+
     // Initialize DataTable
     $('#transactionsTable').DataTable({
         "pageLength": 10,
@@ -298,60 +325,54 @@ $(document).ready(function() {
         }
     });
     
-    // Calculate days when dates are selected
-    $('#period_from, #period_to').change(function() {
-        var fromDate = $('#period_from').val();
-        var toDate = $('#period_to').val();
-        
-        if (fromDate && toDate) {
-            var from = new Date(fromDate);
-            var to = new Date(toDate);
-            var diffTime = Math.abs(to - from);
-            var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            // Display calculated days (you can add a field to show this)
-            console.log('Days calculated:', diffDays);
-        }
-    });
-    
-    // Form validation
+    // Form validation (client-side)
     $('#transactionForm').submit(function(e) {
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
         
-        if (amountPaid === 0 && amountRepaid === 0) {
+        /*if (amountPaid === 0 && amountRepaid === 0) {
             e.preventDefault();
-            alert('Please enter either amount paid or amount repaid.');
+            // Using custom message function from app.js if available
+            if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
+                LoanApp.utils.showInputError($('#amount_paid')[0], 'Please enter either amount paid or amount repaid.');
+                LoanApp.utils.showInputError($('#amount_repaid')[0], 'Please enter either amount paid or amount repaid.');
+            } else {
+                alert('Please enter either amount paid or amount repaid.');
+            }
             return false;
-        }
+        }*/
         
-        // Validate date ranges
-        var fromDate = $('#period_from').val();
-        var toDate = $('#period_to').val();
-        
-        if ((fromDate && !toDate) || (!fromDate && toDate)) {
-            e.preventDefault();
-            alert('Please select both period from and period to dates, or leave both empty.');
-            return false;
-        }
+        // Validate period_from <= period_to if manually changed
+        var fromDate = periodFromInput.val();
+        var toDate = periodToInput.val();
         
         if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
             e.preventDefault();
-            alert('Period from date cannot be later than period to date.');
+            if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
+                LoanApp.utils.showInputError(periodToInput[0], 'Period from date cannot be later than period to date.');
+            } else {
+                alert('Period from date cannot be later than period to date.');
+            }
             return false;
         }
     });
     
     // Update balance display on amount changes
     $('#amount_paid, #amount_repaid').on('input', function() {
-        var currentBalance = {{ customer.current_balance | safe_decimal }};
+        // This is client-side projection, actual balance will be calculated server-side
+        var initialCustomerBalance = {{ customer.get_current_balance() | safe_decimal }};
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
         
-        var newBalance = currentBalance + amountPaid - amountRepaid;
-        $('#current_balance_display').val('₹' + newBalance.toFixed(2));
+        // This projection does NOT include interest/tds for the new transaction,
+        // as that is complex and handled fully on the server.
+        // It only reflects the principal movement.
+        var newProjectedBalance = initialCustomerBalance + amountPaid - amountRepaid;
+        $('#current_balance_display').val('₹' + newProjectedBalance.toFixed(2));
     });
-	const editTransactionForm = document.getElementById('editTransactionForm');
+
+    // Edit Transaction Modal Logic
+    const editTransactionForm = document.getElementById('editTransactionForm');
 
     document.querySelectorAll('.edit-transaction-btn').forEach(button => {
         button.addEventListener('click', function() {
@@ -373,26 +394,12 @@ $(document).ready(function() {
             document.getElementById('edit_period_from').value = periodFrom;
             document.getElementById('edit_period_to').value = periodTo;
 
-            // Auto-fill Period From for Edit Transaction Modal if Transaction Date changes
-            const editTransactionDateInput = document.getElementById('edit_date');
-            const editPeriodFromInput = document.getElementById('edit_period_from');
-
-            // Remove previous listener to prevent multiple bindings if modal is opened multiple times
-            const existingListener = editTransactionDateInput.dataset.listener;
-            if (existingListener && window[existingListener]) {
-                editTransactionDateInput.removeEventListener('change', window[existingListener]);
-            }
-            const newEditListener = function() {
-                editPeriodFromInput.value = this.value;
-            };
-            const listenerName = `editDateChangeListener_${transactionId}`; // Unique name
-            window[listenerName] = newEditListener; // Store globally
-            editTransactionDateInput.addEventListener('change', newEditListener);
-            editTransactionDateInput.dataset.listener = listenerName; // Store reference to remove later
+            // For edit modal, period_from and period_to are still editable by admin
+            // No automation for these fields in edit modal, as admin might need to correct.
         });
     });
 
-    // Calculate days when dates are selected for EDIT transaction form
+    // Calculate days when dates are selected for EDIT transaction form (still manual for edit)
     $('#edit_period_from, #edit_period_to').change(function() {
         var fromDate = $('#edit_period_from').val();
         var toDate = $('#edit_period_to').val();
@@ -412,63 +419,3 @@ $(document).ready(function() {
         var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
         
-        if (amountPaid === 0 && amountRepaid === 0) {
-            e.preventDefault();
-            showCustomMessage('Please enter either amount paid or amount repaid.', 'danger');
-            return false;
-        }
-        
-        var fromDate = $('#edit_period_from').val();
-        var toDate = $('#edit_period_to').val();
-        
-        if ((fromDate && !toDate) || (!fromDate && toDate)) {
-            e.preventDefault();
-            showCustomMessage('Please select both period from and period to dates, or leave both empty.', 'danger');
-            return false;
-        }
-        
-        if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
-            e.preventDefault();
-            showCustomMessage('Period from date cannot be later than period to date.', 'danger');
-            return false;
-        }
-    });
-    
-    // Update balance display on amount changes for EDIT form (simplified projection)
-    $('#edit_amount_paid, #edit_amount_repaid').on('input', function() {
-        console.log('Edit Form - Projected New Balance: This is a simplified client-side projection.');
-        var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
-        var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
-        
-        console.log('Edit Form - Amount Paid:', amountPaid, 'Amount Repaid:', amountRepaid);
-    });
-
-    // Confirm Delete Transaction function
-    function confirmDeleteTransaction(transactionId, transactionDate) {
-        if (confirm(`Are you sure you want to delete the transaction on ${transactionDate}? This action cannot be undone.`)) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `/delete_transaction/${transactionId}`;
-
-            // Add CSRF token
-            const csrfTokenElement = document.querySelector('meta[name="csrf-token"]');
-            if (csrfTokenElement) {
-                const csrfInput = document.createElement('input');
-                csrfInput.type = 'hidden';
-                csrfInput.name = 'csrf_token';
-                csrfInput.value = csrfTokenElement.getAttribute('content');
-                form.appendChild(csrfInput);
-            } else {
-                console.error("CSRF token meta tag not found. Delete operation might fail.");
-                showCustomMessage("Security error: CSRF token missing. Delete operation aborted.", "danger");
-                return; // Prevent form submission if CSRF token is missing
-            }
-            document.body.appendChild(form);
-            form.submit();
-        }
-    }
-    // Make confirmDeleteTransaction globally accessible as it's called from onclick
-    window.confirmDeleteTransaction = confirmDeleteTransaction;
-});
-</script>
-{% endblock %}
