@@ -40,19 +40,19 @@
                     <dl class="row">
                         <dt class="col-sm-4">ICL No:</dt>
                         <dd class="col-sm-8">{{ customer.icl_no }}</dd>
-                        
+
                         <dt class="col-sm-4">Name:</dt>
                         <dd class="col-sm-8">{{ customer.name }}</dd>
-                        
+
                         <dt class="col-sm-4">Address:</dt>
                         <dd class="col-sm-8">{{ customer.address or 'Not provided' }}</dd>
-                        
+
                         <dt class="col-sm-4">Contact:</dt>
                         <dd class="col-sm-8">{{ customer.contact_details or 'Not provided' }}</dd>
-                        
+
                         <dt class="col-sm-4">Annual Rate:</dt>
                         <dd class="col-sm-8">{{ customer.annual_rate | safe_percentage }}</dd>
-                        
+
                         <dt class="col-sm-4">Interest Type:</dt>
                         <dd class="col-sm-8">
                             <span class="badge bg-info">{{ customer.interest_type.title() }}</span>
@@ -60,7 +60,7 @@
                                 <small class="text-muted">({{ customer.compound_frequency.title() }})</small>
                             {% endif %}
                         </dd>
-                        
+
                         <dt class="col-sm-4">TDS Applicable:</dt>
                         <dd class="col-sm-8">
                             {% if customer.tds_applicable %}
@@ -75,7 +75,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
@@ -85,18 +85,18 @@
                     <dl class="row">
                         <dt class="col-sm-4">Start Date:</dt>
                         <dd class="col-sm-8">{{ customer.icl_start_date.strftime('%d-%m-%Y') if customer.icl_start_date else 'Not set' }}</dd>
-                        
+
                         <dt class="col-sm-4">End Date:</dt>
                         <dd class="col-sm-8">{{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else 'Not set' }}</dd>
-                        
+
                         <dt class="col-sm-4">Extension:</dt>
                         <dd class="col-sm-8">{{ customer.icl_extension or 'None' }}</dd>
-                        
+
                         {% if customer.first_compounding_date %}
                         <dt class="col-sm-4">First Compounding:</dt>
                         <dd class="col-sm-8">{{ customer.first_compounding_date.strftime('%d-%m-%Y') }}</dd>
                         {% endif %}
-                        
+
                         <dt class="col-sm-4">Created:</dt>
                         <dd class="col-sm-8">{{ customer.created_at.strftime('%d-%m-%Y') if customer.created_at else 'Unknown' }}</dd>
                     </dl>
@@ -124,63 +124,153 @@
         </div>
     </div>
 
-    <!-- Transaction History -->
+    <!-- Transaction History (Aggregated View) -->
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-history me-2"></i>Transaction History</h5>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-chart-line me-2"></i>Financial Summary</h5>
+                    <div class="btn-group" role="group" aria-label="Period View">
+                        <button type="button" class="btn btn-outline-primary active" data-period="quarterly">Quarterly</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="half_yearly">Half-Yearly</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="yearly">Yearly</button>
+                    </div>
                 </div>
                 <div class="card-body">
-                    {% if transactions %}
-                    <div class="table-responsive">
-                        <table class="table table-striped" id="transactionsTable">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Amount Paid</th>
-                                    <th>Amount Repaid</th>
-                                    <th>Balance</th>
-                                    <th>Period From</th>
-                                    <th>Period To</th>
-                                    <th>Days</th>
-                                    <th>Interest Rate</th>
-                                    <th>Interest Amount</th>
-                                    <th>TDS</th>
-                                    <th>Net Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for transaction in transactions %}
-                                <tr>
-                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}</td>
-                                    <td>{{ transaction.amount_paid | safe_currency if transaction.amount_paid else '-' }}</td>
-                                    <td>{{ transaction.amount_repaid | safe_currency if transaction.amount_repaid else '-' }}</td>
-                                    <td>{{ transaction.balance | safe_currency if transaction.balance else '-' }}</td>
-                                    <td>{{ transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else '-' }}</td>
-                                    <td>{{ transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else '-' }}</td>
-                                    <td>{{ transaction.no_of_days | safe_number if transaction.no_of_days else '-' }}</td>
-                                    <td>{{ transaction.int_rate | safe_percentage if transaction.int_rate else '-' }}</td>
-                                    <td>{{ transaction.int_amount | safe_currency if transaction.int_amount else '-' }}</td>
-                                    <td>{{ transaction.tds_amount | safe_currency if transaction.tds_amount else '-' }}</td>
-                                    <td>{{ transaction.net_amount | safe_currency if transaction.net_amount else '-' }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-4">
-                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                        <h5 class="text-muted">No transactions found</h5>
-                        <p class="text-muted">No transactions have been recorded for this customer yet.</p>
-                        {% if current_user.role in ['admin', 'data_entry'] %}
-                        <a href="{{ url_for('transactions', customer_id=customer.id) }}" class="btn btn-primary">
-                            <i class="fas fa-plus me-2"></i>Add First Transaction
-                        </a>
+                    <div id="quarterly_summary" class="period-summary-table">
+                        {% if quarterly_summary %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Period</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th class="text-end">Opening Balance</th>
+                                        <th class="text-end">Total Paid</th>
+                                        <th class="text-end">Total Repaid</th>
+                                        <th class="text-end">Total Interest</th>
+                                        <th class="text-end">Total TDS</th>
+                                        <th class="text-end">Total Net Amount</th>
+                                        <th class="text-end">Closing Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for period in quarterly_summary %}
+                                    <tr>
+                                        <td>{{ period.period_name }}</td>
+                                        <td>{{ period.start_date.strftime('%d-%m-%Y') }}</td>
+                                        <td>{{ period.end_date.strftime('%d-%m-%Y') }}</td>
+                                        <td class="text-end">{{ period.opening_balance | safe_currency }}</td>
+                                        <td class="text-end text-success">{{ period.total_paid | safe_currency }}</td>
+                                        <td class="text-end text-danger">{{ period.total_repaid | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_interest | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_tds | safe_currency }}</td>
+                                        <td class="text-end text-primary">{{ period.total_net_amount | safe_currency }}</td>
+                                        <td class="text-end"><strong>{{ period.closing_balance | safe_currency }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No quarterly data available.</h5>
+                            <p class="text-muted">Add transactions to see financial summaries.</p>
+                        </div>
                         {% endif %}
                     </div>
-                    {% endif %}
+
+                    <div id="half_yearly_summary" class="period-summary-table" style="display: none;">
+                        {% if half_yearly_summary %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Period</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th class="text-end">Opening Balance</th>
+                                        <th class="text-end">Total Paid</th>
+                                        <th class="text-end">Total Repaid</th>
+                                        <th class="text-end">Total Interest</th>
+                                        <th class="text-end">Total TDS</th>
+                                        <th class="text-end">Total Net Amount</th>
+                                        <th class="text-end">Closing Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for period in half_yearly_summary %}
+                                    <tr>
+                                        <td>{{ period.period_name }}</td>
+                                        <td>{{ period.start_date.strftime('%d-%m-%Y') }}</td>
+                                        <td>{{ period.end_date.strftime('%d-%m-%Y') }}</td>
+                                        <td class="text-end">{{ period.opening_balance | safe_currency }}</td>
+                                        <td class="text-end text-success">{{ period.total_paid | safe_currency }}</td>
+                                        <td class="text-end text-danger">{{ period.total_repaid | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_interest | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_tds | safe_currency }}</td>
+                                        <td class="text-end text-primary">{{ period.total_net_amount | safe_currency }}</td>
+                                        <td class="text-end"><strong>{{ period.closing_balance | safe_currency }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No half-yearly data available.</h5>
+                            <p class="text-muted">Add transactions to see financial summaries.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div id="yearly_summary" class="period-summary-table" style="display: none;">
+                        {% if yearly_summary %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Period</th>
+                                        <th>Start Date</th>
+                                        <th>End Date</th>
+                                        <th class="text-end">Opening Balance</th>
+                                        <th class="text-end">Total Paid</th>
+                                        <th class="text-end">Total Repaid</th>
+                                        <th class="text-end">Total Interest</th>
+                                        <th class="text-end">Total TDS</th>
+                                        <th class="text-end">Total Net Amount</th>
+                                        <th class="text-end">Closing Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for period in yearly_summary %}
+                                    <tr>
+                                        <td>{{ period.period_name }}</td>
+                                        <td>{{ period.start_date.strftime('%d-%m-%Y') }}</td>
+                                        <td>{{ period.end_date.strftime('%d-%m-%Y') }}</td>
+                                        <td class="text-end">{{ period.opening_balance | safe_currency }}</td>
+                                        <td class="text-end text-success">{{ period.total_paid | safe_currency }}</td>
+                                        <td class="text-end text-danger">{{ period.total_repaid | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_interest | safe_currency }}</td>
+                                        <td class="text-end">{{ period.total_tds | safe_currency }}</td>
+                                        <td class="text-end text-primary">{{ period.total_net_amount | safe_currency }}</td>
+                                        <td class="text-end"><strong>{{ period.closing_balance | safe_currency }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No yearly data available.</h5>
+                            <p class="text-muted">Add transactions to see financial summaries.</p>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -200,24 +290,46 @@
 {% block extra_scripts %}
 <script>
 $(document).ready(function() {
-    $('#transactionsTable').DataTable({
-        "pageLength": 10,
-        "responsive": true,
-        "order": [[0, "desc"]], // Sort by date descending
-        "language": {
-            "search": "Search transactions:"
-        },
-        "columnDefs": [
-            {
-                "targets": [1, 2, 3, 8, 9, 10], // Amount columns
-                "className": "text-end"
-            },
-            {
-                "targets": [6, 7], // Number columns
-                "className": "text-center"
-            }
-        ]
+    // Handle period view selection
+    $('.btn-group button').on('click', function() {
+        // Remove active class from all buttons
+        $('.btn-group button').removeClass('active');
+        // Add active class to the clicked button
+        $(this).addClass('active');
+
+        // Hide all summary tables
+        $('.period-summary-table').hide();
+
+        // Show the selected summary table
+        const periodType = $(this).data('period');
+        $('#' + periodType + '_summary').show();
     });
+
+    // Initialize DataTables for each summary table (if they exist)
+    // Note: DataTables might not be ideal for aggregated tables that are small or dynamically shown/hidden.
+    // If performance issues arise, consider removing DataTable initialization for these summary tables.
+    // For now, I'll keep the basic DataTable initialization logic.
+    $('.period-summary-table table').each(function() {
+        if (!$.fn.DataTable.isDataTable(this)) {
+            $(this).DataTable({
+                "paging": false, // No pagination for summary tables
+                "searching": false, // No search for summary tables
+                "info": false, // No info text
+                "ordering": false, // No sorting
+                "responsive": true,
+                "columnDefs": [
+                    {
+                        "targets": [3, 4, 5, 6, 7, 8, 9], // Balance and amount columns
+                        "className": "text-end"
+                    }
+                ]
+            });
+        }
+    });
+
+    // Ensure the initially active tab's DataTable is rendered if it has data
+    // This might be redundant if DataTables are initialized on all tables, but good for clarity.
+    $('#quarterly_summary table').DataTable(); // Initialize the default visible table
 });
 </script>
 {% endblock %}
