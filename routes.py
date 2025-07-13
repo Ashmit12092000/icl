@@ -4,7 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app import app, db
 from models import User, Customer, Transaction, InterestRate, TDSRate
 from utils import calculate_interest, calculate_compound_interest, export_to_excel, get_period_report, safe_decimal_conversion
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 import io
 import logging
@@ -87,10 +87,10 @@ def dashboard():
     recent_transactions = Transaction.query.order_by(Transaction.created_at.desc()).limit(5).all()
 
     return render_template('dashboard.html',
-                         customers=customers,
-                         total_customers=total_customers,
-                         total_balance=total_balance,
-                         recent_transactions=recent_transactions)
+                           customers=customers,
+                           total_customers=total_customers,
+                           total_balance=total_balance,
+                           recent_transactions=recent_transactions)
 
 @app.route('/customer_master', methods=['GET', 'POST'])
 @data_entry_required
@@ -161,9 +161,9 @@ def customer_profile(customer_id):
     current_balance = customer.get_current_balance()
 
     return render_template('customer_profile.html',
-                         customer=customer,
-                         transactions=transactions,
-                         current_balance=current_balance)
+                           customer=customer,
+                           transactions=transactions,
+                           current_balance=current_balance)
 
 @app.route('/edit_customer/<int:customer_id>', methods=['GET', 'POST'])
 @data_entry_required
@@ -223,6 +223,29 @@ def delete_customer(customer_id):
 @data_entry_required
 def transactions(customer_id):
     customer = Customer.query.get_or_404(customer_id)
+
+    # --- START MODIFICATION ---
+    default_period_from = None
+    # Fetch the last transaction for the customer to get its period_to date
+    last_transaction = Transaction.query.filter_by(customer_id=customer_id) \
+                                      .order_by(Transaction.date.desc(), Transaction.created_at.desc()) \
+                                      .first()
+    if last_transaction and last_transaction.period_to:
+        # If there's a last transaction with a period_to, set it as default_period_from
+        new_period_from_date = last_transaction.period_to + timedelta(days=1)
+        default_period_from = new_period_from_date.strftime('%Y-%m-%d')
+        logging.debug(f"Found last transaction period_to: {default_period_from} for customer {customer_id}")
+    else:
+        # If no transactions or no period_to, use customer's start date as default
+        # or just leave it None to allow client-side to use current date
+        if customer.icl_start_date:
+            default_period_from = customer.icl_start_date.strftime('%Y-%m-%d')
+            logging.debug(f"No last transaction period_to, using customer icl_start_date: {default_period_from}")
+        else:
+            # Fallback for entirely new customers without a defined start date
+            default_period_from = date.today().strftime('%Y-%m-%d')
+            logging.debug(f"No customer icl_start_date, defaulting period_from to today: {default_period_from}")
+    # --- END MODIFICATION ---
 
     if request.method == 'POST':
         try:
@@ -322,8 +345,8 @@ def transactions(customer_id):
             logging.error(f"Transaction error: {e}")
 
     transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
-    return render_template('transactions.html', customer=customer, transactions=transactions)
-
+    # Pass the default_period_from to the template
+    return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
 
 
 @app.route('/reports')
@@ -475,6 +498,7 @@ def update_tds_rate():
         flash(f'Error updating TDS rate: {str(e)}', 'error')
 
     return redirect(url_for('admin_panel'))
+
 @app.route('/edit_transaction/<int:transaction_id>', methods=['POST'])
 @login_required # Ensure user is logged in
 @admin_required # Only admin can edit transactions
@@ -551,6 +575,7 @@ def delete_transaction(transaction_id):
         logging.error(f"Error deleting transaction {transaction_id}: {e}", exc_info=True)
 
     return redirect(url_for('transactions', customer_id=customer_id))
+
 def recalculate_customer_transactions(customer_id, start_date=None):
     """
     Recalculates balances, interest, TDS, and net amounts for a customer's transactions
@@ -559,7 +584,7 @@ def recalculate_customer_transactions(customer_id, start_date=None):
     Args:
         customer_id (int): The ID of the customer whose transactions need recalculation.
         start_date (datetime.date, optional): The date from which to start recalculating.
-                                              If None, all transactions for the customer are recalculated.
+                                               If None, all transactions for the customer are recalculated.
     """
     logging.debug(f"Starting recalculation for customer {customer_id} from date {start_date}")
 
@@ -679,3 +704,170 @@ def recalculate_customer_transactions(customer_id, start_date=None):
         db.session.rollback()
         logging.error(f"Error during recalculation for customer {customer_id}: {e}", exc_info=True)
         return False
+def _group_transactions_by_period(customer, transactions, period_type):
+    """
+    Aggregates transactions into quarterly, half-yearly, or yearly periods
+    starting from the customer's ICL start date.
+    """
+    logging.debug(f"Starting _group_transactions_by_period for customer {customer.id}, type: {period_type}")
+    summary_data = []
+    if not customer or not customer.icl_start_date:
+        logging.debug("Customer or ICL start date missing, returning empty summary.")
+        return summary_data
+
+    start_date_of_customer = customer.icl_start_date
+
+    # Sort transactions by date and creation_at to ensure correct chronological processing
+    sorted_transactions = sorted(transactions, key=lambda t: (t.date, t.created_at))
+    logging.debug(f"Sorted transactions count: {len(sorted_transactions)}")
+
+    # Initialize running balance before the first period
+    current_running_balance_for_summary = Decimal('0')
+
+    # Calculate initial balance from transactions *before* the ICL start date
+    # This ensures the first period's opening balance is correct if there are historical transactions
+    pre_icl_transactions = [t for t in sorted_transactions if t.date < start_date_of_customer]
+    for t in pre_icl_transactions:
+        current_running_balance_for_summary += t.get_safe_amount_paid() - t.get_safe_amount_repaid()
+        current_running_balance_for_summary += t.get_safe_net_amount()
+    logging.debug(f"Initial running balance before ICL start date ({start_date_of_customer}): {current_running_balance_for_summary}")
+
+
+    current_period_start = start_date_of_customer
+
+    # Determine the overall end date for the summary (latest transaction date or today)
+    if sorted_transactions:
+        max_transaction_date = sorted_transactions[-1].date
+    else:
+        max_transaction_date = date.today() # If no transactions, summarize up to today
+
+    overall_end_date = max(max_transaction_date, date.today()) # Ensure we go up to today if no future transactions
+    logging.debug(f"Overall summary end date: {overall_end_date}")
+
+    # Keep track of the index for sorted_transactions to avoid re-iterating
+    transaction_idx = 0
+
+    while current_period_start <= overall_end_date:
+        period_name = ""
+        period_end = None
+
+        if period_type == 'quarterly':
+            # Calculate end of quarter
+            year = current_period_start.year
+            month = current_period_start.month
+
+            if month >= 1 and month <= 3:
+                period_end = date(year, 3, 31)
+                period_name = f"Q1 {year}"
+            elif month >= 4 and month <= 6:
+                period_end = date(year, 6, 30)
+                period_name = f"Q2 {year}"
+            elif month >= 7 and month <= 9:
+                period_end = date(year, 9, 30)
+                period_name = f"Q3 {year}"
+            else: # month >= 10 and month <= 12
+                period_end = date(year, 12, 31)
+                period_name = f"Q4 {year}"
+        elif period_type == 'half_yearly':
+            # Calculate end of half-year
+            year = current_period_start.year
+            if current_period_start.month <= 6:
+                period_end = date(year, 6, 30)
+                period_name = f"H1 {year}"
+            else:
+                period_end = date(year, 12, 31)
+                period_name = f"H2 {year}"
+        elif period_type == 'yearly':
+            # Calculate end of year
+            year = current_period_start.year
+            period_end = date(year, 12, 31)
+            period_name = f"Year {year}"
+
+        # Adjust period_end if it goes beyond overall_end_date (e.g., current period)
+        if period_end > overall_end_date:
+            period_end = overall_end_date
+
+        # Ensure actual_period_start is not before customer's ICL start date for the very first period
+        actual_period_start = max(current_period_start, start_date_of_customer)
+
+        logging.debug(f"Processing period: {period_name} from {actual_period_start} to {period_end}")
+
+        total_paid_in_period = Decimal('0')
+        total_repaid_in_period = Decimal('0')
+        total_interest_in_period = Decimal('0')
+        total_tds_in_period = Decimal('0')
+        total_net_amount_in_period = Decimal('0')
+
+        # Capture opening balance for the current period
+        opening_balance_for_period = current_running_balance_for_summary
+
+        # Iterate through transactions from the last processed point
+        transactions_in_period = []
+        while transaction_idx < len(sorted_transactions) and \
+              sorted_transactions[transaction_idx].date <= period_end:
+
+            t = sorted_transactions[transaction_idx]
+            if t.date >= actual_period_start: # Only include if within the current period's bounds
+                transactions_in_period.append(t)
+                total_paid_in_period += t.get_safe_amount_paid()
+                total_repaid_in_period += t.get_safe_amount_repaid()
+                total_interest_in_period += t.get_safe_int_amount()
+                total_tds_in_period += t.get_safe_tds_amount()
+                total_net_amount_in_period += t.get_safe_net_amount()
+
+                # Update running balance for the next period's opening balance
+                current_running_balance_for_summary += t.get_safe_amount_paid() - t.get_safe_amount_repaid()
+                current_running_balance_for_summary += t.get_safe_net_amount()
+            transaction_idx += 1 # Move to the next transaction
+
+        # Capture closing balance for the current period
+        closing_balance_for_period = current_running_balance_for_summary
+
+        logging.debug(f"  Period totals: Paid={total_paid_in_period}, Repaid={total_repaid_in_period}, Interest={total_interest_in_period}, Closing Balance={closing_balance_for_period}")
+
+        # Only add period if it contains transactions or if it's the current/last period
+        # and has a non-zero balance or if it's the first period.
+        # Also, ensure period_end is not before actual_period_start (can happen with single-day periods or edge cases)
+        if actual_period_start <= period_end and \
+           (transactions_in_period or \
+           (actual_period_start <= date.today() <= period_end) or \
+           (actual_period_start == start_date_of_customer) or \
+           (opening_balance_for_period != Decimal('0') or closing_balance_for_period != Decimal('0'))):
+
+            summary_data.append({
+                'period_name': period_name,
+                'start_date': actual_period_start,
+                'end_date': period_end,
+                'opening_balance': opening_balance_for_period.quantize(Decimal('0.01')),
+                'total_paid': total_paid_in_period.quantize(Decimal('0.01')),
+                'total_repaid': total_repaid_in_period.quantize(Decimal('0.01')),
+                'total_interest': total_interest_in_period.quantize(Decimal('0.01')),
+                'total_tds': total_tds_in_period.quantize(Decimal('0.01')),
+                'total_net_amount': total_net_amount_in_period.quantize(Decimal('0.01')),
+                'closing_balance': closing_balance_for_period.quantize(Decimal('0.01'))
+            })
+
+        # Move to the next period
+        if period_type == 'quarterly':
+            # Advance to the first day of the next quarter
+            if period_end.month == 12: # If current quarter ends in Dec, next is Jan of next year
+                current_period_start = date(period_end.year + 1, 1, 1)
+            else: # Otherwise, next quarter starts 3 months from current quarter's start month
+                current_period_start = date(period_end.year, ((period_end.month // 3) * 3) + 1 + 3, 1)
+        elif period_type == 'half_yearly':
+            # Advance to the first day of the next half-year
+            if period_end.month == 12: # If current half-year ends in Dec, next is Jan of next year
+                current_period_start = date(period_end.year + 1, 1, 1)
+            else: # Otherwise, next half-year starts 6 months from current half-year's start month
+                current_period_start = date(period_end.year, 7, 1)
+        elif period_type == 'yearly':
+            current_period_start = date(current_period_start.year + 1, 1, 1)
+
+        # Break condition to prevent infinite loops if logic goes awry
+        if current_period_start > date.today() + timedelta(days=365 * 2): # Stop if more than 2 years into future
+            logging.warning("Breaking period summary loop: current_period_start too far in future.")
+            break
+
+    logging.debug(f"Finished _group_transactions_by_period. Total periods: {len(summary_data)}")
+    return summary_data
+
