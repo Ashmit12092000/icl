@@ -309,7 +309,16 @@ def transactions(customer_id):
                     if current_balance_before_this_txn == Decimal('0') and amount_paid > Decimal('0'):
                         principal_for_interest_calculation = amount_paid
                     else:
-                        principal_for_interest_calculation = current_balance_before_this_txn
+                        prior_transactions = Transaction.query.filter(
+                            Transaction.customer_id == customer_id,
+                            Transaction.date < transaction_date
+                        ).order_by(Transaction.date, Transaction.created_at).all()
+                
+                        principal_for_interest_calculation = compute_cumulative_balance(
+                            prior_transactions,
+                            deposits=amount_paid,
+                            withdrawals=amount_repaid
+                        )
 
                 if customer.interest_type == 'simple':
                     int_amount = calculate_interest(principal_for_interest_calculation, customer.annual_rate, no_of_days)
