@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from app import app, db
 from models import User, Customer, Transaction, InterestRate, TDSRate
-from utils import calculate_interest, calculate_compound_interest, export_to_excel, get_period_report, safe_decimal_conversion
+from utils import calculate_interest, calculate_compound_interest, export_to_excel, get_period_report, safe_decimal_conversion,compute_cumulative_principal
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 import io
