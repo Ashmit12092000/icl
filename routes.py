@@ -160,10 +160,18 @@ def customer_profile(customer_id):
     transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
     current_balance = customer.get_current_balance()
 
+    # Generate period summaries
+    quarterly_summary = _group_transactions_by_period(customer, transactions, 'quarterly')
+    half_yearly_summary = _group_transactions_by_period(customer, transactions, 'half_yearly')
+    yearly_summary = _group_transactions_by_period(customer, transactions, 'yearly')
+
     return render_template('customer_profile.html',
                            customer=customer,
                            transactions=transactions,
-                           current_balance=current_balance)
+                           current_balance=current_balance,
+                           quarterly_summary=quarterly_summary,
+                           half_yearly_summary=half_yearly_summary,
+                           yearly_summary=yearly_summary)
 
 @app.route('/edit_customer/<int:customer_id>', methods=['GET', 'POST'])
 @data_entry_required
@@ -853,13 +861,22 @@ def _group_transactions_by_period(customer, transactions, period_type):
             if period_end.month == 12: # If current quarter ends in Dec, next is Jan of next year
                 current_period_start = date(period_end.year + 1, 1, 1)
             else: # Otherwise, next quarter starts 3 months from current quarter's start month
-                current_period_start = date(period_end.year, ((period_end.month // 3) * 3) + 1 + 3, 1)
+                next_month = ((period_end.month - 1) // 3 + 1) * 3 + 1  # Always an integer
+                if next_month > 12:
+                    # Roll over to next year, correct month
+                    month = next_month - 12
+                    year = period_end.year + 1
+                else:
+                    month = next_month
+                    year = period_end.year
+
+                current_period_start = date(year, month, 1)
         elif period_type == 'half_yearly':
             # Advance to the first day of the next half-year
-            if period_end.month == 12: # If current half-year ends in Dec, next is Jan of next year
-                current_period_start = date(period_end.year + 1, 1, 1)
-            else: # Otherwise, next half-year starts 6 months from current half-year's start month
+            if period_end.month == 6: # If current half-year ends in June, next starts in July
                 current_period_start = date(period_end.year, 7, 1)
+            else: # If current half-year ends in December, next starts in January of next year
+                current_period_start = date(period_end.year + 1, 1, 1)
         elif period_type == 'yearly':
             current_period_start = date(current_period_start.year + 1, 1, 1)
 
