@@ -454,6 +454,97 @@ def export_customer_report(customer_id):
 
     return response
 
+@app.route('/calculate_realtime_balance/<int:customer_id>', methods=['POST'])
+@login_required
+def calculate_realtime_balance(customer_id):
+    """Calculate balance as of a specific date including accrued interest"""
+    try:
+        customer = Customer.query.get_or_404(customer_id)
+        as_of_date = datetime.strptime(request.form['as_of_date'], '%Y-%m-%d').date()
+        
+        # Get all transactions up to the specified date
+        transactions = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.date <= as_of_date
+        ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+        
+        if not transactions:
+            return jsonify({
+                'success': True,
+                'balance': '0.00',
+                'principal': '0.00',
+                'accrued_interest': '0.00',
+                'as_of_date': as_of_date.strftime('%d-%m-%Y')
+            })
+        
+        # Calculate principal balance from transactions
+        principal_balance = Decimal('0')
+        total_recorded_interest = Decimal('0')
+        
+        for txn in transactions:
+            principal_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+            total_recorded_interest += txn.get_safe_net_amount()
+        
+        # Find the last transaction date to calculate additional interest from
+        last_transaction = max(transactions, key=lambda t: (t.date, t.created_at))
+        last_transaction_date = last_transaction.date
+        
+        # Calculate additional interest from last transaction date to as_of_date
+        additional_interest = Decimal('0')
+        if as_of_date > last_transaction_date:
+            days_since_last_transaction = (as_of_date - last_transaction_date).days
+            
+            if days_since_last_transaction > 0:
+                # Determine the principal for interest calculation
+                # For the period after last transaction, use the accumulated balance
+                
+                # Check if we should use compound interest logic
+                should_use_compound = False
+                if customer.interest_type == 'compound' and customer.first_compounding_date:
+                    if as_of_date >= customer.first_compounding_date:
+                        should_use_compound = True
+                
+                if should_use_compound:
+                    # For compound interest, principal includes accumulated interest
+                    principal_for_calculation = principal_balance + total_recorded_interest
+                else:
+                    # For simple interest, only use principal balance
+                    principal_for_calculation = principal_balance
+                
+                # Calculate additional interest
+                additional_interest = calculate_interest(
+                    principal_for_calculation, 
+                    customer.annual_rate, 
+                    days_since_last_transaction
+                )
+                
+                # Apply TDS if applicable
+                if customer.tds_applicable and additional_interest > Decimal('0'):
+                    tds_rate = customer.tds_percentage or Decimal('0.00')
+                    tds_amount = additional_interest * (tds_rate / Decimal('100'))
+                    additional_interest = additional_interest - tds_amount
+        
+        # Total balance = principal + recorded interest + additional accrued interest
+        total_balance = principal_balance + total_recorded_interest + additional_interest
+        
+        return jsonify({
+            'success': True,
+            'balance': str(total_balance.quantize(Decimal('0.01'))),
+            'principal': str(principal_balance.quantize(Decimal('0.01'))),
+            'recorded_interest': str(total_recorded_interest.quantize(Decimal('0.01'))),
+            'accrued_interest': str(additional_interest.quantize(Decimal('0.01'))),
+            'as_of_date': as_of_date.strftime('%d-%m-%Y'),
+            'days_calculated': (as_of_date - last_transaction_date).days if as_of_date > last_transaction_date else 0,
+            'interest_type': customer.interest_type
+        })
+        
+    except Exception as e:
+        logging.error(f"Error calculating real-time balance: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
+
 @app.route('/export_period_report', methods=['POST'])
 @login_required
 def export_period_report():
@@ -985,6 +1076,5 @@ def _group_transactions_by_period(customer, transactions, period_type):
 
     logging.debug(f"Finished _group_transactions_by_period. Total periods: {len(summary_data)}")
     return summary_data
-
 
 
