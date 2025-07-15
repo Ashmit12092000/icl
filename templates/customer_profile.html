@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
 {% block title %}{{ customer.name }} - Customer Profile{% endblock %}
-
 {% block content %}
 <div class="container">
     <!-- Customer Header -->
@@ -9,7 +8,7 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h1><i class="fas fa-user me-2"></i>{{ customer.name }}</h1>
+                    <h1><i class="fas fa-user me-2"></i>{{ customer.name }} </h1>
                     <p class="text-muted">ICL No: {{ customer.icl_no }}</p>
                 </div>
                 <div>
@@ -123,6 +122,99 @@
             </div>
         </div>
     </div>
+
+    <!-- Interactive Charts and Analytics -->
+    <div class="row mb-4">
+        <!-- Transaction Distribution Pie Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-pie me-2"></i>Transaction Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="transactionPieChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance Trend Line Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-line me-2"></i>Balance Trend</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="balanceTrendChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center bg-gradient-success text-white">
+                <div class="card-body">
+                    <i class="fas fa-arrow-up fa-2x mb-2"></i>
+                    <h4 id="totalDeposits">₹0</h4>
+                    <p class="mb-0">Total Deposits</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-gradient-danger text-white">
+                <div class="card-body">
+                    <i class="fas fa-arrow-down fa-2x mb-2"></i>
+                    <h4 id="totalWithdrawals">₹0</h4>
+                    <p class="mb-0">Total Withdrawals</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-gradient-warning text-white">
+                <div class="card-body">
+                    <i class="fas fa-percentage fa-2x mb-2"></i>
+                    <h4 id="totalInterest">₹0</h4>
+                    <p class="mb-0">Total Interest</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center bg-gradient-info text-white">
+                <div class="card-body">
+                    <i class="fas fa-calendar fa-2x mb-2"></i>
+                    <h4 id="transactionCount">0</h4>
+                    <p class="mb-0">Transactions</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interest vs TDS Doughnut Chart -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-doughnut me-2"></i>Interest vs TDS Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="interestTdsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Monthly Activity Bar Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-bar me-2"></i>Monthly Activity</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="monthlyActivityChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div></div>
 
     <!-- Transaction History (Aggregated View) -->
     <div class="row">
@@ -288,8 +380,281 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
 <script>
 $(document).ready(function() {
+    // Transaction data from backend
+    const transactions = [
+        {% for transaction in transactions %}
+        {
+            date: '{{ transaction.date.strftime("%Y-%m-%d") if transaction.date else "" }}',
+            amountPaid: {{ transaction.get_safe_amount_paid() }},
+            amountRepaid: {{ transaction.get_safe_amount_repaid() }},
+            balance: {{ transaction.get_safe_balance() }},
+            interest: {{ transaction.get_safe_int_amount() }},
+            tds: {{ transaction.get_safe_tds_amount() }},
+            netAmount: {{ transaction.get_safe_net_amount() }}
+        },
+        {% endfor %}
+    ];
+
+    // Calculate metrics
+    function calculateMetrics() {
+        let totalDeposits = 0;
+        let totalWithdrawals = 0;
+        let totalInterest = 0;
+        let totalTds = 0;
+        
+        transactions.forEach(txn => {
+            totalDeposits += parseFloat(txn.amountPaid) || 0;
+            totalWithdrawals += parseFloat(txn.amountRepaid) || 0;
+            totalInterest += parseFloat(txn.interest) || 0;
+            totalTds += parseFloat(txn.tds) || 0;
+        });
+        
+        return {
+            totalDeposits,
+            totalWithdrawals,
+            totalInterest,
+            totalTds,
+            transactionCount: transactions.length
+        };
+    }
+
+    const metrics = calculateMetrics();
+
+    // Update metric cards
+    $('#totalDeposits').text('₹' + metrics.totalDeposits.toLocaleString('en-IN', {maximumFractionDigits: 2}));
+    $('#totalWithdrawals').text('₹' + metrics.totalWithdrawals.toLocaleString('en-IN', {maximumFractionDigits: 2}));
+    $('#totalInterest').text('₹' + metrics.totalInterest.toLocaleString('en-IN', {maximumFractionDigits: 2}));
+    $('#transactionCount').text(metrics.transactionCount);
+
+    // Transaction Distribution Pie Chart
+    const ctx1 = document.getElementById('transactionPieChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'pie',
+        data: {
+            labels: ['Deposits', 'Withdrawals'],
+            datasets: [{
+                data: [metrics.totalDeposits, metrics.totalWithdrawals],
+                backgroundColor: [
+                    'rgba(34, 197, 94, 0.8)',
+                    'rgba(239, 68, 68, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(34, 197, 94, 1)',
+                    'rgba(239, 68, 68, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return context.label + ': ₹' + value.toLocaleString('en-IN') + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Balance Trend Line Chart
+    const ctx2 = document.getElementById('balanceTrendChart').getContext('2d');
+    const balanceData = transactions.map(txn => ({
+        x: txn.date,
+        y: parseFloat(txn.balance) || 0
+    })).sort((a, b) => new Date(a.x) - new Date(b.x));
+
+    new Chart(ctx2, {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: 'Balance Trend',
+                data: balanceData,
+                borderColor: 'rgba(79, 70, 229, 1)',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: 'rgba(79, 70, 229, 1)',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Balance (₹)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + value.toLocaleString('en-IN');
+                        }
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Balance: ₹' + context.parsed.y.toLocaleString('en-IN');
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Interest vs TDS Doughnut Chart
+    const ctx3 = document.getElementById('interestTdsChart').getContext('2d');
+    const netInterest = metrics.totalInterest - metrics.totalTds;
+    
+    new Chart(ctx3, {
+        type: 'doughnut',
+        data: {
+            labels: ['Net Interest', 'TDS Deducted'],
+            datasets: [{
+                data: [netInterest, metrics.totalTds],
+                backgroundColor: [
+                    'rgba(16, 185, 129, 0.8)',
+                    'rgba(245, 158, 11, 0.8)'
+                ],
+                borderColor: [
+                    'rgba(16, 185, 129, 1)',
+                    'rgba(245, 158, 11, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.parsed;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return context.label + ': ₹' + value.toLocaleString('en-IN') + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Monthly Activity Bar Chart
+    const ctx4 = document.getElementById('monthlyActivityChart').getContext('2d');
+    
+    // Group transactions by month
+    const monthlyData = {};
+    transactions.forEach(txn => {
+        if (txn.date) {
+            const month = new Date(txn.date).toISOString().substr(0, 7); // YYYY-MM format
+            if (!monthlyData[month]) {
+                monthlyData[month] = { deposits: 0, withdrawals: 0 };
+            }
+            monthlyData[month].deposits += parseFloat(txn.amountPaid) || 0;
+            monthlyData[month].withdrawals += parseFloat(txn.amountRepaid) || 0;
+        }
+    });
+
+    const months = Object.keys(monthlyData).sort();
+    const monthlyDeposits = months.map(month => monthlyData[month].deposits);
+    const monthlyWithdrawals = months.map(month => monthlyData[month].withdrawals);
+
+    new Chart(ctx4, {
+        type: 'bar',
+        data: {
+            labels: months.map(month => {
+                const date = new Date(month + '-01');
+                return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short' });
+            }),
+            datasets: [
+                {
+                    label: 'Deposits',
+                    data: monthlyDeposits,
+                    backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                    borderColor: 'rgba(34, 197, 94, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Withdrawals',
+                    data: monthlyWithdrawals,
+                    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                    borderColor: 'rgba(239, 68, 68, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Amount (₹)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + value.toLocaleString('en-IN');
+                        }
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Month'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ₹' + context.parsed.y.toLocaleString('en-IN');
+                        }
+                    }
+                }
+            }
+        }
+    });
+
     // Handle period view selection
     $('.btn-group button').on('click', function() {
         // Remove active class from all buttons
@@ -306,20 +671,17 @@ $(document).ready(function() {
     });
 
     // Initialize DataTables for each summary table (if they exist)
-    // Note: DataTables might not be ideal for aggregated tables that are small or dynamically shown/hidden.
-    // If performance issues arise, consider removing DataTable initialization for these summary tables.
-    // For now, I'll keep the basic DataTable initialization logic.
     $('.period-summary-table table').each(function() {
         if (!$.fn.DataTable.isDataTable(this)) {
             $(this).DataTable({
-                "paging": false, // No pagination for summary tables
-                "searching": false, // No search for summary tables
-                "info": false, // No info text
-                "ordering": false, // No sorting
+                "paging": false,
+                "searching": false,
+                "info": false,
+                "ordering": false,
                 "responsive": true,
                 "columnDefs": [
                     {
-                        "targets": [3, 4, 5, 6, 7, 8, 9], // Balance and amount columns
+                        "targets": [3, 4, 5, 6, 7, 8, 9],
                         "className": "text-end"
                     }
                 ]
@@ -327,9 +689,52 @@ $(document).ready(function() {
         }
     });
 
-    // Ensure the initially active tab's DataTable is rendered if it has data
-    // This might be redundant if DataTables are initialized on all tables, but good for clarity.
-    $('#quarterly_summary table').DataTable(); // Initialize the default visible table
+    // Animate metric cards on load
+    $('.card').each(function(index) {
+        $(this).css({
+            'animation': 'fadeInUp 0.6s ease forwards',
+            'animation-delay': (index * 0.1) + 's'
+        });
+    });
 });
 </script>
+
+<style>
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bg-gradient-success {
+    background: linear-gradient(135deg, #10b981, #34d399) !important;
+}
+
+.bg-gradient-danger {
+    background: linear-gradient(135deg, #ef4444, #f87171) !important;
+}
+
+.bg-gradient-warning {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24) !important;
+}
+
+.bg-gradient-info {
+    background: linear-gradient(135deg, #3b82f6, #60a5fa) !important;
+}
+
+.card {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+</style>
 {% endblock %}
