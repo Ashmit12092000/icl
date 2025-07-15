@@ -59,7 +59,7 @@
                         </div>
 
                         <hr>
-                        
+
                         <h6><i class="fas fa-percent me-2"></i>Interest Calculation Period</h6>
                         <div class="row">
                             <div class="col-md-6">
@@ -98,7 +98,7 @@
                                            value="{% if customer.tds_applicable %}Yes{% else %}No{% endif %}" readonly>
                                 </div>
                             </div>
-			                <div class="col-md-4">
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label class="form-label">TDS Rate</labe l>
                                     <input type="text" class="form-control" 
@@ -123,7 +123,7 @@
             </div>
         </div>
     </div>
-	<!-- Edit Transaction Modal -->
+    <!-- Edit Transaction Modal -->
 <div class="modal fade" id="editTransactionModal" tabindex="-1" aria-labelledby="editTransactionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -201,7 +201,7 @@
                                     <th>Interest Amount</th>
                                     <th>TDS</th>
                                     <th>Net Amount</th>
-				                    <th>Actions</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -242,7 +242,7 @@
                                             <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
-				    <td>
+                    <td>
                                         <div class="btn-group btn-group-sm" role="group">
                                             {% if current_user.role == 'admin' %}
                                             <button type="button" class="btn btn-outline-warning edit-transaction-btn"
@@ -294,7 +294,7 @@ $(document).ready(function() {
     if (!transactionDateInput.val()) {
         transactionDateInput.val(today);
     }
-    
+
     // Set initial Period From using the value passed from Flask
     // This ensures JS controls the initial value and can be more resilient
     const defaultPeriodFromValue = "{{ default_period_from }}";
@@ -324,12 +324,12 @@ $(document).ready(function() {
             "search": "Search transactions:"
         }
     });
-    
+
     // Form validation (client-side)
     $('#transactionForm').submit(function(e) {
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
-        
+
         /*if (amountPaid === 0 && amountRepaid === 0) {
             e.preventDefault();
             // Using custom message function from app.js if available
@@ -341,11 +341,11 @@ $(document).ready(function() {
             }
             return false;
         }*/
-        
+
         // Validate period_from <= period_to if manually changed
         var fromDate = periodFromInput.val();
         var toDate = periodToInput.val();
-        
+
         if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
             e.preventDefault();
             if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
@@ -356,14 +356,14 @@ $(document).ready(function() {
             return false;
         }
     });
-    
+
     // Update balance display on amount changes
     $('#amount_paid, #amount_repaid').on('input', function() {
         // This is client-side projection, actual balance will be calculated server-side
         var initialCustomerBalance = {{ customer.get_current_balance() | safe_decimal }};
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
-        
+
         // This projection does NOT include interest/tds for the new transaction,
         // as that is complex and handled fully on the server.
         // It only reflects the principal movement.
@@ -403,19 +403,78 @@ $(document).ready(function() {
     $('#edit_period_from, #edit_period_to').change(function() {
         var fromDate = $('#edit_period_from').val();
         var toDate = $('#edit_period_to').val();
-        
+
         if (fromDate && toDate) {
             var from = new Date(fromDate);
             var to = new Date(toDate);
             var diffTime = Math.abs(to - from);
             var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
+
             console.log('Edit Form Days calculated:', diffDays);
         }
     });
-    
+
     // Form validation for EDIT transaction form
     $('#editTransactionForm').submit(function(e) {
         var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
-        
+
+        if (amountPaid === 0 && amountRepaid === 0) {
+            e.preventDefault();
+            if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
+                LoanApp.utils.showInputError($('#edit_amount_paid')[0], 'Please enter either amount paid or amount repaid.');
+                LoanApp.utils.showInputError($('#edit_amount_repaid')[0], 'Please enter either amount paid or amount repaid.');
+            } else {
+                alert('Please enter either amount paid or amount repaid.');
+            }
+            return false;
+        }
+
+        var fromDate = $('#edit_period_from').val();
+        var toDate = $('#edit_period_to').val();
+
+        if ((fromDate && !toDate) || (!fromDate && toDate)) {
+            e.preventDefault();
+            if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
+                LoanApp.utils.showInputError($('#edit_period_to')[0], 'Please select both period from and period to dates, or leave both empty.');
+            } else {
+                alert('Please select both period from and period to dates, or leave both empty.');
+            }
+            return false;
+        }
+
+        if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+            e.preventDefault();
+            if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
+                LoanApp.utils.showInputError($('#edit_period_to')[0], 'Period from date cannot be later than period to date.');
+            } else {
+                alert('Period from date cannot be later than period to date.');
+            }
+            return false;
+        }
+    });
+
+    // Update balance display on amount changes for EDIT form (simplified projection)
+    $('#edit_amount_paid, #edit_amount_repaid').on('input', function() {
+        console.log('Edit Form - Projected New Balance: This is a simplified client-side projection.');
+        var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
+        var amountRepaid = parseFloat($('#edit_repaid').val()) || 0;
+
+        console.log('Edit Form - Amount Paid:', amountPaid, 'Amount Repaid:', amountRepaid);
+    });
+
+    // Confirm Delete Transaction function
+    function confirmDeleteTransaction(transactionId, transactionDate) {
+        if (confirm(`Are you sure you want to delete the transaction on ${transactionDate}? This action cannot be undone.`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/delete_transaction/${transactionId}`;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+    // Make confirmDeleteTransaction globally accessible as it's called from onclick
+    window.confirmDeleteTransaction = confirmDeleteTransaction;
+});
+</script>
+{% endblock %}
