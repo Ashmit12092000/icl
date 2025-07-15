@@ -106,7 +106,7 @@
 
     <!-- Current Balance Card -->
     <div class="row mb-4">
-        <div class="col-12">
+        <div class="col-md-8">
             <div class="card bg-primary text-white">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
@@ -116,6 +116,42 @@
                         </div>
                         <div>
                             <i class="fas fa-balance-scale fa-3x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Real-time Balance Calculator -->
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Real-time Balance Calculator</h6>
+                </div>
+                <div class="card-body">
+                    <form id="realtimeBalanceForm">
+                        <div class="mb-3">
+                            <label for="as_of_date" class="form-label text-white">As of Date:</label>
+                            <input type="date" class="form-control" id="as_of_date" name="as_of_date" 
+                                   value="{{ date.today().strftime('%Y-%m-%d') }}" required>
+                        </div>
+                        <button type="submit" class="btn btn-light btn-sm w-100">
+                            <i class="fas fa-sync me-2"></i>Calculate Balance
+                        </button>
+                    </form>
+                    
+                    <!-- Results Display -->
+                    <div id="realtimeResults" class="mt-3" style="display: none;">
+                        <hr class="border-light">
+                        <div class="text-center">
+                            <h6 class="text-white">Balance as of <span id="resultDate"></span></h6>
+                            <h4 class="text-white mb-2" id="resultBalance">₹0.00</h4>
+                            <small class="text-light">
+                                Principal: <span id="resultPrincipal">₹0.00</span><br>
+                                Recorded Interest: <span id="resultRecordedInterest">₹0.00</span><br>
+                                Accrued Interest: <span id="resultAccruedInterest">₹0.00</span><br>
+                                <span id="additionalInfo"></span>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -694,6 +730,61 @@ $(document).ready(function() {
         $(this).css({
             'animation': 'fadeInUp 0.6s ease forwards',
             'animation-delay': (index * 0.1) + 's'
+        });
+    });
+
+    // Real-time balance calculation
+    $('#realtimeBalanceForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const asOfDate = $('#as_of_date').val();
+        if (!asOfDate) {
+            alert('Please select a date');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = $(this).find('button[type="submit"]');
+        const originalText = submitBtn.html();
+        submitBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>Calculating...').prop('disabled', true);
+        
+        $.ajax({
+            url: '/calculate_realtime_balance/{{ customer.id }}',
+            method: 'POST',
+            data: {
+                as_of_date: asOfDate
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Update results
+                    $('#resultDate').text(response.as_of_date);
+                    $('#resultBalance').text('₹' + parseFloat(response.balance).toLocaleString('en-IN', {maximumFractionDigits: 2}));
+                    $('#resultPrincipal').text('₹' + parseFloat(response.principal).toLocaleString('en-IN', {maximumFractionDigits: 2}));
+                    $('#resultRecordedInterest').text('₹' + parseFloat(response.recorded_interest).toLocaleString('en-IN', {maximumFractionDigits: 2}));
+                    $('#resultAccruedInterest').text('₹' + parseFloat(response.accrued_interest).toLocaleString('en-IN', {maximumFractionDigits: 2}));
+                    
+                    // Additional info
+                    let additionalInfo = '';
+                    if (response.days_calculated > 0) {
+                        additionalInfo = `(${response.days_calculated} days @ ${response.interest_type} interest)`;
+                    } else {
+                        additionalInfo = '(No additional interest calculated)';
+                    }
+                    $('#additionalInfo').text(additionalInfo);
+                    
+                    // Show results
+                    $('#realtimeResults').slideDown();
+                } else {
+                    alert('Error: ' + response.error);
+                }
+            },
+            error: function(xhr, status, error) {
+                alert('Error calculating balance: ' + error);
+            },
+            complete: function() {
+                // Reset button
+                submitBtn.html(originalText).prop('disabled', false);
+            }
         });
     });
 });
