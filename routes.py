@@ -174,6 +174,7 @@ def customer_profile(customer_id):
     quarterly_summary = _group_transactions_by_period(customer, transactions, 'quarterly')
     half_yearly_summary = _group_transactions_by_period(customer, transactions, 'half_yearly')
     yearly_summary = _group_transactions_by_period(customer, transactions, 'yearly')
+    today = date.today()
 
     return render_template('customer_profile.html',
                            customer=customer,
@@ -181,7 +182,8 @@ def customer_profile(customer_id):
                            current_balance=current_balance,
                            quarterly_summary=quarterly_summary,
                            half_yearly_summary=half_yearly_summary,
-                           yearly_summary=yearly_summary)
+                           yearly_summary=yearly_summary,
+                           today=today)
 
 @app.route('/edit_customer/<int:customer_id>', methods=['GET', 'POST'])
 @data_entry_required
