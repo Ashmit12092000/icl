@@ -133,7 +133,7 @@
                         <div class="mb-3">
                             <label for="as_of_date" class="form-label text-white">As of Date:</label>
                             <input type="date" class="form-control" id="as_of_date" name="as_of_date" 
-                                   value="{{ date.today().strftime('%Y-%m-%d') }}" required>
+                                   value="{{ today.strftime('%Y-%m-%d') }}" required>
                         </div>
                         <button type="submit" class="btn btn-light btn-sm w-100">
                             <i class="fas fa-sync me-2"></i>Calculate Balance
