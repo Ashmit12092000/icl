@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from app import app, db
 from models import User, Customer, Transaction, InterestRate, TDSRate
-from utils import calculate_interest, calculate_compound_interest, export_to_excel, get_period_report, safe_decimal_conversion,compute_cumulative_principal
+from utils import calculate_interest, calculate_compound_interest, export_to_excel, get_period_report, safe_decimal_conversion, compute_cumulative_principal
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 import io
@@ -294,9 +294,109 @@ def transactions(customer_id):
             # New balance after this transaction
             new_balance = current_balance_before_this_txn + amount_paid - amount_repaid
 
-            # Interest calculation
-            period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
-            period_to = datetime.strptime(request.form['period_to'], '%Y-%m-%d').date() if request.form.get('period_to') else None
+            # Auto-calculate period dates
+            period_from = None
+            period_to = None
+            
+            # Get manual period dates if provided
+            manual_period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
+            manual_period_to = datetime.strptime(request.form['period_to'], '%Y-%m-%d').date() if request.form.get('period_to') else None
+            
+            # Auto-calculate periods based on transaction type and customer settings
+            if customer.interest_type == 'compound' and customer.compound_frequency == 'quarterly':
+                # Auto-calculate period_from and period_to for quarterly compounding
+                if manual_period_from and manual_period_to:
+                    # Use manual dates if provided
+                    period_from = manual_period_from
+                    period_to = manual_period_to
+                else:
+                    # Check if there's an ongoing period that needs to be split
+                    ongoing_txn = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.period_from <= transaction_date,
+                        Transaction.period_to >= transaction_date
+                    ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
+                    
+                    if ongoing_txn and ongoing_txn.date != transaction_date:
+                        # Split the ongoing period
+                        # For repayments: current transaction should be in the period ending on repayment date
+                        # For deposits: current transaction starts a new period from transaction date
+                        
+                        if amount_repaid > Decimal('0'):
+                            # Repayment: transaction belongs to period ending on repayment date
+                            period_from = ongoing_txn.period_from
+                            period_to = transaction_date
+                            
+                            # Update the ongoing transaction's period_to to day before current transaction
+                            ongoing_txn.period_to = transaction_date - timedelta(days=1)
+                        else:
+                            # Deposit: transaction starts new period from transaction date
+                            period_from = transaction_date
+                            period_to = ongoing_txn.period_to
+                            
+                            # Update the ongoing transaction's period_to to day before current transaction
+                            ongoing_txn.period_to = transaction_date - timedelta(days=1)
+                        
+                        # Recalculate the ongoing transaction's no_of_days and interest
+                        if ongoing_txn.period_from and ongoing_txn.period_to:
+                            ongoing_txn.no_of_days = (ongoing_txn.period_to - ongoing_txn.period_from).days + 1
+                            
+                            # Recalculate interest for the ongoing transaction with new period
+                            principal_for_ongoing = Decimal('0')
+                            previous_balance = Decimal('0')
+                            
+                            # Get balance before ongoing transaction
+                            prev_txns = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date < ongoing_txn.date
+                            ).all()
+                            
+                            for prev_txn in prev_txns:
+                                previous_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+                            
+                            if ongoing_txn.get_safe_amount_paid() > Decimal('0'):
+                                principal_for_ongoing = previous_balance + ongoing_txn.get_safe_amount_paid()
+                            elif ongoing_txn.get_safe_amount_repaid() > Decimal('0'):
+                                principal_for_ongoing = previous_balance - ongoing_txn.get_safe_amount_repaid()
+                            else:
+                                principal_for_ongoing = previous_balance
+                            
+                            # Recalculate interest
+                            if ongoing_txn.no_of_days > 0:
+                                ongoing_txn.int_amount = calculate_interest(principal_for_ongoing, customer.annual_rate, ongoing_txn.no_of_days)
+                                
+                                # Recalculate TDS
+                                if customer.tds_applicable and ongoing_txn.int_amount:
+                                    tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                                    ongoing_txn.tds_amount = ongoing_txn.int_amount * (tds_rate_to_use / Decimal('100'))
+                                    ongoing_txn.net_amount = ongoing_txn.int_amount - ongoing_txn.tds_amount
+                                else:
+                                    ongoing_txn.tds_amount = Decimal('0')
+                                    ongoing_txn.net_amount = ongoing_txn.int_amount
+                            
+                            db.session.add(ongoing_txn)
+                            logging.debug(f"Split ongoing transaction {ongoing_txn.id}: period updated to {ongoing_txn.period_from} - {ongoing_txn.period_to}")
+                    
+                    else:
+                        # No ongoing period to split, calculate normally
+                        last_txn = Transaction.query.filter(
+                            Transaction.customer_id == customer_id,
+                            Transaction.date < transaction_date
+                        ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
+                        
+                        if last_txn and last_txn.period_to:
+                            # Period starts from day after last transaction's period_to
+                            period_from = last_txn.period_to + timedelta(days=1)
+                        else:
+                            # First transaction - start from transaction date
+                            period_from = transaction_date
+                        
+                        # Calculate quarter end based on ICL start date
+                        period_to = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+            else:
+                # For simple interest, use manual dates if provided
+                period_from = manual_period_from
+                period_to = manual_period_to
 
             int_amount = tds_amount = net_amount = None
             no_of_days = None
@@ -305,86 +405,74 @@ def transactions(customer_id):
                 no_of_days = (period_to - period_from).days + 1
                 principal_for_interest_calculation = Decimal('0')
 
-                # Check if transaction period is before first compounding date
-                should_use_simple_interest = True
+                # Determine if we're before first compounding date
+                is_before_first_compounding = True
                 if customer.interest_type == 'compound' and customer.first_compounding_date:
-                    # Use compound interest only if period_from is on or after first_compounding_date
-                    if period_from and period_from >= customer.first_compounding_date:
-                        should_use_simple_interest = False
+                    if transaction_date >= customer.first_compounding_date:
+                        is_before_first_compounding = False
 
-                if should_use_simple_interest:
-                    # Simple Interest Calculation Logic (used for simple interest type OR before first compounding date)
-                    if amount_paid > Decimal('0'):
-                        # Deposit — interest on previous balance + current paid
-                        principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
-                    elif amount_repaid > Decimal('0'):
-                        # Repayment — interest on the reduced principal (outstanding balance minus repayment)
-                        principal_for_interest_calculation = current_balance_before_this_txn - amount_repaid
-                    else:
-                        # Passive period — interest on previous balance
-                        principal_for_interest_calculation = current_balance_before_this_txn
+                # Always use simple interest formula for interest calculation
+                # The difference is only in principal calculation and when to add to balance
+                if amount_paid > Decimal('0'):
+                    # Deposit — interest on previous balance + current paid
+                    principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
+                elif amount_repaid > Decimal('0'):
+                    # Repayment — interest on the reduced principal
+                    principal_for_interest_calculation = current_balance_before_this_txn - amount_repaid
                 else:
-                    # Compound interest logic (only after first_compounding_date)
-                    if amount_paid > Decimal('0'):
-                        # For deposits, interest is calculated on current balance + new deposit
-                        principal_for_interest_calculation = current_balance_before_this_txn + amount_paid
-                    elif amount_repaid > Decimal('0'):
-                        # For repayments with compound interest, calculate accumulated balance first, then subtract repayment
-                        # Get all transactions before this transaction
-                        previous_transactions = Transaction.query.filter(
-                            Transaction.customer_id == customer_id,
-                            Transaction.date < transaction_date
-                        ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                        
-                        accumulated_principal = Decimal('0')
-                        accumulated_net_interest = Decimal('0')
-                        
-                        for prev_txn in previous_transactions:
-                            accumulated_principal += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-                            accumulated_net_interest += prev_txn.get_safe_net_amount()
-                        
-                        # For repayments, reduce the accumulated balance by the repayment amount
-                        principal_for_interest_calculation = accumulated_principal + accumulated_net_interest - amount_repaid
-                        logging.debug(f"Compound Interest - Repayment: accumulated balance {accumulated_principal + accumulated_net_interest} minus repayment {amount_repaid} = {principal_for_interest_calculation}")
-                    else:
-                        # For passive periods with compound interest, calculate the full accumulated balance
-                        # including all previous principal movements and net interest
-                        previous_transactions = Transaction.query.filter(
-                            Transaction.customer_id == customer_id,
-                            Transaction.date < transaction_date
-                        ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                        
-                        accumulated_principal = Decimal('0')
-                        accumulated_net_interest = Decimal('0')
-                        
-                        for prev_txn in previous_transactions:
-                            accumulated_principal += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-                            accumulated_net_interest += prev_txn.get_safe_net_amount()
-                        
-                        principal_for_interest_calculation = accumulated_principal + accumulated_net_interest
-                        logging.debug(f"Compound Interest - Passive: Accumulated principal {accumulated_principal} + accumulated net interest {accumulated_net_interest} = {principal_for_interest_calculation}")
-                    
-                    logging.debug(f"Compound interest calculation: principal_for_interest_calculation={principal_for_interest_calculation}")
+                    # Passive period — interest on previous balance
+                    principal_for_interest_calculation = current_balance_before_this_txn
 
-                # Calculate interest
+                # For compound interest after first compounding date, 
+                # include previously accumulated net interest in principal
+                if not is_before_first_compounding:
+                    # Get all previous transactions (including those before first compounding date)
+                    previous_transactions = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.date < transaction_date
+                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+                    # Calculate accumulated net interest from all previous transactions
+                    accumulated_net_interest = Decimal('0')
+                    for prev_txn in previous_transactions:
+                        accumulated_net_interest += prev_txn.get_safe_net_amount()
+
+                    # For transactions after first compounding date, principal = previous principal + accumulated net interest
+                    if amount_paid > Decimal('0'):
+                        # Deposit — interest on (previous balance + accumulated interest) + current paid
+                        principal_for_interest_calculation = current_balance_before_this_txn + accumulated_net_interest + amount_paid
+                    elif amount_repaid > Decimal('0'):
+                        # Repayment — interest on (previous balance + accumulated interest) - current repaid
+                        principal_for_interest_calculation = current_balance_before_this_txn + accumulated_net_interest - amount_repaid
+                    else:
+                        # Passive period — interest on (previous balance + accumulated interest)
+                        principal_for_interest_calculation = current_balance_before_this_txn + accumulated_net_interest
+
+                # Calculate interest using simple interest formula
                 int_amount = calculate_interest(principal_for_interest_calculation, customer.annual_rate, no_of_days)
                 logging.debug(f"Calculated interest amount: {int_amount} for principal: {principal_for_interest_calculation}")
 
-                # TDS
+                # TDS calculation
                 if customer.tds_applicable and int_amount:
-                    tds_rate_to_use = customer.tds_percentage or Decimal('0.00')
+                    tds_rate_to_use = customer.tds_percentage or Decimal('10.00')  # Default 10% TDS
                     tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
                     net_amount = int_amount - tds_amount
                 else:
                     tds_amount = Decimal('0')
                     net_amount = int_amount
 
-            # For compound interest, the balance should include net interest
-            # For simple interest, balance is just principal movements
-            if not should_use_simple_interest and net_amount:
-                new_balance = current_balance_before_this_txn + amount_paid - amount_repaid + net_amount
-            else:
-                new_balance = current_balance_before_this_txn + amount_paid - amount_repaid
+            # Balance calculation
+            new_balance = current_balance_before_this_txn + amount_paid - amount_repaid
+
+            # For compound interest, add net interest to balance only at quarter end
+            if (customer.interest_type == 'compound' and 
+                customer.first_compounding_date and 
+                transaction_date >= customer.first_compounding_date and 
+                period_to and 
+                _is_quarter_end(period_to, customer.icl_start_date) and 
+                net_amount):
+                new_balance += net_amount
+                logging.debug(f"Quarter end: adding net interest {net_amount} to balance")
 
             # Save transaction
             transaction = Transaction(
@@ -463,13 +551,13 @@ def calculate_realtime_balance(customer_id):
     try:
         customer = Customer.query.get_or_404(customer_id)
         as_of_date = datetime.strptime(request.form['as_of_date'], '%Y-%m-%d').date()
-        
+
         # Get all transactions up to the specified date
         transactions = Transaction.query.filter(
             Transaction.customer_id == customer_id,
             Transaction.date <= as_of_date
         ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
-        
+
         if not transactions:
             return jsonify({
                 'success': True,
@@ -478,57 +566,57 @@ def calculate_realtime_balance(customer_id):
                 'accrued_interest': '0.00',
                 'as_of_date': as_of_date.strftime('%d-%m-%Y')
             })
-        
+
         # Calculate principal balance from transactions
         principal_balance = Decimal('0')
         total_recorded_interest = Decimal('0')
-        
+
         for txn in transactions:
             principal_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
             total_recorded_interest += txn.get_safe_net_amount()
-        
+
         # Find the last transaction date to calculate additional interest from
         last_transaction = max(transactions, key=lambda t: (t.date, t.created_at))
         last_transaction_date = last_transaction.date
-        
+
         # Calculate additional interest from last transaction date to as_of_date
         additional_interest = Decimal('0')
         if as_of_date > last_transaction_date:
             days_since_last_transaction = (as_of_date - last_transaction_date).days
-            
+
             if days_since_last_transaction > 0:
                 # Determine the principal for interest calculation
                 # For the period after last transaction, use the accumulated balance
-                
+
                 # Check if we should use compound interest logic
                 should_use_compound = False
                 if customer.interest_type == 'compound' and customer.first_compounding_date:
                     if as_of_date >= customer.first_compounding_date:
                         should_use_compound = True
-                
+
                 if should_use_compound:
                     # For compound interest, principal includes accumulated interest
                     principal_for_calculation = principal_balance + total_recorded_interest
                 else:
                     # For simple interest, only use principal balance
                     principal_for_calculation = principal_balance
-                
+
                 # Calculate additional interest
                 additional_interest = calculate_interest(
                     principal_for_calculation, 
                     customer.annual_rate, 
                     days_since_last_transaction
                 )
-                
+
                 # Apply TDS if applicable
                 if customer.tds_applicable and additional_interest > Decimal('0'):
                     tds_rate = customer.tds_percentage or Decimal('0.00')
                     tds_amount = additional_interest * (tds_rate / Decimal('100'))
                     additional_interest = additional_interest - tds_amount
-        
+
         # Total balance = principal + recorded interest + additional accrued interest
         total_balance = principal_balance + total_recorded_interest + additional_interest
-        
+
         return jsonify({
             'success': True,
             'balance': str(total_balance.quantize(Decimal('0.01'))),
@@ -539,7 +627,7 @@ def calculate_realtime_balance(customer_id):
             'days_calculated': (as_of_date - last_transaction_date).days if as_of_date > last_transaction_date else 0,
             'interest_type': customer.interest_type
         })
-        
+
     except Exception as e:
         logging.error(f"Error calculating real-time balance: {e}")
         return jsonify({
@@ -681,8 +769,7 @@ def edit_transaction(transaction_id):
         # Recalculate no_of_days for this specific transaction
         if transaction.period_from and transaction.period_to:
             transaction.no_of_days = (transaction.period_to - transaction.period_from).days + 1
-        else:
-            transaction.no_of_days = 0
+        else:transaction.no_of_days = 0
 
         # Don't recalculate int_amount, tds_amount, net_amount, balance here directly.
         # These will be handled by the full recalculation function.
@@ -791,61 +878,42 @@ def recalculate_customer_transactions(customer_id, start_date=None):
                 if transaction.period_from and transaction.period_from >= customer.first_compounding_date:
                     should_use_simple_interest = False
 
-            if should_use_simple_interest:
-                # For simple interest (or before first compounding date), calculate based on transaction type
-                if transaction.get_safe_amount_paid() > Decimal('0'):
-                    # Deposit — interest on previous balance + current paid amount
-                    principal_for_interest_calculation = current_running_balance + transaction.get_safe_amount_paid()
-                    logging.debug(f"  Simple Interest - Deposit - Principal for interest (previous balance + deposit): {principal_for_interest_calculation}")
-                elif transaction.get_safe_amount_repaid() > Decimal('0'):
-                    # Repayment — interest on the reduced principal (outstanding balance minus repayment)
-                    # This assumes the repayment reduces the principal for interest calculation
-                    principal_for_interest_calculation = current_running_balance - transaction.get_safe_amount_repaid()
-                    logging.debug(f"  Simple Interest - Repayment - Principal for interest (reduced principal): {principal_for_interest_calculation}")
-                else:
-                    # Passive period — interest on previous balance
-                    principal_for_interest_calculation = current_running_balance
-                    logging.debug(f"  Simple Interest - Passive - Principal for interest (previous balance): {principal_for_interest_calculation}")
+            # Always use simple interest formula for calculation
+            # The difference is only in principal calculation and when to add to balance
+            if transaction.get_safe_amount_paid() > Decimal('0'):
+                # Deposit — interest on previous balance + current paid amount
+                principal_for_interest_calculation = current_running_balance + transaction.get_safe_amount_paid()
+                logging.debug(f"  Deposit - Principal for interest (previous balance + deposit): {principal_for_interest_calculation}")
+            elif transaction.get_safe_amount_repaid() > Decimal('0'):
+                # Repayment — interest on the reduced principal
+                principal_for_interest_calculation = current_running_balance - transaction.get_safe_amount_repaid()
+                logging.debug(f"  Repayment - Principal for interest (reduced principal): {principal_for_interest_calculation}")
             else:
-                # For compound interest (only after first_compounding_date)
-                # Use the current running balance which includes all accumulated principal and interest
+                # Passive period — interest on previous balance
+                principal_for_interest_calculation = current_running_balance
+                logging.debug(f"  Passive - Principal for interest (previous balance): {principal_for_interest_calculation}")
+
+            # For compound interest after first compounding date, include accumulated net interest
+            if not should_use_simple_interest:
+                all_previous_transactions = Transaction.query.filter(
+                    Transaction.customer_id == customer_id,
+                    Transaction.date < transaction.date
+                ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+                # Calculate accumulated net interest from ALL previous transactions
+                accumulated_net_interest = Decimal('0')
+                for prev_txn in all_previous_transactions:
+                    accumulated_net_interest += prev_txn.get_safe_net_amount()
+
+                # Add accumulated interest to principal for calculation
                 if transaction.get_safe_amount_paid() > Decimal('0'):
-                    # Deposit — interest on accumulated balance + current paid amount
-                    principal_for_interest_calculation = current_running_balance + transaction.get_safe_amount_paid()
-                    logging.debug(f"  Compound Interest - Deposit - Principal for interest (accumulated balance + deposit): {principal_for_interest_calculation}")
+                    principal_for_interest_calculation = current_running_balance + accumulated_net_interest + transaction.get_safe_amount_paid()
                 elif transaction.get_safe_amount_repaid() > Decimal('0'):
-                    # For repayments with compound interest, use accumulated balance including net interest, then subtract repayment
-                    all_previous_transactions = Transaction.query.filter(
-                        Transaction.customer_id == customer_id,
-                        Transaction.date < transaction.date
-                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                    
-                    recalc_accumulated_principal = Decimal('0')
-                    recalc_accumulated_net_interest = Decimal('0')
-                    
-                    for prev_txn in all_previous_transactions:
-                        recalc_accumulated_principal += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-                        recalc_accumulated_net_interest += prev_txn.get_safe_net_amount()
-                    
-                    # For repayments, reduce the accumulated balance by the repayment amount
-                    principal_for_interest_calculation = recalc_accumulated_principal + recalc_accumulated_net_interest - transaction.get_safe_amount_repaid()
-                    logging.debug(f"  Compound Interest - Repayment - Accumulated balance {recalc_accumulated_principal + recalc_accumulated_net_interest} minus repayment {transaction.get_safe_amount_repaid()} = {principal_for_interest_calculation}")
+                    principal_for_interest_calculation = current_running_balance + accumulated_net_interest - transaction.get_safe_amount_repaid()
                 else:
-                    # Passive period with compound interest — calculate accumulated balance including all net interest
-                    all_previous_transactions = Transaction.query.filter(
-                        Transaction.customer_id == customer_id,
-                        Transaction.date < transaction.date
-                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                    
-                    recalc_accumulated_principal = Decimal('0')
-                    recalc_accumulated_net_interest = Decimal('0')
-                    
-                    for prev_txn in all_previous_transactions:
-                        recalc_accumulated_principal += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-                        recalc_accumulated_net_interest += prev_txn.get_safe_net_amount()
-                    
-                    principal_for_interest_calculation = recalc_accumulated_principal + recalc_accumulated_net_interest
-                    logging.debug(f"  Compound Interest - Passive - Accumulated principal {recalc_accumulated_principal} + accumulated net interest {recalc_accumulated_net_interest} = {principal_for_interest_calculation}")
+                    principal_for_interest_calculation = current_running_balance + accumulated_net_interest
+                
+                logging.debug(f"  Compound Interest - Added accumulated net interest {accumulated_net_interest}, new principal: {principal_for_interest_calculation}")
 
             # Recalculate no_of_days (if period dates are present)
             if transaction.period_from and transaction.period_to:
@@ -881,16 +949,22 @@ def recalculate_customer_transactions(customer_id, start_date=None):
 
             # Update the running balance and transaction balance
             current_running_balance += transaction.get_safe_amount_paid() - transaction.get_safe_amount_repaid()
-            
-            # For compound interest, the balance field should include the net interest
-            # For simple interest, balance is just principal movements
-            if not should_use_simple_interest and transaction.net_amount:
+
+            # Update balance - always start with principal movements
+            transaction.balance = current_running_balance.quantize(Decimal('0.01'))
+
+            # For compound interest, add net interest to balance only at quarter end
+            if (customer.interest_type == 'compound' and 
+                customer.first_compounding_date and 
+                transaction.date >= customer.first_compounding_date and 
+                transaction.period_to and 
+                _is_quarter_end(transaction.period_to, customer.icl_start_date) and 
+                transaction.net_amount):
                 transaction.balance = (current_running_balance + transaction.net_amount).quantize(Decimal('0.01'))
                 # Update running balance to include interest for next transaction
                 current_running_balance += transaction.net_amount
-            else:
-                transaction.balance = current_running_balance.quantize(Decimal('0.01'))
-                
+                logging.debug(f"  Quarter end: added net interest {transaction.net_amount} to balance")
+
             logging.debug(f"  Updated transaction.balance to: {transaction.balance}. Running balance for next txn: {current_running_balance}")
 
             db.session.add(transaction) # Mark for update
@@ -903,6 +977,80 @@ def recalculate_customer_transactions(customer_id, start_date=None):
         db.session.rollback()
         logging.error(f"Error during recalculation for customer {customer_id}: {e}", exc_info=True)
         return False
+
+def _get_quarter_end_date(transaction_date, icl_start_date):
+    """
+    Calculate the quarter end date based on transaction date and ICL start date.
+    Quarters are calculated from ICL start date, not calendar quarters.
+    """
+    if not transaction_date or not icl_start_date:
+        return transaction_date
+    
+    # Calculate total days from ICL start to transaction date
+    days_from_start = (transaction_date - icl_start_date).days
+    
+    # Calculate which quarter this transaction falls into (0-based)
+    quarter_number = days_from_start // 90  # 90 days per quarter (approximately)
+    
+    # Calculate the exact quarter end date
+    # Each quarter is exactly 3 months from the ICL start date
+    months_to_add = (quarter_number + 1) * 3
+    
+    # Calculate year and month for quarter end
+    target_year = icl_start_date.year
+    target_month = icl_start_date.month + months_to_add
+    
+    # Handle year overflow
+    while target_month > 12:
+        target_month -= 12
+        target_year += 1
+    
+    # Get the day before the start of next quarter (which is the quarter end)
+    # Start with ICL start day, then subtract 1 day
+    target_day = icl_start_date.day
+    
+    # Create the start of next quarter first
+    try:
+        next_quarter_start = date(target_year, target_month, target_day)
+    except ValueError:
+        # Handle edge case where day doesn't exist in target month (e.g., Feb 30)
+        # Use the last day of the previous month
+        if target_month == 1:
+            target_month = 12
+            target_year -= 1
+        else:
+            target_month -= 1
+        
+        # Get last day of the month
+        if target_month in [1, 3, 5, 7, 8, 10, 12]:
+            target_day = 31
+        elif target_month in [4, 6, 9, 11]:
+            target_day = 30
+        else:  # February
+            if target_year % 4 == 0 and (target_year % 100 != 0 or target_year % 400 == 0):
+                target_day = 29
+            else:
+                target_day = 28
+        
+        next_quarter_start = date(target_year, target_month, target_day)
+    
+    # Quarter end is one day before the next quarter starts
+    quarter_end = next_quarter_start - timedelta(days=1)
+    
+    return quarter_end
+
+def _is_quarter_end(date_to_check, icl_start_date):
+    """
+    Check if a given date falls at the end of a financial quarter, based on the customer's ICL start date.
+    """
+    if not date_to_check or not icl_start_date:
+        return False
+    
+    # Calculate expected quarter end for this date
+    expected_quarter_end = _get_quarter_end_date(date_to_check, icl_start_date)
+    
+    return date_to_check == expected_quarter_end
+
 def _group_transactions_by_period(customer, transactions, period_type):
     """
     Aggregates transactions into quarterly, half-yearly, or yearly periods
@@ -1078,5 +1226,3 @@ def _group_transactions_by_period(customer, transactions, period_type):
 
     logging.debug(f"Finished _group_transactions_by_period. Total periods: {len(summary_data)}")
     return summary_data
-
-
