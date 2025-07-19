@@ -62,6 +62,7 @@
 
                         <h6><i class="fas fa-percent me-2"></i>Interest Calculation Period</h6>
                         <div class="row">
+                            {% if customer.interest_type != 'compound' %}
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="period_from" class="form-label">Period From</label>
@@ -74,6 +75,14 @@
                                     <input type="date" class="form-control" id="period_to" name="period_to">
                                 </div>
                             </div>
+                            {% else %}
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    Period dates are automatically calculated based on compound frequency and ICL start date.
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
 
                         <div class="row">
