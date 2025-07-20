@@ -88,6 +88,18 @@
                         <dt class="col-sm-4">End Date:</dt>
                         <dd class="col-sm-8">{{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else 'Not set' }}</dd>
 
+                        <dt class="col-sm-4">Effective End Date:</dt>
+                        <dd class="col-sm-8">
+                            {% if customer.get_effective_end_date() %}
+                                <span class="badge bg-warning text-dark">{{ customer.get_effective_end_date().strftime('%d-%m-%Y') }}</span>
+                                {% if customer.get_last_transaction_date() and customer.get_last_transaction_date() == customer.get_effective_end_date() %}
+                                    <small class="text-muted">(Based on last transaction)</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Not determined</span>
+                            {% endif %}
+                        </dd>
+
                         <dt class="col-sm-4">Extension:</dt>
                         <dd class="col-sm-8">{{ customer.icl_extension or 'None' }}</dd>
 
@@ -133,7 +145,12 @@
                         <div class="mb-3">
                             <label for="as_of_date" class="form-label text-white">As of Date:</label>
                             <input type="date" class="form-control" id="as_of_date" name="as_of_date" 
-                                   value="{{ today.strftime('%Y-%m-%d') }}" required>
+                                   value="{{ today.strftime('%Y-%m-%d') }}" 
+                                   {% if customer.get_effective_end_date() %}max="{{ customer.get_effective_end_date().strftime('%Y-%m-%d') }}"{% endif %}
+                                   required>
+                            {% if customer.get_effective_end_date() %}
+                            <small class="text-light">Max date: {{ customer.get_effective_end_date().strftime('%d-%m-%Y') }}</small>
+                            {% endif %}
                         </div>
                         <button type="submit" class="btn btn-light btn-sm w-100">
                             <i class="fas fa-sync me-2"></i>Calculate Balance
