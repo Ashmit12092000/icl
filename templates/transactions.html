@@ -335,7 +335,7 @@ $(document).ready(function() {
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
 
-        if (amountPaid === 0 && amountRepaid === 0) {
+      /*  if (amountPaid === 0 && amountRepaid === 0) {
             e.preventDefault();
             if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
                 LoanApp.utils.showInputError($('#amount_paid')[0], 'Please enter either amount paid or amount repaid.');
@@ -344,7 +344,7 @@ $(document).ready(function() {
                 alert('Please enter either amount paid or amount repaid.');
             }
             return false;
-        }
+        }*/
 
         // Validate period_from <= period_to if manually changed
         var fromDate = periodFromInput.val();
@@ -423,7 +423,7 @@ $(document).ready(function() {
         var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#edit_amount_repaid').val()) || 0;
 
-        if (amountPaid === 0 && amountRepaid === 0) {
+      /*  if (amountPaid === 0 && amountRepaid === 0) {
             e.preventDefault();
             if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
                 LoanApp.utils.showInputError($('#edit_amount_paid')[0], 'Please enter either amount paid or amount repaid.');
@@ -432,7 +432,7 @@ $(document).ready(function() {
                 alert('Please enter either amount paid or amount repaid.');
             }
             return false;
-        }
+        }*/
 
         var fromDate = $('#edit_period_from').val();
         var toDate = $('#edit_period_to').val();
