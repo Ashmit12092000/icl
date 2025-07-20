@@ -222,6 +222,24 @@ def edit_customer(customer_id):
 
     return render_template('customer_master.html', customer=customer, edit_mode=True)
 
+@app.route('/customer/<int:customer_id>/close_loan', methods=['POST'])
+@admin_required
+def close_loan(customer_id):
+    """Close a customer's loan"""
+    customer = Customer.query.get_or_404(customer_id)
+    
+    try:
+        customer.loan_closed = True
+        customer.loan_closed_date = date.today()
+        db.session.commit()
+        flash(f'Loan for customer "{customer.name}" has been closed successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error closing loan for customer "{customer.name}": {e}', 'error')
+        app.logger.error(f"Error closing loan for customer {customer_id}: {e}")
+    
+    return redirect(url_for('customer_profile', customer_id=customer_id))
+
 @app.route('/customer/<int:customer_id>/delete', methods=['POST'])
 @admin_required
 def delete_customer(customer_id):
@@ -273,6 +291,12 @@ def transactions(customer_id):
             amount_paid = safe_decimal_conversion(request.form.get('amount_paid'))
             amount_repaid = safe_decimal_conversion(request.form.get('amount_repaid'))
 
+            # Check if loan is closed
+            if customer.loan_closed:
+                flash('Cannot add transactions to a closed loan.', 'error')
+                transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
+                return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
+
             # Check if transaction date is beyond ICL end date
             if customer.icl_end_date and transaction_date > customer.icl_end_date:
                 flash(f'Transaction date cannot be beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")})', 'error')
@@ -303,6 +327,7 @@ def transactions(customer_id):
             # Auto-calculate period dates
             period_from = None
             period_to = None
+            create_post_payment_period = False
 
             # Get manual period dates if provided
             manual_period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
@@ -481,10 +506,10 @@ def transactions(customer_id):
                             db.session.add(existing_quarter_txn)
                             logging.debug(f"Split existing quarter transaction {existing_quarter_txn.id}: period updated to {existing_quarter_txn.period_from} - {existing_quarter_txn.period_to}")
 
-                        # Current repayment transaction takes the period from quarter start to repayment date
-                        period_from = quarter_start
-                        # Use transaction date, but don't exceed ICL end date
-                        period_to = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
+                    # Current repayment transaction takes the period from quarter start to repayment date
+                    period_from = quarter_start
+                    # Use transaction date, but don't exceed ICL end date
+                    period_to = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
 
                 else:
                     # Initialize post-payment period variables for non-repayment cases
