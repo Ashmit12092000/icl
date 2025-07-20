@@ -276,7 +276,8 @@ def transactions(customer_id):
             # Check if transaction date is beyond ICL end date
             if customer.icl_end_date and transaction_date > customer.icl_end_date:
                 flash(f'Transaction date cannot be beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")})', 'error')
-                return redirect(url_for('transactions', customer_id=customer_id))
+                transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
+                return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
 
             # Only include transactions before this one to calculate correct principal
             previous_txns = Transaction.query.filter(
@@ -313,13 +314,12 @@ def transactions(customer_id):
                 period_from = manual_period_from
                 period_to = manual_period_to
             else:
-                # For both simple and compound interest users, check if we need to split the current quarter on repayment
-                if amount_repaid > Decimal('0'):
-                    # For repayments in both simple and compound interest, split the quarter
-                    # Period 1: From quarter start to repayment date
-                    # Period 2: From day after repayment to quarter end (will be created as next transaction)
+                # Handle repayments differently for compound interest
+                if amount_repaid > Decimal('0') and customer.interest_type == 'compound':
+                    # For compound interest repayments, create two periods:
+                    # Period 1: Quarter start to repayment date (interest calculated but NOT added to principal)
+                    # Period 2: Day after repayment to quarter end (interest calculated on reduced principal and added to principal)
 
-                    # Calculate the quarter start and end for this transaction date
                     quarter_start = _get_quarter_start_date(transaction_date, customer.icl_start_date)
                     quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
 
@@ -333,13 +333,11 @@ def transactions(customer_id):
 
                     if existing_quarter_txn:
                         # Split the existing quarter transaction
-                        # Update existing transaction to end day before repayment
                         existing_quarter_txn.period_to = transaction_date - timedelta(days=1)
                         existing_quarter_txn.no_of_days = (existing_quarter_txn.period_to - existing_quarter_txn.period_from).days + 1
 
-                        # Recalculate interest for the split period
+                        # Recalculate interest for the split period (but don't add to principal for mid-quarter)
                         if existing_quarter_txn.no_of_days > 0:
-                            # Get principal for existing transaction
                             prev_balance = Decimal('0')
                             prev_txns = Transaction.query.filter(
                                 Transaction.customer_id == customer_id,
@@ -349,24 +347,23 @@ def transactions(customer_id):
                             for prev_txn in prev_txns:
                                 prev_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
 
-                            # For compound interest, include accumulated net interest if after first compounding date
-                            if (customer.interest_type == 'compound' and 
-                                customer.first_compounding_date and 
+                            # For compound interest, include accumulated net interest from PREVIOUS QUARTERS only
+                            if (customer.first_compounding_date and 
                                 existing_quarter_txn.date >= customer.first_compounding_date):
-                                # Get all previous transactions to calculate accumulated net interest
-                                all_prev_txns = Transaction.query.filter(
+                                # Get accumulated net interest only from transactions before this quarter starts
+                                previous_quarter_transactions = Transaction.query.filter(
                                     Transaction.customer_id == customer_id,
-                                    Transaction.date < existing_quarter_txn.date
+                                    Transaction.date < quarter_start
                                 ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
-                                accumulated_net_interest = Decimal('0')
-                                for prev_txn in all_prev_txns:
-                                    accumulated_net_interest += prev_txn.get_safe_net_amount()
+                                accumulated_net_interest_from_previous_quarters = Decimal('0')
+                                for prev_txn in previous_quarter_transactions:
+                                    accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
 
                                 if existing_quarter_txn.get_safe_amount_paid() > Decimal('0'):
-                                    principal_for_existing = prev_balance + accumulated_net_interest + existing_quarter_txn.get_safe_amount_paid()
+                                    principal_for_existing = prev_balance + accumulated_net_interest_from_previous_quarters + existing_quarter_txn.get_safe_amount_paid()
                                 else:
-                                    principal_for_existing = prev_balance + accumulated_net_interest
+                                    principal_for_existing = prev_balance + accumulated_net_interest_from_previous_quarters
                             else:
                                 if existing_quarter_txn.get_safe_amount_paid() > Decimal('0'):
                                     principal_for_existing = prev_balance + existing_quarter_txn.get_safe_amount_paid()
@@ -387,9 +384,63 @@ def transactions(customer_id):
                         db.session.add(existing_quarter_txn)
                         logging.debug(f"Split existing quarter transaction {existing_quarter_txn.id}: period updated to {existing_quarter_txn.period_from} - {existing_quarter_txn.period_to}")
 
-                    # Current repayment transaction takes the period from quarter start to repayment date
+                    # Current repayment transaction (Period 1): Quarter start to repayment date
                     period_from = quarter_start
-                    period_to = transaction_date
+                    # Use transaction date, but don't exceed ICL end date
+                    period_to = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
+
+                elif amount_repaid > Decimal('0'):
+                    # For simple interest repayments, use existing logic
+                    quarter_start = _get_quarter_start_date(transaction_date, customer.icl_start_date)
+                    quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+
+                    # Check if there's an existing transaction in this quarter that needs splitting
+                    existing_quarter_txn = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.period_from == quarter_start,
+                        Transaction.period_to == quarter_end,
+                        Transaction.date < transaction_date
+                    ).order_by(Transaction.date.desc()).first()
+
+                    if existing_quarter_txn:
+                        # Split the existing quarter transaction
+                        existing_quarter_txn.period_to = transaction_date - timedelta(days=1)
+                        existing_quarter_txn.no_of_days = (existing_quarter_txn.period_to - existing_quarter_txn.period_from).days + 1
+
+                        # Recalculate interest for the split period
+                        if existing_quarter_txn.no_of_days > 0:
+                            prev_balance = Decimal('0')
+                            prev_txns = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date < existing_quarter_txn.date
+                            ).all()
+
+                            for prev_txn in prev_txns:
+                                prev_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+
+                            if existing_quarter_txn.get_safe_amount_paid() > Decimal('0'):
+                                principal_for_existing = prev_balance + existing_quarter_txn.get_safe_amount_paid()
+                            else:
+                                principal_for_existing = prev_balance
+
+                            existing_quarter_txn.int_amount = calculate_interest(principal_for_existing, customer.annual_rate, existing_quarter_txn.no_of_days)
+
+                            # Recalculate TDS
+                            if customer.tds_applicable and existing_quarter_txn.int_amount:
+                                tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                                existing_quarter_txn.tds_amount = existing_quarter_txn.int_amount * (tds_rate_to_use / Decimal('100'))
+                                existing_quarter_txn.net_amount = existing_quarter_txn.int_amount - existing_quarter_txn.tds_amount
+                            else:
+                                existing_quarter_txn.tds_amount = Decimal('0')
+                                existing_quarter_txn.net_amount = existing_quarter_txn.int_amount
+
+                            db.session.add(existing_quarter_txn)
+                            logging.debug(f"Split existing quarter transaction {existing_quarter_txn.id}: period updated to {existing_quarter_txn.period_from} - {existing_quarter_txn.period_to}")
+
+                        # Current repayment transaction takes the period from quarter start to repayment date
+                        period_from = quarter_start
+                        # Use transaction date, but don't exceed ICL end date
+                        period_to = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
 
                 else:
                     # For other cases (deposits or compound interest), use existing logic
@@ -477,16 +528,22 @@ def transactions(customer_id):
                             else:
                                 period_from = customer.icl_start_date or transaction_date
 
-                        # Calculate period_to based on interest type
+                        # Calculate period_to based on interest type, but respect ICL end date
                         if customer.interest_type == 'compound' and customer.compound_frequency == 'quarterly':
                             # For compound interest with quarterly frequency, calculate quarter end
-                            period_to = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                            calculated_quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                            # Use the earlier of quarter end or ICL end date
+                            period_to = min(calculated_quarter_end, customer.icl_end_date) if customer.icl_end_date else calculated_quarter_end
                         elif customer.interest_type == 'simple':
                             # For simple interest, also calculate quarter end based on ICL start date
-                            period_to = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                            calculated_quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                            # Use the earlier of quarter end or ICL end date
+                            period_to = min(calculated_quarter_end, customer.icl_end_date) if customer.icl_end_date else calculated_quarter_end
                         else:
                             # For compound interest with other frequencies, use quarterly periods by default (90 days)
-                            period_to = period_from + timedelta(days=89)  # 90 days total (including start day)
+                            calculated_period_end = period_from + timedelta(days=89)  # 90 days total (including start day)
+                            # Use the earlier of calculated period end or ICL end date
+                            period_to = min(calculated_period_end, customer.icl_end_date) if customer.icl_end_date else calculated_period_end
 
             int_amount = tds_amount = net_amount = None
             no_of_days = None
@@ -566,6 +623,9 @@ def transactions(customer_id):
                 net_amount):
                 new_balance += net_amount
                 logging.debug(f"Quarter end: adding net interest {net_amount} to balance")
+            else:
+                if customer.interest_type == 'compound' and net_amount:
+                    logging.debug(f"Mid-quarter transaction: interest {net_amount} calculated but NOT added to principal balance")
 
             # Save transaction
             transaction = Transaction(
@@ -585,13 +645,13 @@ def transactions(customer_id):
             )
 
             db.session.add(transaction)
-            
+
             # Auto-update ICL end date to last transaction date if it's later
             last_txn_date = customer.get_last_transaction_date()
             if last_txn_date and (not customer.icl_end_date or last_txn_date > customer.icl_end_date):
                 customer.icl_end_date = max(transaction_date, last_txn_date)
                 db.session.add(customer)
-            
+
             db.session.commit()
             flash('Transaction added successfully!', 'success')
             return redirect(url_for('transactions', customer_id=customer_id))
@@ -647,17 +707,16 @@ def export_customer_report(customer_id):
 @app.route('/calculate_realtime_balance/<int:customer_id>', methods=['POST'])
 @login_required
 def calculate_realtime_balance(customer_id):
-    """Calculate balance as of a specific date including accrued interest"""
+    """Calculate balance as of a specific date including accrued interest using same logic as transaction creation"""
     try:
         customer = Customer.query.get_or_404(customer_id)
         as_of_date = datetime.strptime(request.form['as_of_date'], '%Y-%m-%d').date()
 
-        # Check if as_of_date is beyond effective end date
-        effective_end_date = customer.get_effective_end_date()
-        if effective_end_date and as_of_date > effective_end_date:
+        # Check if as_of_date is beyond ICL end date
+        if customer.icl_end_date and as_of_date > customer.icl_end_date:
             return jsonify({
                 'success': False,
-                'error': f'Cannot calculate balance beyond effective end date ({effective_end_date.strftime("%d-%m-%Y")})'
+                'error': f'Cannot calculate balance beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")})'
             }), 400
 
         # Get all transactions up to the specified date
@@ -675,41 +734,76 @@ def calculate_realtime_balance(customer_id):
                 'as_of_date': as_of_date.strftime('%d-%m-%Y')
             })
 
-        # Calculate principal balance from transactions
-        principal_balance = Decimal('0')
+        # Use the same logic as transaction creation - process transactions chronologically
+        current_balance = Decimal('0')
+        total_principal_movements = Decimal('0')
         total_recorded_interest = Decimal('0')
 
         for txn in transactions:
-            principal_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
-            total_recorded_interest += txn.get_safe_net_amount()
+            # Add principal movements
+            principal_movement = txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+            current_balance += principal_movement
+            total_principal_movements += principal_movement
+            
+            # For compound interest, add net interest to balance only at quarter end
+            # For simple interest, interest is typically not added to principal until maturity
+            if (customer.interest_type == 'compound' and 
+                customer.first_compounding_date and 
+                txn.date >= customer.first_compounding_date and 
+                txn.period_to and 
+                _is_quarter_end(txn.period_to, customer.icl_start_date) and 
+                txn.get_safe_net_amount()):
+                
+                net_amount = txn.get_safe_net_amount()
+                current_balance += net_amount
+                total_recorded_interest += net_amount
+                logging.debug(f"Quarter end: added net interest {net_amount} to balance")
+            else:
+                # For tracking purposes, record interest but don't add to balance
+                total_recorded_interest += txn.get_safe_net_amount()
+                if customer.interest_type == 'compound' and txn.get_safe_net_amount():
+                    logging.debug(f"Mid-quarter: interest {txn.get_safe_net_amount()} recorded but NOT added to balance")
 
-        # Find the last transaction date to calculate additional interest from
+        # Find the last transaction to calculate additional interest from
         last_transaction = max(transactions, key=lambda t: (t.date, t.created_at))
-        last_transaction_date = last_transaction.date
+        last_transaction_date = last_transaction.period_to or last_transaction.date
 
-        # Calculate additional interest from last transaction date to as_of_date
+        # Calculate additional interest from last transaction period end to as_of_date
         additional_interest = Decimal('0')
         if as_of_date > last_transaction_date:
             days_since_last_transaction = (as_of_date - last_transaction_date).days
 
             if days_since_last_transaction > 0:
-                # Determine the principal for interest calculation
-                # For the period after last transaction, use the accumulated balance
-
-                # Check if we should use compound interest logic
-                should_use_compound = False
+                # Use the same principal calculation logic as transaction creation
+                principal_for_calculation = Decimal('0')
+                
+                # Check if we're before first compounding date
+                is_before_first_compounding = True
                 if customer.interest_type == 'compound' and customer.first_compounding_date:
                     if as_of_date >= customer.first_compounding_date:
-                        should_use_compound = True
+                        is_before_first_compounding = False
 
-                if should_use_compound:
-                    # For compound interest, principal includes accumulated interest
-                    principal_for_calculation = principal_balance + total_recorded_interest
+                if not is_before_first_compounding:
+                    # For compound interest after first compounding date, include accumulated net interest from previous quarters
+                    # Get the quarter start date for the as_of_date
+                    quarter_start = _get_quarter_start_date(as_of_date, customer.icl_start_date)
+                    
+                    # Get accumulated net interest only from transactions before this quarter starts
+                    previous_quarter_transactions = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.date < quarter_start
+                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+                    accumulated_net_interest_from_previous_quarters = Decimal('0')
+                    for prev_txn in previous_quarter_transactions:
+                        accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
+
+                    principal_for_calculation = total_principal_movements + accumulated_net_interest_from_previous_quarters
                 else:
-                    # For simple interest, only use principal balance
-                    principal_for_calculation = principal_balance
+                    # For simple interest or before first compounding date, only use principal movements
+                    principal_for_calculation = total_principal_movements
 
-                # Calculate additional interest
+                # Calculate additional interest using simple interest formula
                 additional_interest = calculate_interest(
                     principal_for_calculation, 
                     customer.annual_rate, 
@@ -718,17 +812,23 @@ def calculate_realtime_balance(customer_id):
 
                 # Apply TDS if applicable
                 if customer.tds_applicable and additional_interest > Decimal('0'):
-                    tds_rate = customer.tds_percentage or Decimal('0.00')
+                    tds_rate = customer.tds_percentage or Decimal('10.00')
                     tds_amount = additional_interest * (tds_rate / Decimal('100'))
                     additional_interest = additional_interest - tds_amount
 
-        # Total balance = principal + recorded interest + additional accrued interest
-        total_balance = principal_balance + total_recorded_interest + additional_interest
+        # For compound interest, total balance includes accumulated interest at quarter ends
+        # For simple interest, balance is principal + all accrued interest (recorded + additional)
+        if customer.interest_type == 'compound':
+            # Current balance already includes quarter-end interest accumulation
+            total_balance = current_balance + additional_interest
+        else:
+            # For simple interest, add all interest to principal
+            total_balance = total_principal_movements + total_recorded_interest + additional_interest
 
         return jsonify({
             'success': True,
             'balance': str(total_balance.quantize(Decimal('0.01'))),
-            'principal': str(principal_balance.quantize(Decimal('0.01'))),
+            'principal': str(total_principal_movements.quantize(Decimal('0.01'))),
             'recorded_interest': str(total_recorded_interest.quantize(Decimal('0.01'))),
             'accrued_interest': str(additional_interest.quantize(Decimal('0.01'))),
             'as_of_date': as_of_date.strftime('%d-%m-%Y'),
@@ -1066,6 +1166,7 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             transaction.balance = current_running_balance.quantize(Decimal('0.01'))
 
             # For compound interest, add net interest to balance only at quarter end
+            # CRITICAL: Do NOT add interest to balance during mid-quarter periods
             if (customer.interest_type == 'compound' and 
                 customer.first_compounding_date and 
                 transaction.date >= customer.first_compounding_date and 
@@ -1075,7 +1176,9 @@ def recalculate_customer_transactions(customer_id, start_date=None):
                 transaction.balance = (current_running_balance + transaction.net_amount).quantize(Decimal('0.01'))
                 # Update running balance to include interest for next transaction
                 current_running_balance += transaction.net_amount
-                logging.debug(f"  Quarter end: added net interest {transaction.net_amount} to balance")
+                logging.debug(f"Quarter end: added net interest {transaction.net_amount} to balance")
+            else:
+                logging.debug(f"Mid-quarter recalc: interest {transaction.net_amount} calculated but NOT added to principal balance")
 
             logging.debug(f"  Updated transaction.balance to: {transaction.balance}. Running balance for next txn: {current_running_balance}")
 
@@ -1214,7 +1317,7 @@ def _is_quarter_end(date_to_check, icl_start_date):
 
 def _group_transactions_by_period(customer, transactions, period_type):
     """
-    Aggregates transactions into quarterly, half-yearly, or yearly periods
+    Aggregates transactions into quarterly, half_yearly, or yearly periods
     starting from the customer's ICL start date.
     """
     logging.debug(f"Starting _group_transactions_by_period for customer {customer.id}, type: {period_type}")
@@ -1273,7 +1376,7 @@ def _group_transactions_by_period(customer, transactions, period_type):
             elif month >= 7 and month <= 9:
                 period_end = date(year, 9, 30)
                 period_name = f"Q3 {year}"
-            else: # month >= 10 and month <= 12
+            else: # month >= 10 and month <= 12:
                 period_end = date(year, 12, 31)
                 period_name = f"Q4 {year}"
         elif period_type == 'half_yearly':
