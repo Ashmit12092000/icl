@@ -81,6 +81,59 @@ class Customer(db.Model):
         logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, calculated_balance={calculated_balance}")
         return calculated_balance
 
+    def get_compound_balance(self):
+        """Calculates the balance with compound interest accumulation at quarter ends."""
+        # Sort transactions by date and creation time to process in chronological order
+        sorted_transactions = sorted(self.transactions, key=lambda t: (t.date, t.created_at))
+        
+        current_balance = Decimal('0')
+        
+        logging.debug(f"Starting get_compound_balance for customer {self.id}. Number of transactions: {len(sorted_transactions)}")
+
+        for t in sorted_transactions:
+            logging.debug(f"Processing transaction {t.id} for customer {self.id}")
+            
+            # Add principal movements
+            safe_paid = t.get_safe_amount_paid()
+            safe_repaid = t.get_safe_amount_repaid()
+            current_balance += safe_paid - safe_repaid
+            
+            logging.debug(f"  Principal movement: +{safe_paid} -{safe_repaid}, running balance: {current_balance}")
+            
+            # For compound interest, add net interest at quarter end
+            if (self.interest_type == 'compound' and 
+                self.first_compounding_date and 
+                t.date >= self.first_compounding_date and 
+                t.period_to and 
+                self._is_quarter_end(t.period_to) and 
+                t.get_safe_net_amount()):
+                
+                net_amount = t.get_safe_net_amount()
+                current_balance += net_amount
+                logging.debug(f"  Quarter end: added net interest {net_amount}, new balance: {current_balance}")
+            elif self.interest_type == 'simple':
+                # For simple interest, interest is typically not added to principal until maturity
+                logging.debug(f"  Simple interest: net interest {t.get_safe_net_amount()} not added to balance")
+            else:
+                logging.debug(f"  Mid-quarter compound: net interest {t.get_safe_net_amount()} not added to balance")
+
+        calculated_balance = current_balance.quantize(Decimal('0.01'))
+        logging.debug(f"get_compound_balance for customer {self.id}: final calculated_balance={calculated_balance}")
+        return calculated_balance
+    
+    def _is_quarter_end(self, date_to_check):
+        """Check if a given date falls at the end of a financial quarter, based on the customer's ICL start date."""
+        if not date_to_check or not self.icl_start_date:
+            return False
+
+        # Import here to avoid circular imports
+        from routes import _get_quarter_end_date
+        
+        # Calculate expected quarter end for this date
+        expected_quarter_end = _get_quarter_end_date(date_to_check, self.icl_start_date)
+        
+        return date_to_check == expected_quarter_end
+
     def get_safe_annual_rate(self):
         """Get annual rate as a safe float for display purposes (if needed as float)."""
         if self.annual_rate is None:
@@ -98,6 +151,24 @@ class Customer(db.Model):
             return float(self.tds_percentage)
         except (ValueError, TypeError, InvalidOperation):
             return 0.0
+
+    def get_effective_end_date(self):
+        """Get the effective end date (latest of ICL end date or last transaction date)."""
+        last_transaction_date = self.get_last_transaction_date()
+        if self.icl_end_date and last_transaction_date:
+            return max(self.icl_end_date, last_transaction_date)
+        elif self.icl_end_date:
+            return self.icl_end_date
+        elif last_transaction_date:
+            return last_transaction_date
+        else:
+            return None
+
+    def get_last_transaction_date(self):
+        """Get the date of the last transaction for this customer."""
+        if self.transactions:
+            return max(t.date for t in self.transactions)
+        return None
 
     def __repr__(self):
         return f'<Customer {self.name}>'
