@@ -8,10 +8,16 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
-                
+
                 <div>
                     <h1><i class="fas fa-exchange-alt me-2"></i>Transactions</h1>
                     <p class="text-muted">Customer: {{ customer.name }} ({{ customer.icl_no }})</p>
+                    {% if customer.loan_closed %}
+                    <div class="alert alert-danger">
+                        <i class="fas fa-lock me-2"></i>
+                        <strong>Loan Closed:</strong> This loan was closed on {{ customer.loan_closed_date.strftime('%d-%m-%Y') if customer.loan_closed_date else 'N/A' }}. No new transactions can be added.
+                    </div>
+                    {% endif %}
                 </div>
                 <div>
                     <span class="badge bg-primary fs-6">Current Balance: {{ customer.get_current_balance() | safe_currency }}</span>
@@ -21,13 +27,12 @@
     </div>
 
     <!-- Add Transaction Form -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-plus me-2"></i>Add New Transaction</h5>
-                </div>
-                <div class="card-body">
+    {% if current_user.role in ['admin', 'data_entry'] and not customer.loan_closed %}
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-plus me-2"></i>Add New Transaction</h5>
+                    </div>
+                    <div class="card-body">
                     <form method="POST" id="transactionForm">
                         <div class="row">
                             <div class="col-md-4">
@@ -122,7 +127,7 @@
                 </div>
             </div>
         </div>
-    </div>
+    {% endif %}
     <!-- Edit Transaction Modal -->
 <div class="modal fade" id="editTransactionModal" tabindex="-1" aria-labelledby="editTransactionModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -330,9 +335,8 @@ $(document).ready(function() {
         var amountPaid = parseFloat($('#amount_paid').val()) || 0;
         var amountRepaid = parseFloat($('#amount_repaid').val()) || 0;
 
-        /*if (amountPaid === 0 && amountRepaid === 0) {
+        if (amountPaid === 0 && amountRepaid === 0) {
             e.preventDefault();
-            // Using custom message function from app.js if available
             if (typeof LoanApp !== 'undefined' && LoanApp.utils && LoanApp.utils.showInputError) {
                 LoanApp.utils.showInputError($('#amount_paid')[0], 'Please enter either amount paid or amount repaid.');
                 LoanApp.utils.showInputError($('#amount_repaid')[0], 'Please enter either amount paid or amount repaid.');
@@ -340,7 +344,7 @@ $(document).ready(function() {
                 alert('Please enter either amount paid or amount repaid.');
             }
             return false;
-        }*/
+        }
 
         // Validate period_from <= period_to if manually changed
         var fromDate = periodFromInput.val();
