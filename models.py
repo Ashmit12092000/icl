@@ -37,6 +37,8 @@ class Customer(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     is_active = db.Column(db.Boolean, default=True)
+    loan_closed = db.Column(db.Boolean, default=False)
+    loan_closed_date = db.Column(db.Date)
 
     # Relationships
     transactions = db.relationship('Transaction', backref='customer', lazy=True, cascade='all, delete-orphan')
