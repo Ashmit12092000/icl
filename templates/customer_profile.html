@@ -133,7 +133,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Real-time Balance Calculator -->
         <div class="col-md-4">
             <div class="card bg-info text-white">
@@ -156,7 +156,7 @@
                             <i class="fas fa-sync me-2"></i>Calculate Balance
                         </button>
                     </form>
-                    
+
                     <!-- Results Display -->
                     <div id="realtimeResults" class="mt-3" style="display: none;">
                         <hr class="border-light">
@@ -255,7 +255,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Monthly Activity Bar Chart -->
         <div class="col-md-6">
             <div class="card">
@@ -420,6 +420,16 @@
             </div>
         </div>
     </div>
+    {% if current_user.role in ['admin', 'data_entry'] %}
+    <!-- Close Loan Button -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <button onclick="confirmLoanClose('{{ customer.id }}', '{{ customer.name }}')" class="btn btn-danger">
+                <i class="fas fa-lock me-2"></i>Close Loan
+            </button>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Back Button -->
     <div class="row mt-4">
@@ -438,6 +448,28 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <script>
+// Confirm loan close function
+function confirmLoanClose(customerId, customerName) {
+    if (confirm(`Are you sure you want to close the loan for "${customerName}"? This action will mark the loan as closed and prevent further transactions.`)) {
+        // Create a form to submit the close loan request
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/customer/${customerId}/close_loan`;
+
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name=csrf-token]');
+        if (csrfToken) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken.getAttribute('content');
+            form.appendChild(csrfInput);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
 $(document).ready(function() {
     // Transaction data from backend
     const transactions = [
@@ -460,14 +492,14 @@ $(document).ready(function() {
         let totalWithdrawals = 0;
         let totalInterest = 0;
         let totalTds = 0;
-        
+
         transactions.forEach(txn => {
             totalDeposits += parseFloat(txn.amountPaid) || 0;
             totalWithdrawals += parseFloat(txn.amountRepaid) || 0;
             totalInterest += parseFloat(txn.interest) || 0;
             totalTds += parseFloat(txn.tds) || 0;
         });
-        
+
         return {
             totalDeposits,
             totalWithdrawals,
@@ -590,7 +622,7 @@ $(document).ready(function() {
     // Interest vs TDS Doughnut Chart
     const ctx3 = document.getElementById('interestTdsChart').getContext('2d');
     const netInterest = metrics.totalInterest - metrics.totalTds;
-    
+
     new Chart(ctx3, {
         type: 'doughnut',
         data: {
@@ -631,7 +663,7 @@ $(document).ready(function() {
 
     // Monthly Activity Bar Chart
     const ctx4 = document.getElementById('monthlyActivityChart').getContext('2d');
-    
+
     // Group transactions by month
     const monthlyData = {};
     transactions.forEach(txn => {
@@ -753,18 +785,18 @@ $(document).ready(function() {
     // Real-time balance calculation
     $('#realtimeBalanceForm').on('submit', function(e) {
         e.preventDefault();
-        
+
         const asOfDate = $('#as_of_date').val();
         if (!asOfDate) {
             alert('Please select a date');
             return;
         }
-        
+
         // Show loading state
         const submitBtn = $(this).find('button[type="submit"]');
         const originalText = submitBtn.html();
         submitBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>Calculating...').prop('disabled', true);
-        
+
         $.ajax({
             url: '/calculate_realtime_balance/{{ customer.id }}',
             method: 'POST',
@@ -779,7 +811,7 @@ $(document).ready(function() {
                     $('#resultPrincipal').text('₹' + parseFloat(response.principal).toLocaleString('en-IN', {maximumFractionDigits: 2}));
                     $('#resultRecordedInterest').text('₹' + parseFloat(response.recorded_interest).toLocaleString('en-IN', {maximumFractionDigits: 2}));
                     $('#resultAccruedInterest').text('₹' + parseFloat(response.accrued_interest).toLocaleString('en-IN', {maximumFractionDigits: 2}));
-                    
+
                     // Additional info
                     let additionalInfo = '';
                     if (response.days_calculated > 0) {
@@ -788,7 +820,7 @@ $(document).ready(function() {
                         additionalInfo = '(No additional interest calculated)';
                     }
                     $('#additionalInfo').text(additionalInfo);
-                    
+
                     // Show results
                     $('#realtimeResults').slideDown();
                 } else {
