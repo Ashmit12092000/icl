@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter # <--- Added this import
 from sqlalchemy import and_
 # Configure logging for utils.py
 logging.basicConfig(level=logging.DEBUG)
+
 def compute_cumulative_principal(transactions, new_paid=Decimal('0'), new_repaid=Decimal('0')):
     """
     Calculates cumulative principal for the next compounding period, including all prior net interest.
