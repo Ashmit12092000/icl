@@ -56,12 +56,12 @@ class Customer(db.Model):
         total_principal_paid = Decimal('0')
         total_principal_repaid = Decimal('0')
         total_net_interest_accrued = Decimal('0')
-        
+
         logging.debug(f"Starting get_current_balance for customer {self.id}. Number of transactions: {len(self.transactions)}")
 
         for t in self.transactions:
             logging.debug(f"Processing transaction {t.id} for customer {self.id}")
-            
+
             safe_paid = t.get_safe_amount_paid()
             logging.debug(f"  get_safe_amount_paid() returned: {safe_paid} (type: {type(safe_paid)})")
             total_principal_paid += safe_paid
@@ -69,7 +69,7 @@ class Customer(db.Model):
             safe_repaid = t.get_safe_amount_repaid()
             logging.debug(f"  get_safe_amount_repaid() returned: {safe_repaid} (type: {type(safe_repaid)})")
             total_principal_repaid += safe_repaid
-            
+
             # Only add interest/TDS if they were calculated for this transaction
             # Ensure int_amount and tds_amount are not None before attempting subtraction
             if t.int_amount is not None or t.tds_amount is not None:
@@ -80,26 +80,51 @@ class Customer(db.Model):
                 total_net_interest_accrued += net_interest_for_txn
 
         calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
-        
-        # Find all repayment transactions and subtract their net amounts from calculated balance
+
+        # For compound interest customers only, subtract net amounts from repayment transactions after repayment quarters
         total_repayment_net_amount = Decimal('0')
-        for t in self.transactions:
-            if t.transaction_type == 'repayment':
-                repayment_net_amount = t.get_safe_net_amount()
-                total_repayment_net_amount += repayment_net_amount
-                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount}")
-        
-        # Subtract repayment net amounts from calculated balance
-        if total_repayment_net_amount > Decimal('0'):
-            adjusted_balance = calculated_balance - total_repayment_net_amount
-            logging.debug(f"  Adjusted balance: {calculated_balance} - {total_repayment_net_amount} = {adjusted_balance}")
-            calculated_balance = adjusted_balance
-        
-        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, total_repayment_net_amount={total_repayment_net_amount}, final_calculated_balance={calculated_balance}")
+        if self.interest_type == 'compound':
+            # Find quarters that contain repayment transactions
+            repayment_quarters = set()
+            for t in self.transactions:
+                if t.transaction_type == 'repayment' and t.period_to:
+                    # Get the quarter start for this repayment transaction
+                    quarter_start = None
+                    if self.icl_start_date:
+                        try:
+                            from routes import _get_quarter_start_date
+                            quarter_start = _get_quarter_start_date(t.date, self.icl_start_date)
+                            repayment_quarters.add(quarter_start)
+                        except ImportError:
+                            pass
+
+            # Only apply adjustment for transactions after repayment quarters
+            for t in self.transactions:
+                if t.transaction_type == 'repayment':
+                    # Check if this transaction's quarter has been identified as a repayment quarter
+                    if self.icl_start_date:
+                        try:
+                            from routes import _get_quarter_start_date
+                            txn_quarter_start = _get_quarter_start_date(t.date, self.icl_start_date)
+                            if txn_quarter_start in repayment_quarters:
+                                repayment_net_amount = t.get_safe_net_amount()
+                                total_repayment_net_amount += repayment_net_amount
+                                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount} in repayment quarter")
+                        except ImportError:
+                            pass
+
+            # Subtract repayment net amounts from calculated balance for compound interest customers only
+            if total_repayment_net_amount > Decimal('0'):
+                adjusted_balance = calculated_balance - total_repayment_net_amount
+                logging.debug(f"  Compound interest - Adjusted balance: {calculated_balance} - {total_repayment_net_amount} = {adjusted_balance}")
+                calculated_balance = adjusted_balance
+
+        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, repayment_adjustment={total_repayment_net_amount if self.interest_type == 'compound' else 'N/A'}, final_calculated_balance={calculated_balance}")
+        logging.debug(f"FINAL BALANCE RETURNED: {calculated_balance}")
         return calculated_balance
 
-    
-    
+
+
     def _is_quarter_end(self, date_to_check):
         """Check if a given date falls at the end of a financial quarter, based on the customer's ICL start date."""
         if not date_to_check or not self.icl_start_date:
@@ -107,10 +132,10 @@ class Customer(db.Model):
 
         # Import here to avoid circular imports
         from routes import _get_quarter_end_date
-        
+
         # Calculate expected quarter end for this date
         expected_quarter_end = _get_quarter_end_date(date_to_check, self.icl_start_date)
-        
+
         return date_to_check == expected_quarter_end
 
     def get_safe_annual_rate(self):
