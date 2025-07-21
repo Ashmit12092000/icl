@@ -114,7 +114,22 @@ def export_to_excel(customer, transactions):
         cell.alignment = center_alignment
     
     # Transaction data
+    total_days = Decimal('0')
+    total_interest = Decimal('0')
+    total_tds = Decimal('0')
+    total_net_amount = Decimal('0')
+    
     for row, transaction in enumerate(transactions, start=start_row + 1):
+        # Accumulate totals
+        if transaction.no_of_days:
+            total_days += Decimal(str(transaction.no_of_days))
+        if transaction.int_amount:
+            total_interest += transaction.int_amount
+        if transaction.tds_amount:
+            total_tds += transaction.tds_amount
+        if transaction.net_amount:
+            total_net_amount += transaction.net_amount
+        
         data = [
             transaction.date.strftime('%d-%m-%Y') if transaction.date else "",
             str(transaction.amount_paid) if transaction.amount_paid else "",
@@ -134,6 +149,33 @@ def export_to_excel(customer, transactions):
             cell.border = border
             if col > 1:  # Align numbers to right
                 cell.alignment = Alignment(horizontal='right')
+    
+    # Add totals row if there are transactions
+    if transactions:
+        totals_row = len(transactions) + start_row + 2  # Add space between data and totals
+        
+        # Add "TOTAL" label
+        total_label_cell = worksheet.cell(row=totals_row, column=6, value="TOTAL:")
+        total_label_cell.font = Font(bold=True)
+        total_label_cell.border = border
+        total_label_cell.alignment = Alignment(horizontal='right')
+        
+        # Add totals for specific columns
+        totals_data = [
+            str(int(total_days)),  # Column 7: Total Days
+            "",  # Column 8: Interest Rate (no total needed)
+            str(total_interest.quantize(Decimal('0.01'))),  # Column 9: Total Interest Amount
+            str(total_tds.quantize(Decimal('0.01'))),  # Column 10: Total TDS Amount
+            str(total_net_amount.quantize(Decimal('0.01')))  # Column 11: Total Net Amount
+        ]
+        
+        for col, value in enumerate(totals_data, start=7):
+            cell = worksheet.cell(row=totals_row, column=col, value=value)
+            cell.font = Font(bold=True)
+            cell.border = border
+            cell.alignment = Alignment(horizontal='right')
+            if col > 8:  # Add background color to totals columns
+                cell.fill = PatternFill(start_color="E6F3FF", end_color="E6F3FF", fill_type="solid")
     
     # Auto-adjust column widths
     for column in worksheet.columns:
