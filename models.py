@@ -80,7 +80,22 @@ class Customer(db.Model):
                 total_net_interest_accrued += net_interest_for_txn
 
         calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
-        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, calculated_balance={calculated_balance}")
+        
+        # Find all repayment transactions and subtract their net amounts from calculated balance
+        total_repayment_net_amount = Decimal('0')
+        for t in self.transactions:
+            if t.transaction_type == 'repayment':
+                repayment_net_amount = t.get_safe_net_amount()
+                total_repayment_net_amount += repayment_net_amount
+                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount}")
+        
+        # Subtract repayment net amounts from calculated balance
+        if total_repayment_net_amount > Decimal('0'):
+            adjusted_balance = calculated_balance - total_repayment_net_amount
+            logging.debug(f"  Adjusted balance: {calculated_balance} - {total_repayment_net_amount} = {adjusted_balance}")
+            calculated_balance = adjusted_balance
+        
+        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, total_repayment_net_amount={total_repayment_net_amount}, final_calculated_balance={calculated_balance}")
         return calculated_balance
 
     
@@ -151,6 +166,7 @@ class Transaction(db.Model):
     int_amount = db.Column(db.Numeric(15, 2))
     tds_amount = db.Column(db.Numeric(15, 2))
     net_amount = db.Column(db.Numeric(15, 2))
+    transaction_type = db.Column(db.String(20), default='passive')  # 'deposit', 'repayment', 'passive'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
 
@@ -197,6 +213,15 @@ class Transaction(db.Model):
     def get_safe_net_amount(self):
         return self._to_decimal(self.net_amount, 'net_amount')
     # --- END OF FIX ---
+
+    def get_transaction_type_display(self):
+        """Get formatted transaction type for display"""
+        type_mapping = {
+            'deposit': 'Deposit',
+            'repayment': 'Repayment', 
+            'passive': 'Passive Period'
+        }
+        return type_mapping.get(self.transaction_type, 'Unknown')
 
 
 class InterestRate(db.Model):
