@@ -297,7 +297,8 @@
                                         <th class="text-end">Total Interest</th>
                                         <th class="text-end">Total TDS</th>
                                         <th class="text-end">Total Net Amount</th>
-                                        <th class="text-end">Closing Balance</th>
+                                        <th>Closing Balance</th>
+                                        <th>Adjusted Balance</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -312,7 +313,8 @@
                                         <td class="text-end">{{ period.total_interest | safe_currency }}</td>
                                         <td class="text-end">{{ period.total_tds | safe_currency }}</td>
                                         <td class="text-end text-primary">{{ period.total_net_amount | safe_currency }}</td>
-                                        <td class="text-end"><strong>{{ period.closing_balance | safe_currency }}</strong></td>
+                                        <td>{{ period.closing_balance|safe_currency }}</td>
+                                        <td>{{ period.adjusted_closing_balance|safe_currency }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -766,7 +768,7 @@ $(document).ready(function() {
                 "responsive": true,
                 "columnDefs": [
                     {
-                        "targets": [3, 4, 5, 6, 7, 8, 9],
+                        "targets": [3, 4, 5, 6, 7, 8, 9, 10],
                         "className": "text-end"
                     }
                 ]
