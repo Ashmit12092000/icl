@@ -241,7 +241,7 @@
                                     </td>
                                     <td class="text-end">
                                         {% if transaction.balance %}
-                                            <strong>{{ transaction.balance | safe_currency }}</strong>
+                                            <strong>{{ transaction.get_safe_balance() | safe_currency }}</strong>
                                         {% else %}
                                             <span class="text-muted">-</span>
                                         {% endif %}
