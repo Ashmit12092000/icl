@@ -196,6 +196,7 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
+                                    <th>Type</th>
                                     <th>Amount Paid</th>
                                     <th>Amount Repaid</th>
                                     <th>Balance</th>
@@ -213,6 +214,17 @@
                                 {% for transaction in transactions %}
                                 <tr>
                                     <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}</td>
+                                    <td>
+                                        {% if transaction.transaction_type == 'deposit' %}
+                                            <span class="badge bg-success">{{ transaction.get_transaction_type_display() }}</span>
+                                        {% elif transaction.transaction_type == 'repayment' %}
+                                            <span class="badge bg-warning text-dark">{{ transaction.get_transaction_type_display() }}</span>
+                                        {% elif transaction.transaction_type == 'passive' %}
+                                            <span class="badge bg-secondary">{{ transaction.get_transaction_type_display() }}</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ transaction.get_transaction_type_display() }}</span>
+                                        {% endif %}
+                                    </td>
                                     <td class="text-end">
                                         {% if transaction.amount_paid %}
                                             <span class="text-success">{{ transaction.amount_paid | safe_currency }}</span>
