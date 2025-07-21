@@ -699,6 +699,13 @@ def transactions(customer_id):
                 if customer.interest_type == 'compound' and net_amount:
                     logging.debug(f"Mid-quarter transaction: interest {net_amount} calculated but NOT added to principal balance")
 
+            # Determine transaction type
+            transaction_type = 'passive'  # Default
+            if amount_paid > Decimal('0'):
+                transaction_type = 'deposit'
+            elif amount_repaid > Decimal('0'):
+                transaction_type = 'repayment'
+
             # Save transaction
             transaction = Transaction(
                 customer_id=customer_id,
@@ -713,6 +720,7 @@ def transactions(customer_id):
                 int_amount=int_amount,
                 tds_amount=tds_amount,
                 net_amount=net_amount,
+                transaction_type=transaction_type,
                 created_by=current_user.id
             )
 
@@ -786,6 +794,7 @@ def transactions(customer_id):
                         int_amount=post_payment_int_amount,
                         tds_amount=post_payment_tds_amount,
                         net_amount=post_payment_net_amount,
+                        transaction_type='passive',
                         created_by=current_user.id
                     )
                     
@@ -1117,8 +1126,19 @@ def edit_transaction(transaction_id):
     try:
         # Update transaction fields from form data
         transaction.date = datetime.strptime(request.form['date'], '%Y-%m-%d').date()
-        transaction.amount_paid = safe_decimal_conversion(request.form.get('amount_paid'))
-        transaction.amount_repaid = safe_decimal_conversion(request.form.get('amount_repaid'))
+        amount_paid = safe_decimal_conversion(request.form.get('amount_paid'))
+        amount_repaid = safe_decimal_conversion(request.form.get('amount_repaid'))
+        
+        transaction.amount_paid = amount_paid if amount_paid != Decimal('0') else None
+        transaction.amount_repaid = amount_repaid if amount_repaid != Decimal('0') else None
+
+        # Update transaction type based on amounts
+        if amount_paid > Decimal('0'):
+            transaction.transaction_type = 'deposit'
+        elif amount_repaid > Decimal('0'):
+            transaction.transaction_type = 'repayment'
+        else:
+            transaction.transaction_type = 'passive'
 
         transaction.period_from = datetime.strptime(request.form['period_from'], '%Y-%m-%d').date() if request.form.get('period_from') else None
         transaction.period_to = datetime.strptime(request.form['period_to'], '%Y-%m-%d').date() if request.form.get('period_to') else None
@@ -1622,6 +1642,7 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
         int_amount=int_amount,
         tds_amount=tds_amount,
         net_amount=net_amount,
+        transaction_type='passive',
         created_by=created_by_user_id
     )
     
@@ -1748,8 +1769,32 @@ def _group_transactions_by_period(customer, transactions, period_type):
 
         # Capture closing balance for the current period
         closing_balance_for_period = current_running_balance_for_summary
+        
+        # For quarterly periods, subtract net amounts from repayment transactions within the quarter
+        adjusted_closing_balance = closing_balance_for_period
+        if period_type == 'quarterly':
+            # Search database for repayment transactions in this quarter period
+            repayment_transactions_in_quarter = Transaction.query.filter(
+                Transaction.customer_id == customer.id,
+                Transaction.transaction_type == 'repayment',
+                Transaction.date >= actual_period_start,
+                Transaction.date <= period_end
+            ).all()
+            
+            # Subtract net amounts of repayment transactions from closing balance
+            total_repayment_net_amount = Decimal('0')
+            for repayment_txn in repayment_transactions_in_quarter:
+                repayment_net_amount = repayment_txn.get_safe_net_amount()
+                total_repayment_net_amount += repayment_net_amount
+                logging.debug(f"  Database search found repayment transaction {repayment_txn.id} on {repayment_txn.date} with net amount: {repayment_net_amount}")
+            
+            if total_repayment_net_amount > Decimal('0'):
+                adjusted_closing_balance = closing_balance_for_period - total_repayment_net_amount
+                logging.debug(f"  Adjusted closing balance: {closing_balance_for_period} - {total_repayment_net_amount} = {adjusted_closing_balance}")
+            else:
+                logging.debug(f"  No repayment transactions found in quarter {period_name}")
 
-        logging.debug(f"  Period totals: Paid={total_paid_in_period}, Repaid={total_repaid_in_period}, Interest={total_interest_in_period}, Closing Balance={closing_balance_for_period}")
+        logging.debug(f"  Period totals: Paid={total_paid_in_period}, Repaid={total_repaid_in_period}, Interest={total_interest_in_period}, Closing Balance={closing_balance_for_period}, Adjusted Closing Balance={adjusted_closing_balance}")
 
         # Only add period if it contains transactions or if it's the current/last period
         # and has a non-zero balance or if it's the first period.
@@ -1770,7 +1815,8 @@ def _group_transactions_by_period(customer, transactions, period_type):
                 'total_interest': total_interest_in_period.quantize(Decimal('0.01')),
                 'total_tds': total_tds_in_period.quantize(Decimal('0.01')),
                 'total_net_amount': total_net_amount_in_period.quantize(Decimal('0.01')),
-                'closing_balance': closing_balance_for_period.quantize(Decimal('0.01'))
+                'closing_balance': closing_balance_for_period.quantize(Decimal('0.01')),
+                'adjusted_closing_balance': adjusted_closing_balance.quantize(Decimal('0.01')) if period_type == 'quarterly' else closing_balance_for_period.quantize(Decimal('0.01'))
             })
 
         # Move to the next period
