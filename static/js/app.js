@@ -335,7 +335,7 @@ const LoanApp = {
                 const tableId = $table.attr('id') || 'unnamed-table';
                 
                 // Complete cleanup before initialization
-                app.destroyDataTable('#' + tableId);
+                LoanApp.destroyDataTable('#' + tableId);
                 
                 const options = {
                     destroy: true, // Allow reinitialization
@@ -399,7 +399,7 @@ const LoanApp = {
             const summaryTable = document.getElementById('customerSummaryTable');
             if (!summaryTable) return;
             
-            app.destroyDataTable('#customerSummaryTable');
+            LoanApp.destroyDataTable('#customerSummaryTable');
             
             try {
                 $('#customerSummaryTable').DataTable({
