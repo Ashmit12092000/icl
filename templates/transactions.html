@@ -382,15 +382,24 @@ $(document).ready(function() {
         console.log('User manually changed Period From to:', $(this).val());
     });
 
-    // Initialize DataTable
-    $('#transactionsTable').DataTable({
-        "pageLength": 10,
-        "responsive": true,
-        "order": [[0, "desc"]], // Sort by date descending
-        "language": {
-            "search": "Search transactions:"
+    // Initialize DataTable with proper cleanup
+    const $transactionTable = $('#transactionsTable');
+    if ($transactionTable.length && !$.fn.DataTable.isDataTable($transactionTable)) {
+        try {
+            $transactionTable.DataTable({
+                "destroy": true,
+                "pageLength": 10,
+                "responsive": true,
+                "order": [[0, "desc"]], // Sort by date descending
+                "language": {
+                    "search": "Search transactions:"
+                }
+            });
+            console.log('Transaction DataTable initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize transaction DataTable:', error);
         }
-    });
+    }
 
     // Form validation (client-side)
     $('#transactionForm').submit(function(e) {
