@@ -764,12 +764,199 @@ def transactions(customer_id):
                 transaction_date == customer.icl_end_date and 
                 amount_repaid > Decimal('0')):
                 
+                # For compound interest customers, ensure final quarter interest is calculated
+                # before creating the loan closure transaction
+                if customer.interest_type == 'compound':
+                    # Check if there's already a transaction for the final quarter
+                    final_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+                    
+                    existing_final_quarter_txn = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.period_from == final_quarter_start,
+                        Transaction.period_to == customer.icl_end_date,
+                        Transaction.date < transaction_date
+                    ).first()
+                    
+                    # If no transaction exists for the final quarter, create a passive period for it
+                    if not existing_final_quarter_txn and final_quarter_start < customer.icl_end_date:
+                        # Calculate balance before the final quarter
+                        final_quarter_txns = Transaction.query.filter(
+                            Transaction.customer_id == customer_id,
+                            Transaction.date < final_quarter_start
+                        ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+                        
+                        balance_before_final_quarter = Decimal('0')
+                        for txn in final_quarter_txns:
+                            balance_before_final_quarter += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+                            # For compound interest, add net interest at quarter ends
+                            if (txn.period_to and 
+                                _is_quarter_end(txn.period_to, customer.icl_start_date) and 
+                                txn.get_safe_net_amount()):
+                                balance_before_final_quarter += txn.get_safe_net_amount()
+                        
+                        # Calculate accumulated net interest from previous quarters
+                        accumulated_net_interest = Decimal('0')
+                        repayment_adjustment = Decimal('0')
+                        previous_quarter_transactions = Transaction.query.filter(
+                            Transaction.customer_id == customer_id,
+                            Transaction.date < final_quarter_start
+                        ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+                        
+                        for prev_txn in previous_quarter_transactions:
+                            accumulated_net_interest += prev_txn.get_safe_net_amount()
+                            if prev_txn.transaction_type == 'repayment':
+                                repayment_adjustment += prev_txn.get_safe_net_amount()
+                        
+                        principal_for_final_quarter = balance_before_final_quarter + accumulated_net_interest - repayment_adjustment
+                        
+                        # Calculate days for final quarter (from quarter start to ICL end date)
+                        final_quarter_days = (customer.icl_end_date - final_quarter_start).days + 1
+                        
+                        if final_quarter_days > 0 and principal_for_final_quarter > Decimal('0'):
+                            # Calculate interest for final quarter
+                            final_quarter_int_amount = calculate_interest(principal_for_final_quarter, customer.annual_rate, final_quarter_days)
+                            
+                            # Calculate TDS for final quarter
+                            final_quarter_tds_amount = Decimal('0')
+                            if customer.tds_applicable and final_quarter_int_amount:
+                                tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                                final_quarter_tds_amount = final_quarter_int_amount * (tds_rate_to_use / Decimal('100'))
+                            
+                            final_quarter_net_amount = final_quarter_int_amount - final_quarter_tds_amount
+                            
+                            # Calculate balance for final quarter (before repayment)
+                            final_quarter_balance = balance_before_final_quarter + final_quarter_net_amount
+                            
+                            # Create final quarter transaction (before the repayment)
+                            final_quarter_date = final_quarter_start + timedelta(days=final_quarter_days // 2)
+                            
+                            final_quarter_transaction = Transaction(
+                                customer_id=customer_id,
+                                date=final_quarter_date,
+                                amount_paid=None,
+                                amount_repaid=None,
+                                balance=final_quarter_balance,
+                                period_from=final_quarter_start,
+                                period_to=customer.icl_end_date,
+                                no_of_days=final_quarter_days,
+                                int_rate=customer.annual_rate,
+                                int_amount=final_quarter_int_amount,
+                                tds_amount=final_quarter_tds_amount,
+                                net_amount=final_quarter_net_amount,
+                                transaction_type='passive',
+                                created_by=current_user.id
+                            )
+                            
+                            db.session.add(final_quarter_transaction)
+                            db.session.flush()  # Ensure the transaction is available
+                            
+                            logging.debug(f"Created final quarter transaction for compound interest customer: {final_quarter_start} to {customer.icl_end_date}, interest: {final_quarter_int_amount}")
+                
+                            # NOW RECALCULATE THE CURRENT BALANCE INCLUDING THE FINAL QUARTER TRANSACTION
+                            # This is crucial for the repayment transaction's interest calculation
+                            previous_txns = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date < transaction_date
+                            ).all()
+                
+                            same_day_txns = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date == transaction_date
+                            ).order_by(Transaction.id.asc()).all()
+                
+                            net_outstanding_balance = Decimal('0')
+                            for txn in previous_txns + same_day_txns:
+                                net_outstanding_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+                                # For compound interest, add accumulated interest at quarter ends
+                                if (customer.interest_type == 'compound' and 
+                                    customer.first_compounding_date and 
+                                    txn.date >= customer.first_compounding_date and 
+                                    txn.period_to and 
+                                    _is_quarter_end(txn.period_to, customer.icl_start_date) and 
+                                    txn.get_safe_net_amount()):
+                                    net_outstanding_balance += txn.get_safe_net_amount()
+                
+                            current_balance_before_this_txn = net_outstanding_balance
+                            
+                            # Apply repayment adjustment for compound interest customers (excluding ICL end date quarter)
+                            if customer.interest_type == 'compound':
+                                repayment_quarters = set()
+                                icl_end_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+                                
+                                for t in previous_txns + same_day_txns:
+                                    if t.transaction_type == 'repayment' and t.period_to:
+                                        quarter_start = _get_quarter_start_date(t.date, customer.icl_start_date)
+                                        if quarter_start != icl_end_quarter_start:
+                                            repayment_quarters.add(quarter_start)
+                                
+                                # Subtract net amounts from repayment transactions in repayment quarters
+                                total_repayment_net_amount = Decimal('0')
+                                for t in previous_txns + same_day_txns:
+                                    if t.transaction_type == 'repayment':
+                                        txn_quarter_start = _get_quarter_start_date(t.date, customer.icl_start_date)
+                                        if txn_quarter_start in repayment_quarters:
+                                            total_repayment_net_amount += t.get_safe_net_amount()
+                                
+                                if total_repayment_net_amount > Decimal('0'):
+                                    current_balance_before_this_txn -= total_repayment_net_amount
+                
+                            # Update the balance for interest calculation - this is the correct balance before repayment
+                            new_balance = current_balance_before_this_txn - amount_repaid
+                            
+                            # CRITICAL FIX: For ICL end date repayments, recalculate interest using correct principal
+                            # The interest should be calculated on the principal BEFORE repayment, not after
+                            if amount_repaid > Decimal('0'):
+                                # Recalculate interest for the final period using principal before repayment
+                                principal_for_final_interest = current_balance_before_this_txn
+                                
+                                # For compound interest, include accumulated net interest from previous quarters
+                                if customer.interest_type == 'compound' and customer.first_compounding_date:
+                                    final_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+                                    
+                                    # Get accumulated net interest from transactions before this quarter starts
+                                    previous_quarter_transactions = Transaction.query.filter(
+                                        Transaction.customer_id == customer_id,
+                                        Transaction.date < final_quarter_start
+                                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+                                    
+                                    accumulated_net_interest = Decimal('0')
+                                    repayment_adjustment = Decimal('0')
+                                    for prev_txn in previous_quarter_transactions:
+                                        accumulated_net_interest += prev_txn.get_safe_net_amount()
+                                        if prev_txn.transaction_type == 'repayment':
+                                            repayment_adjustment += prev_txn.get_safe_net_amount()
+                                    
+                                    principal_for_final_interest = current_balance_before_this_txn + accumulated_net_interest - repayment_adjustment
+                                
+                                # Recalculate interest and TDS for the current transaction using correct principal
+                                if period_from and period_to and no_of_days and no_of_days > 0:
+                                    int_amount = calculate_interest(principal_for_final_interest, customer.annual_rate, no_of_days)
+                                    
+                                    # Recalculate TDS
+                                    if customer.tds_applicable and int_amount:
+                                        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                                        tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
+                                        net_amount = int_amount - tds_amount
+                                    else:
+                                        tds_amount = Decimal('0')
+                                        net_amount = int_amount
+                                    
+                                    # Update the transaction with recalculated values
+                                    transaction.int_amount = int_amount
+                                    transaction.tds_amount = tds_amount
+                                    transaction.net_amount = net_amount
+                                    
+                                    logging.debug(f"ICL end date repayment: Recalculated interest {int_amount}, TDS {tds_amount}, net {net_amount} using principal {principal_for_final_interest}")
+                
+                # Set the final balance after repayment to zero (loan closure)
+                transaction.balance = Decimal('0')
+                
                 # Create loan closure entry for ICL end date
                 final_entry = Transaction(
                     customer_id=customer_id,
                     date=customer.icl_end_date,
                     amount_paid=None,
-                    amount_repaid=amount_repaid,
+                    amount_repaid=None,  # The repayment is already recorded in the main transaction
                     balance=Decimal('0'),  # Set balance to zero on closure
                     period_from=None,
                     period_to=None,
@@ -788,6 +975,22 @@ def transactions(customer_id):
                 customer.loan_closed = True
                 customer.loan_closed_date = customer.icl_end_date
                 db.session.add(customer)
+
+                # AUTOMATIC RECALCULATION FOR ICL END DATE REPAYMENTS
+                # This ensures the values are correct from the start, just like when editing and saving
+                db.session.commit()  # Commit first to save all transactions
+                
+                # For ICL end date repayments, we need to recalculate from the final quarter start
+                # to ensure the interest calculation uses the correct logic
+                final_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+                
+                # Now run recalculation starting from the final quarter to fix any calculation issues
+                logging.info(f"Running automatic recalculation for ICL end date repayment - Customer {customer_id} from {final_quarter_start}")
+                if recalculate_customer_transactions(customer_id, start_date=final_quarter_start):
+                    db.session.commit()  # Commit the recalculated values
+                    logging.info(f"Automatic recalculation completed successfully for customer {customer_id}")
+                else:
+                    logging.error(f"Automatic recalculation failed for customer {customer_id}")
 
                 flash('Loan fully repaid and closed successfully!', 'success')
             else:
@@ -1326,20 +1529,29 @@ def recalculate_customer_transactions(customer_id, start_date=None):
                     accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
 
                 # Calculate adjustment for repayment transactions in previous quarters
+                # IMPORTANT: For ICL end date transactions, do NOT exclude the ICL end quarter from repayment adjustments
                 repayment_adjustment = Decimal('0')
+                icl_end_quarter_start = None
+                if customer.icl_end_date:
+                    icl_end_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+
                 for prev_txn in previous_quarter_transactions:
                     if prev_txn.transaction_type == 'repayment':
+                        # For recalculation, apply standard repayment adjustment logic
+                        # The exclusion of ICL end quarter is handled in balance calculation, not here
                         repayment_adjustment += prev_txn.get_safe_net_amount()
 
                 # Add accumulated interest from previous quarters and subtract repayment adjustments
                 if transaction.get_safe_amount_paid() > Decimal('0'):
                     principal_for_interest_calculation = current_running_balance + accumulated_net_interest_from_previous_quarters - repayment_adjustment + transaction.get_safe_amount_paid()
                 elif transaction.get_safe_amount_repaid() > Decimal('0'):
-                    principal_for_interest_calculation = current_running_balance + accumulated_net_interest_from_previous_quarters - repayment_adjustment - transaction.get_safe_amount_repaid()
+                    # For repayment transactions, especially ICL end date, use principal BEFORE repayment
+                    principal_for_interest_calculation = current_running_balance + accumulated_net_interest_from_previous_quarters - repayment_adjustment
+                    logging.debug(f"  Repayment transaction - Using principal BEFORE repayment: {principal_for_interest_calculation}")
                 else:
                     principal_for_interest_calculation = current_running_balance + accumulated_net_interest_from_previous_quarters - repayment_adjustment
 
-                logging.debug(f"  Compound Interest - Added accumulated net interest from previous quarters {accumulated_net_interest_from_previous_quarters}, new principal: {principal_for_interest_calculation}")
+                logging.debug(f"  Compound Interest - Added accumulated net interest from previous quarters {accumulated_net_interest_from_previous_quarters}, repayment adjustment: {repayment_adjustment}, final principal: {principal_for_interest_calculation}")
 
             # Recalculate no_of_days (if period dates are present)
             if transaction.period_from and transaction.period_to:
