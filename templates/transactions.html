@@ -212,75 +212,116 @@
                             </thead>
                             <tbody>
                                 {% for transaction in transactions %}
-                                <tr>
-                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}</td>
-                                    <td>
-                                        {% if transaction.transaction_type == 'deposit' %}
-                                            <span class="badge bg-success">{{ transaction.get_transaction_type_display() }}</span>
-                                        {% elif transaction.transaction_type == 'repayment' %}
-                                            <span class="badge bg-warning text-dark">{{ transaction.get_transaction_type_display() }}</span>
-                                        {% elif transaction.transaction_type == 'passive' %}
-                                            <span class="badge bg-secondary">{{ transaction.get_transaction_type_display() }}</span>
-                                        {% else %}
-                                            <span class="badge bg-light text-dark">{{ transaction.get_transaction_type_display() }}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if transaction.amount_paid %}
-                                            <span class="text-success">{{ transaction.amount_paid | safe_currency }}</span>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if transaction.amount_repaid %}
-                                            <span class="text-danger">{{ transaction.amount_repaid | safe_currency }}</span>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if transaction.balance %}
-                                            <strong>{{ transaction.get_safe_balance() | safe_currency }}</strong>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else '-' }}</td>
-                                    <td>{{ transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else '-' }}</td>
-                                    <td class="text-center">{{ transaction.no_of_days if transaction.no_of_days else '-' }}</td>
-                                    <td class="text-center">{{ transaction.int_rate | safe_percentage if transaction.int_rate else '-' }}</td>
-                                    <td class="text-end">{{ transaction.int_amount | safe_currency if transaction.int_amount else '-' }}</td>
-                                    <td class="text-end">{{ transaction.tds_amount | safe_currency if transaction.tds_amount else '-' }}</td>
-                                    <td class="text-end">
-                                        {% if transaction.net_amount %}
-                                            <strong class="text-primary">{{ transaction.net_amount | safe_currency }}</strong>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                    <td>
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            {% if current_user.role == 'admin' %}
-                                            <button type="button" class="btn btn-outline-warning edit-transaction-btn"
-                                                    data-bs-toggle="modal" data-bs-target="#editTransactionModal"
-                                                    data-transaction-id="{{ transaction.id }}"
-                                                    data-date="{{ transaction.date.strftime('%Y-%m-%d') if transaction.date else '' }}"
-                                                    data-amount-paid="{{ transaction.get_safe_amount_paid() }}"
-                                                    data-amount-repaid="{{ transaction.get_safe_amount_repaid() }}"
-                                                    data-period-from="{{ transaction.period_from.strftime('%Y-%m-%d') if transaction.period_from else '' }}"
-                                                    data-period-to="{{ transaction.period_to.strftime('%Y-%m-%d') if transaction.period_to else '' }}"
-                                                    title="Edit Transaction">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button class="btn btn-outline-danger delete-transaction-btn"
-                                                    onclick="confirmDeleteTransaction({{ transaction.id }}, '{{ transaction.date.strftime('%d-%m-%Y') }}')" title="Delete Transaction">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                    <tr {% if transaction.transaction_type == 'loan_closure' %}class="table-success"{% endif %}>
+                                        <td>
+                                            {{ transaction.date.strftime('%d-%m-%Y') if transaction.date else '-' }}
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                <span class="badge bg-success ms-2">LOAN CLOSED</span>
                                             {% endif %}
-                                        </div>
-                                    </td>
-                                </tr>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{% if transaction.transaction_type == 'deposit' %}success{% elif transaction.transaction_type == 'repayment' %}warning{% elif transaction.transaction_type == 'loan_closure' %}danger{% else %}secondary{% endif %}">
+                                                {{ transaction.get_transaction_type_display() }}
+                                            </span>
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.amount_paid %}
+                                                <span class="text-success">{{ transaction.amount_paid | safe_currency }}</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.amount_repaid %}
+                                                <span class="text-danger">{{ transaction.amount_repaid | safe_currency }}</span>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                {{ "0.00" | safe_currency }}
+                                            {% else %}
+                                                {{ transaction.balance | safe_currency }}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.no_of_days if transaction.no_of_days else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.int_rate | safe_percentage if transaction.int_rate else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.int_amount | safe_currency if transaction.int_amount else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.tds_amount | safe_currency if transaction.tds_amount else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                -
+                                            {% else %}
+                                                {{ transaction.net_amount | safe_currency if transaction.net_amount else '-' }}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if current_user.role in ['admin', 'data_entry'] and transaction.transaction_type != 'loan_closure' %}
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button class="btn btn-outline-primary edit-transaction-btn" 
+                                                            data-transaction-id="{{ transaction.id }}"
+                                                            data-date="{{ transaction.date.strftime('%Y-%m-%d') if transaction.date }}"
+                                                            data-amount-paid="{{ transaction.amount_paid if transaction.amount_paid else '' }}"
+                                                            data-amount-repaid="{{ transaction.amount_repaid if transaction.amount_repaid else '' }}"
+                                                            data-period-from="{{ transaction.period_from.strftime('%Y-%m-%d') if transaction.period_from }}"
+                                                            data-period-to="{{ transaction.period_to.strftime('%Y-%m-%d') if transaction.period_to }}"
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#editTransactionModal"
+                                                            title="Edit Transaction">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    {% if current_user.role == 'admin' %}
+                                                    <button class="btn btn-outline-danger" 
+                                                            onclick="confirmDeleteTransaction({{ transaction.id }}, '{{ transaction.date.strftime('%d-%m-%Y') if transaction.date }}')"
+                                                            title="Delete Transaction">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                    {% endif %}
+                                                </div>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
