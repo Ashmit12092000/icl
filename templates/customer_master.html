@@ -131,10 +131,13 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if customer.is_active %}
-                                                <span class="badge bg-success">Active</span>
+                                            {% if customer.loan_closed %}
+                                                <span class="badge bg-danger">Closed</span>
+                                                {% if customer.loan_closed_date %}
+                                                    <small class="text-muted">({{ customer.loan_closed_date.strftime('%d-%m-%Y') }})</small>
+                                                {% endif %}
                                             {% else %}
-                                                <span class="badge bg-danger">Inactive</span>
+                                                <span class="badge bg-success">Active</span>
                                             {% endif %}
                                         </td>
                                         <td>
