@@ -764,194 +764,9 @@ def transactions(customer_id):
                 transaction_date == customer.icl_end_date and 
                 amount_repaid > Decimal('0')):
                 
-                # For both simple and compound interest customers, ensure final period interest is calculated
-                # before creating the loan closure transaction
-                if customer.interest_type in ['compound', 'simple']:
-                    # Determine the appropriate frequency for final period calculation
-                    if customer.interest_type == 'compound' and customer.compound_frequency:
-                        frequency_to_use = customer.compound_frequency
-                    else:
-                        frequency_to_use = 'quarterly'  # Default to quarterly for simple interest
-                    
-                    # Check if there's already a transaction for the final period
-                    final_period_start = _get_period_start_date(customer.icl_end_date, customer.icl_start_date, frequency_to_use)
-                    
-                    # Look for existing transactions that cover this final period
-                    # Check both exact match and overlapping periods
-                    existing_final_period_txn = Transaction.query.filter(
-                        Transaction.customer_id == customer_id,
-                        Transaction.period_from == final_period_start,
-                        Transaction.period_to == customer.icl_end_date,
-                        Transaction.date < transaction_date,
-                        Transaction.transaction_type == 'passive'  # Only look for passive period transactions
-                    ).first()
-                    
-                    # Also check if there's any transaction that overlaps with this period
-                    overlapping_txn = Transaction.query.filter(
-                        Transaction.customer_id == customer_id,
-                        Transaction.period_from <= customer.icl_end_date,
-                        Transaction.period_to >= final_period_start,
-                        Transaction.date < transaction_date,
-                        Transaction.transaction_type == 'passive'
-                    ).first()
-                    
-                    # If no passive transaction exists for the final period, create one
-                    if not existing_final_period_txn and not overlapping_txn and final_period_start < customer.icl_end_date:
-                        # Calculate balance before the final period
-                        final_period_txns = Transaction.query.filter(
-                            Transaction.customer_id == customer_id,
-                            Transaction.date < final_period_start
-                        ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
-                        
-                        balance_before_final_period = Decimal('0')
-                        for txn in final_period_txns:
-                            balance_before_final_period += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
-                            # For compound interest, add net interest at period ends
-                            if (customer.interest_type == 'compound' and 
-                                txn.period_to and 
-                                _is_period_end(txn.period_to, customer.icl_start_date, frequency_to_use) and 
-                                txn.get_safe_net_amount()):
-                                balance_before_final_period += txn.get_safe_net_amount()
-                        
-                        # Calculate accumulated net interest from previous periods
-                        accumulated_net_interest = Decimal('0')
-                        repayment_adjustment = Decimal('0')
-                        previous_period_transactions = Transaction.query.filter(
-                            Transaction.customer_id == customer_id,
-                            Transaction.date < final_period_start
-                        ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                        
-                        for prev_txn in previous_period_transactions:
-                            accumulated_net_interest += prev_txn.get_safe_net_amount()
-                            if customer.interest_type == 'compound' and prev_txn.transaction_type == 'repayment':
-                                repayment_adjustment += prev_txn.get_safe_net_amount()
-                        
-                        # For simple interest, only use principal movements for final period calculation
-                        if customer.interest_type == 'simple':
-                            principal_for_final_period = balance_before_final_period
-                        else:
-                            # For compound interest, include accumulated interest and adjustments
-                            principal_for_final_period = balance_before_final_period + accumulated_net_interest - repayment_adjustment
-                        
-                        # Calculate days for final period (from period start to ICL end date)
-                        final_period_days = (customer.icl_end_date - final_period_start).days + 1
-                        
-                        if final_period_days > 0 and principal_for_final_period > Decimal('0'):
-                            # Double-check that no passive transaction exists for this final period
-                            existing_final_period_txn_check = Transaction.query.filter(
-                                Transaction.customer_id == customer_id,
-                                Transaction.period_from == final_period_start,
-                                Transaction.period_to == customer.icl_end_date,
-                                Transaction.transaction_type == 'passive'
-                            ).first()
-                            
-                            if not existing_final_period_txn_check:
-                                # Calculate interest for final period
-                                final_period_int_amount = calculate_interest(principal_for_final_period, customer.annual_rate, final_period_days)
-                                
-                                # Calculate TDS for final period
-                                final_period_tds_amount = Decimal('0')
-                                if customer.tds_applicable and final_period_int_amount:
-                                    tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
-                                    final_period_tds_amount = final_period_int_amount * (tds_rate_to_use / Decimal('100'))
-                                
-                                final_period_net_amount = final_period_int_amount - final_period_tds_amount
-                                
-                                # Calculate balance for final period (before repayment)
-                                if customer.interest_type == 'simple':
-                                    # For simple interest, don't add interest to balance
-                                    final_period_balance = balance_before_final_period
-                                else:
-                                    # For compound interest, add net interest to balance
-                                    final_period_balance = balance_before_final_period + final_period_net_amount
-                                
-                                # Create final period transaction (before the repayment)
-                                final_period_date = final_period_start + timedelta(days=final_period_days // 2)
-                                
-                                final_period_transaction = Transaction(
-                                    customer_id=customer_id,
-                                    date=final_period_date,
-                                    amount_paid=None,
-                                    amount_repaid=None,
-                                    balance=final_period_balance,
-                                    period_from=final_period_start,
-                                    period_to=customer.icl_end_date,
-                                    no_of_days=final_period_days,
-                                    int_rate=customer.annual_rate,
-                                    int_amount=final_period_int_amount,
-                                    tds_amount=final_period_tds_amount,
-                                    net_amount=final_period_net_amount,
-                                    transaction_type='passive',
-                                    created_by=current_user.id
-                                )
-                                
-                                db.session.add(final_period_transaction)
-                                db.session.flush()  # Ensure the transaction is available
-                                
-                                logging.debug(f"Created final period transaction for {customer.interest_type} interest customer: {final_period_start} to {customer.icl_end_date}, interest: {final_period_int_amount}")
-                            else:
-                                logging.debug(f"Final period passive transaction already exists for period {final_period_start} to {customer.icl_end_date}, skipping creation")
-                        else:
-                            logging.debug(f"Final period conditions not met: days={final_period_days}, principal={principal_for_final_period}")
-                    else:
-                        logging.debug(f"Final period already covered by existing transactions: existing={existing_final_period_txn is not None}, overlapping={overlapping_txn is not None}")
-                
-                            # NOW RECALCULATE THE CURRENT BALANCE INCLUDING THE FINAL QUARTER TRANSACTION
-                # This is crucial for the repayment transaction's interest calculation
-                previous_txns = Transaction.query.filter(
-                    Transaction.customer_id == customer_id,
-                    Transaction.date < transaction_date
-                ).all()
-                
-                same_day_txns = Transaction.query.filter(
-                    Transaction.customer_id == customer_id,
-                    Transaction.date == transaction_date
-                ).order_by(Transaction.id.asc()).all()
-                
-                net_outstanding_balance = Decimal('0')
-                for txn in previous_txns + same_day_txns:
-                    net_outstanding_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
-                    # For compound interest, add accumulated interest at quarter ends
-                    if (customer.interest_type == 'compound' and 
-                        customer.first_compounding_date and 
-                        txn.date >= customer.first_compounding_date and 
-                        txn.period_to and 
-                        _is_quarter_end(txn.period_to, customer.icl_start_date) and 
-                        txn.get_safe_net_amount()):
-                        net_outstanding_balance += txn.get_safe_net_amount()
-                
-                current_balance_before_this_txn = net_outstanding_balance
-                            
-                            # Apply repayment adjustment for compound interest customers only (excluding ICL end date period)
-                if customer.interest_type == 'compound':
-                    repayment_periods = set()
-                    frequency_for_adjustment = customer.compound_frequency if customer.compound_frequency else 'quarterly'
-                    icl_end_period_start = _get_period_start_date(customer.icl_end_date, customer.icl_start_date, frequency_for_adjustment)
-                    
-                    for t in previous_txns + same_day_txns:
-                        if t.transaction_type == 'repayment' and t.period_to:
-                            period_start = _get_period_start_date(t.date, customer.icl_start_date, frequency_for_adjustment)
-                            if period_start != icl_end_period_start:
-                                repayment_periods.add(period_start)
-                    
-                    # Subtract net amounts from repayment transactions in repayment periods
-                    total_repayment_net_amount = Decimal('0')
-                    for t in previous_txns + same_day_txns:
-                        if t.transaction_type == 'repayment':
-                            txn_period_start = _get_period_start_date(t.date, customer.icl_start_date, frequency_for_adjustment)
-                            if txn_period_start in repayment_periods:
-                                total_repayment_net_amount += t.get_safe_net_amount()
-                    
-                    if total_repayment_net_amount > Decimal('0'):
-                        current_balance_before_this_txn -= total_repayment_net_amount
-                
-                # Update the balance for interest calculation - this is the correct balance before repayment
-                new_balance = current_balance_before_this_txn - amount_repaid
-                            
-                            # CRITICAL FIX: For ICL end date repayments, recalculate interest using correct principal
-                # The interest should be calculated on the principal BEFORE repayment, not after
-                if amount_repaid > Decimal('0'):
-                    # Recalculate interest for the final period using principal before repayment
+                # For ICL end date repayments, ensure the repayment transaction includes proper period and interest calculation
+                if period_from and period_to and no_of_days and no_of_days > 0:
+                    # Calculate the final interest on the period including the final period before repayment
                     principal_for_final_interest = current_balance_before_this_txn
                     
                     # Handle accumulated interest calculation based on interest type
@@ -977,25 +792,24 @@ def transactions(customer_id):
                         # For simple interest, only use the current balance before repayment
                         principal_for_final_interest = current_balance_before_this_txn
                     
-                    # Recalculate interest and TDS for the current transaction using correct principal
-                    if period_from and period_to and no_of_days and no_of_days > 0:
-                        int_amount = calculate_interest(principal_for_final_interest, customer.annual_rate, no_of_days)
-                        
-                        # Recalculate TDS
-                        if customer.tds_applicable and int_amount:
-                            tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
-                            tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
-                            net_amount = int_amount - tds_amount
-                        else:
-                            tds_amount = Decimal('0')
-                            net_amount = int_amount
-                        
-                        # Update the transaction with recalculated values
-                        transaction.int_amount = int_amount
-                        transaction.tds_amount = tds_amount
-                        transaction.net_amount = net_amount
-                        
-                        logging.debug(f"ICL end date repayment: Recalculated interest {int_amount}, TDS {tds_amount}, net {net_amount} using principal {principal_for_final_interest}")
+                    # Calculate interest and TDS for the final period
+                    int_amount = calculate_interest(principal_for_final_interest, customer.annual_rate, no_of_days)
+                    
+                    # Calculate TDS
+                    if customer.tds_applicable and int_amount:
+                        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                        tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
+                        net_amount = int_amount - tds_amount
+                    else:
+                        tds_amount = Decimal('0')
+                        net_amount = int_amount
+                    
+                    # Update the transaction with calculated values
+                    transaction.int_amount = int_amount
+                    transaction.tds_amount = tds_amount
+                    transaction.net_amount = net_amount
+                    
+                    logging.debug(f"ICL end date repayment: Calculated interest {int_amount}, TDS {tds_amount}, net {net_amount} using principal {principal_for_final_interest}")
                 
                 # Set the final balance after repayment to zero (loan closure)
                 transaction.balance = Decimal('0')
