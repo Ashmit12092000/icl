@@ -225,14 +225,23 @@
                                             </span>
                                         </td>
                                         <td class="text-end">
-                                            {% if transaction.amount_paid %}
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                <span class="text-muted">-</span>
+                                            {% elif transaction.amount_paid %}
                                                 <span class="text-success">{{ transaction.amount_paid | safe_currency }}</span>
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
                                         <td class="text-end">
-                                            {% if transaction.amount_repaid %}
+                                            {% if transaction.transaction_type == 'loan_closure' %}
+                                                {% set repayment_txn = transactions | selectattr('date', 'equalto', transaction.date) | selectattr('transaction_type', 'equalto', 'repayment') | first %}
+                                                {% if repayment_txn and repayment_txn.amount_repaid %}
+                                                    <span class="text-danger">{{ repayment_txn.amount_repaid | safe_currency }}</span>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            {% elif transaction.amount_repaid %}
                                                 <span class="text-danger">{{ transaction.amount_repaid | safe_currency }}</span>
                                             {% else %}
                                                 <span class="text-muted">-</span>
