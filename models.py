@@ -62,6 +62,11 @@ class Customer(db.Model):
         for t in self.transactions:
             logging.debug(f"Processing transaction {t.id} for customer {self.id}")
 
+            # Skip loan closure transactions from balance calculation as they represent final state
+            if t.transaction_type == 'loan_closure':
+                logging.debug(f"  Skipping loan closure transaction {t.id}")
+                continue
+
             safe_paid = t.get_safe_amount_paid()
             logging.debug(f"  get_safe_amount_paid() returned: {safe_paid} (type: {type(safe_paid)})")
             total_principal_paid += safe_paid
@@ -82,34 +87,53 @@ class Customer(db.Model):
         calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
 
         # For compound interest customers only, subtract net amounts from repayment transactions after repayment quarters
+        # BUT exclude ICL end date quarter from adjustment
         total_repayment_net_amount = Decimal('0')
         if self.interest_type == 'compound':
-            # Find quarters that contain repayment transactions
-            repayment_quarters = set()
+            # Find periods that contain repayment transactions (based on customer's frequency)
+            frequency_to_use = self.compound_frequency if self.compound_frequency else 'quarterly'
+            repayment_periods = set()
+            icl_end_period_start = None
+            
+            # Identify ICL end date period if ICL end date exists
+            if self.icl_end_date and self.icl_start_date:
+                try:
+                    from routes import _get_period_start_date
+                    icl_end_period_start = _get_period_start_date(self.icl_end_date, self.icl_start_date, frequency_to_use)
+                    logging.debug(f"  ICL end date period starts: {icl_end_period_start}")
+                except ImportError:
+                    icl_end_period_start = None
+            
             for t in self.transactions:
                 if t.transaction_type == 'repayment' and t.period_to:
-                    # Get the quarter start for this repayment transaction
-                    quarter_start = None
+                    # Get the period start for this repayment transaction
+                    period_start = None
                     if self.icl_start_date:
                         try:
-                            from routes import _get_quarter_start_date
-                            quarter_start = _get_quarter_start_date(t.date, self.icl_start_date)
-                            repayment_quarters.add(quarter_start)
+                            from routes import _get_period_start_date
+                            period_start = _get_period_start_date(t.date, self.icl_start_date, frequency_to_use)
+                            
+                            # Only add to repayment periods if it's NOT the ICL end date period
+                            if icl_end_period_start is None or period_start != icl_end_period_start:
+                                repayment_periods.add(period_start)
+                                logging.debug(f"  Added repayment period: {period_start} (not ICL end period)")
+                            else:
+                                logging.debug(f"  Skipping repayment adjustment for ICL end date period: {period_start}")
                         except ImportError:
                             pass
 
-            # Only apply adjustment for transactions after repayment quarters
+            # Only apply adjustment for transactions after repayment periods (excluding ICL end period)
             for t in self.transactions:
                 if t.transaction_type == 'repayment':
-                    # Check if this transaction's quarter has been identified as a repayment quarter
+                    # Check if this transaction's period has been identified as a repayment period
                     if self.icl_start_date:
                         try:
-                            from routes import _get_quarter_start_date
-                            txn_quarter_start = _get_quarter_start_date(t.date, self.icl_start_date)
-                            if txn_quarter_start in repayment_quarters:
+                            from routes import _get_period_start_date
+                            txn_period_start = _get_period_start_date(t.date, self.icl_start_date, frequency_to_use)
+                            if txn_period_start in repayment_periods:
                                 repayment_net_amount = t.get_safe_net_amount()
                                 total_repayment_net_amount += repayment_net_amount
-                                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount} in repayment quarter")
+                                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount} in repayment {frequency_to_use} period")
                         except ImportError:
                             pass
 
@@ -244,7 +268,8 @@ class Transaction(db.Model):
         type_mapping = {
             'deposit': 'Deposit',
             'repayment': 'Repayment', 
-            'passive': 'Passive Period'
+            'passive': 'Passive Period',
+            'loan_closure': 'Loan Closed'
         }
         return type_mapping.get(self.transaction_type, 'Unknown')
 
