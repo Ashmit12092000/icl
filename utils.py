@@ -113,35 +113,145 @@ def export_to_excel(customer, transactions):
         cell.border = border
         cell.alignment = center_alignment
     
+    # Process transactions and consolidate ICL end date repayments
+    processed_transactions = []
+    i = 0
+    
+    while i < len(transactions):
+        transaction = transactions[i]
+        
+        # Check if this is an ICL end date scenario with multiple transactions
+        is_icl_end_date = (
+            customer.icl_end_date and 
+            transaction.date == customer.icl_end_date
+        )
+        
+        if is_icl_end_date:
+            # Collect all transactions on the ICL end date
+            icl_end_transactions = [transaction]
+            j = i + 1
+            
+            while j < len(transactions) and transactions[j].date == customer.icl_end_date:
+                icl_end_transactions.append(transactions[j])
+                j += 1
+            
+            # Separate different types of transactions
+            period_txn = None
+            repayment_txn = None
+            loan_closure_txn = None
+            
+            for txn in icl_end_transactions:
+                if txn.transaction_type == 'repayment' and txn.amount_repaid and txn.amount_repaid > Decimal('0'):
+                    repayment_txn = txn
+                elif txn.transaction_type == 'loan_closure':
+                    loan_closure_txn = txn
+                elif txn.period_from and txn.period_to and txn.int_amount:
+                    # This is the period interest calculation transaction
+                    period_txn = txn
+            
+            # For ICL end date, create a single consolidated entry that shows:
+            # 1. The period with interest calculation
+            # 2. The repayment amount in the same row
+            if repayment_txn and repayment_txn.period_from and repayment_txn.period_to:
+                # Create single consolidated entry showing both period interest and repayment
+                consolidated_data = {
+                    'date': repayment_txn.period_from,  # Show period start date
+                    'period_from': repayment_txn.period_from,
+                    'period_to': repayment_txn.period_to,
+                    'no_of_days': repayment_txn.no_of_days,
+                    'int_rate': repayment_txn.int_rate,
+                    'int_amount': repayment_txn.int_amount,
+                    'tds_amount': repayment_txn.tds_amount,
+                    'net_amount': repayment_txn.net_amount,
+                    'amount_paid': repayment_txn.amount_paid,
+                    'amount_repaid': None,  # Don't show repayment in period row
+                    'balance': repayment_txn.balance
+                }
+                processed_transactions.append(consolidated_data)
+                
+                # Create separate repayment row (simple repayment entry)
+                repayment_data = {
+                    'date': repayment_txn.date,
+                    'period_from': None,
+                    'period_to': None,
+                    'no_of_days': None,
+                    'int_rate': None,
+                    'int_amount': None,
+                    'tds_amount': None,
+                    'net_amount': None,
+                    'amount_paid': None,
+                    'amount_repaid': repayment_txn.amount_repaid,
+                    'balance': Decimal('0')  # Always zero after full repayment
+                }
+                processed_transactions.append(repayment_data)
+            else:
+                # Fallback: add each transaction individually if consolidation fails
+                for txn in icl_end_transactions:
+                    if txn.transaction_type != 'loan_closure':  # Skip loan closure entries
+                        transaction_data = {
+                            'date': txn.date,
+                            'period_from': txn.period_from,
+                            'period_to': txn.period_to,
+                            'no_of_days': txn.no_of_days,
+                            'int_rate': txn.int_rate,
+                            'int_amount': txn.int_amount,
+                            'tds_amount': txn.tds_amount,
+                            'net_amount': txn.net_amount,
+                            'amount_paid': txn.amount_paid,
+                            'amount_repaid': txn.amount_repaid,
+                            'balance': txn.balance
+                        }
+                        processed_transactions.append(transaction_data)
+            
+            # Skip all processed transactions
+            i = j
+        else:
+            # Regular transaction - add as is
+            transaction_data = {
+                'date': transaction.date,
+                'period_from': transaction.period_from,
+                'period_to': transaction.period_to,
+                'no_of_days': transaction.no_of_days,
+                'int_rate': transaction.int_rate,
+                'int_amount': transaction.int_amount,
+                'tds_amount': transaction.tds_amount,
+                'net_amount': transaction.net_amount,
+                'amount_paid': transaction.amount_paid,
+                'amount_repaid': transaction.amount_repaid,
+                'balance': transaction.balance
+            }
+            processed_transactions.append(transaction_data)
+            i += 1
+    
     # Transaction data
     total_days = Decimal('0')
     total_interest = Decimal('0')
     total_tds = Decimal('0')
     total_net_amount = Decimal('0')
     
-    for row, transaction in enumerate(transactions, start=start_row + 1):
+    for row, txn_data in enumerate(processed_transactions, start=start_row + 1):
         # Accumulate totals
-        if transaction.no_of_days:
-            total_days += Decimal(str(transaction.no_of_days))
-        if transaction.int_amount:
-            total_interest += transaction.int_amount
-        if transaction.tds_amount:
-            total_tds += transaction.tds_amount
-        if transaction.net_amount:
-            total_net_amount += transaction.net_amount
+        if txn_data['no_of_days']:
+            total_days += Decimal(str(txn_data['no_of_days']))
+        if txn_data['int_amount']:
+            total_interest += txn_data['int_amount']
+        if txn_data['tds_amount']:
+            total_tds += txn_data['tds_amount']
+        if txn_data['net_amount']:
+            total_net_amount += txn_data['net_amount']
         
         data = [
-            transaction.date.strftime('%d-%m-%Y') if transaction.date else "",
-            str(transaction.amount_paid) if transaction.amount_paid else "",
-            str(transaction.amount_repaid) if transaction.amount_repaid else "",
-            str(transaction.balance) if transaction.balance else "",
-            transaction.period_from.strftime('%d-%m-%Y') if transaction.period_from else "",
-            transaction.period_to.strftime('%d-%m-%Y') if transaction.period_to else "",
-            str(transaction.no_of_days) if transaction.no_of_days else "",
-            f"{transaction.int_rate}%" if transaction.int_rate else "",
-            str(transaction.int_amount) if transaction.int_amount else "",
-            str(transaction.tds_amount) if transaction.tds_amount else "",
-            str(transaction.net_amount) if transaction.net_amount else ""
+            txn_data['date'].strftime('%d-%m-%Y') if txn_data['date'] else "",
+            str(txn_data['amount_paid']) if txn_data['amount_paid'] else "",
+            str(txn_data['amount_repaid']) if txn_data['amount_repaid'] else "",
+            str(txn_data['balance']) if txn_data['balance'] is not None else "",
+            txn_data['period_from'].strftime('%d-%m-%Y') if txn_data['period_from'] else "",
+            txn_data['period_to'].strftime('%d-%m-%Y') if txn_data['period_to'] else "",
+            str(txn_data['no_of_days']) if txn_data['no_of_days'] else "",
+            f"{txn_data['int_rate']}%" if txn_data['int_rate'] else "",
+            str(txn_data['int_amount']) if txn_data['int_amount'] else "",
+            str(txn_data['tds_amount']) if txn_data['tds_amount'] else "",
+            str(txn_data['net_amount']) if txn_data['net_amount'] else ""
         ]
         
         for col, value in enumerate(data, start=1):
@@ -150,9 +260,9 @@ def export_to_excel(customer, transactions):
             if col > 1:  # Align numbers to right
                 cell.alignment = Alignment(horizontal='right')
     
-    # Add totals row if there are transactions
-    if transactions:
-        totals_row = len(transactions) + start_row + 2  # Add space between data and totals
+    # Add totals row if there are processed transactions
+    if processed_transactions:
+        totals_row = len(processed_transactions) + start_row + 2  # Add space between data and totals
         
         # Add "TOTAL" label
         total_label_cell = worksheet.cell(row=totals_row, column=6, value="TOTAL:")
