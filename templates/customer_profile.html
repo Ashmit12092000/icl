@@ -20,8 +20,12 @@
                         <i class="fas fa-edit me-2"></i>Edit Customer
                     </a>
                     {% endif %}
-                    <a href="{{ url_for('export_customer_report', customer_id=customer.id) }}" class="btn btn-info">
-                        <i class="fas fa-download me-2"></i>Export Report
+                    <a href="{{ url_for('export_customer_report', customer_id=customer.id) }}" class="btn btn-info me-2">
+                        <i class="fas fa-download me-2"></i>Export Excel
+                    </a>
+                    
+                    <a href="{{ url_for('print_customer_profile', customer_id=customer.id) }}" class="btn btn-success" target="_blank">
+                        <i class="fas fa-print me-2"></i>Print Report
                     </a>
                 </div>
             </div>
@@ -107,6 +111,18 @@
                         <dt class="col-sm-4">First Compounding:</dt>
                         <dd class="col-sm-8">{{ customer.first_compounding_date.strftime('%d-%m-%Y') }}</dd>
                         {% endif %}
+
+                        <dt class="col-sm-4">Loan Status:</dt>
+                        <dd class="col-sm-8">
+                            {% if customer.loan_closed %}
+                                <span class="badge bg-danger">Closed</span>
+                                {% if customer.loan_closed_date %}
+                                    <small class="text-muted">({{ customer.loan_closed_date.strftime('%d-%m-%Y') }})</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-success">Active</span>
+                            {% endif %}
+                        </dd>
 
                         <dt class="col-sm-4">Created:</dt>
                         <dd class="col-sm-8">{{ customer.created_at.strftime('%d-%m-%Y') if customer.created_at else 'Unknown' }}</dd>
@@ -422,7 +438,171 @@
             </div>
         </div>
     </div>
-    {% if current_user.role in ['admin', 'data_entry'] %}
+
+    <!-- Detailed Transaction History -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-history me-2"></i>Transaction History</h5>
+                    <small class="text-muted">{{ transactions|length }} transactions</small>
+                </div>
+                <div class="card-body">
+                    {% if transactions %}
+                    <div class="table-responsive">
+                        <table id="transactionHistoryTable" class="table table-striped table-hover table-sm">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Amount Paid</th>
+                                    <th class="text-end">Amount Repaid</th>
+                                    <th>Period From</th>
+                                    <th>Period To</th>
+                                    <th class="text-end">Days</th>
+                                    <th class="text-end">Interest Rate</th>
+                                    <th class="text-end">Interest Amount</th>
+                                    <th class="text-end">TDS Amount</th>
+                                    <th class="text-end">Net Amount</th>
+                                    <th class="text-end">Balance</th>
+                                    {% if current_user.role == 'admin' %}
+                                    <th>Actions</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transactions %}
+                                <tr {% if transaction.transaction_type == 'loan_closure' %}class="table-danger"{% elif transaction.transaction_type == 'repayment' %}class="table-warning"{% elif transaction.transaction_type == 'deposit' %}class="table-success"{% endif %}>
+                                    <td>{{ loop.index }}</td>
+                                    <td>
+                                        <span class="fw-bold">{{ transaction.date.strftime('%d-%m-%Y') }}</span>
+                                        <br><small class="text-muted">{{ transaction.created_at.strftime('%H:%M') if transaction.created_at else '' }}</small>
+                                    </td>
+                                    <td>
+                                        {% if transaction.transaction_type == 'deposit' %}
+                                            <span class="badge bg-success">Deposit</span>
+                                        {% elif transaction.transaction_type == 'repayment' %}
+                                            <span class="badge bg-warning text-dark">Repayment</span>
+                                        {% elif transaction.transaction_type == 'passive' %}
+                                            <span class="badge bg-info">Interest Period</span>
+                                        {% elif transaction.transaction_type == 'loan_closure' %}
+                                            <span class="badge bg-danger">Loan Closed</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ transaction.transaction_type.title() }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.amount_paid %}
+                                            <span class="text-success fw-bold">{{ transaction.amount_paid | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.amount_repaid %}
+                                            <span class="text-danger fw-bold">{{ transaction.amount_repaid | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if transaction.period_from %}
+                                            {{ transaction.period_from.strftime('%d-%m-%Y') }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if transaction.period_to %}
+                                            {{ transaction.period_to.strftime('%d-%m-%Y') }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.no_of_days %}
+                                            {{ transaction.no_of_days }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.int_rate %}
+                                            {{ transaction.int_rate | safe_percentage }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.int_amount %}
+                                            {{ transaction.int_amount | safe_currency }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.tds_amount %}
+                                            <span class="text-warning">{{ transaction.tds_amount | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.net_amount %}
+                                            <span class="text-primary fw-bold">{{ transaction.net_amount | safe_currency }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if transaction.balance is not none %}
+                                            <span class="fw-bold {% if transaction.balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                                {{ transaction.balance | safe_currency }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    {% if current_user.role == 'admin' %}
+                                    <td>
+                                        {% if transaction.transaction_type != 'loan_closure' %}
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="editTransaction({{ transaction.id }})" title="Edit Transaction">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="deleteTransaction({{ transaction.id }})" title="Delete Transaction">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No transactions found</h5>
+                        <p class="text-muted">Add transactions to see transaction history.</p>
+                        {% if current_user.role in ['admin', 'data_entry'] %}
+                        <a href="{{ url_for('transactions', customer_id=customer.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Add First Transaction
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if current_user.role in ['admin', 'data_entry'] and not customer.loan_closed %}
     <!-- Close Loan Button -->
     <div class="row mt-4">
         <div class="col-12">
@@ -776,6 +956,43 @@ $(document).ready(function() {
         }
     });
 
+    // Initialize DataTable for transaction history
+    if ($('#transactionHistoryTable').length) {
+        $('#transactionHistoryTable').DataTable({
+            "order": [[1, "desc"]], // Sort by date descending
+            "pageLength": 25,
+            "responsive": true,
+            "columnDefs": [
+                {
+                    "targets": [3, 4, 7, 8, 9, 10, 11, 12], // Amount columns
+                    "className": "text-end"
+                },
+                {
+                    "targets": [2], // Type column
+                    "orderable": false
+                },
+                {% if current_user.role == 'admin' %}
+                {
+                    "targets": [13], // Actions column
+                    "orderable": false,
+                    "searchable": false
+                }
+                {% endif %}
+            ],
+            "language": {
+                "search": "Search transactions:",
+                "lengthMenu": "Show _MENU_ transactions per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ transactions",
+                "paginate": {
+                    "first": "First",
+                    "last": "Last",
+                    "next": "Next",
+                    "previous": "Previous"
+                }
+            }
+        });
+    }
+
     // Animate metric cards on load
     $('.card').each(function(index) {
         $(this).css({
@@ -838,6 +1055,40 @@ $(document).ready(function() {
             }
         });
     });
+
+    // Transaction management functions
+    window.editTransaction = function(transactionId) {
+        if (confirm('Are you sure you want to edit this transaction? This will recalculate all subsequent transactions.')) {
+            // Create a form to edit the transaction
+            const form = document.createElement('form');
+            form.method = 'GET';
+            form.action = `/transactions/{{ customer.id }}?edit=${transactionId}`;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    };
+
+    window.deleteTransaction = function(transactionId) {
+        if (confirm('Are you sure you want to delete this transaction? This action cannot be undone and will recalculate all subsequent transactions.')) {
+            // Create a form to delete the transaction
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/delete_transaction/${transactionId}`;
+
+            // Add CSRF token if needed
+            const csrfToken = document.querySelector('meta[name=csrf-token]');
+            if (csrfToken) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrf_token';
+                csrfInput.value = csrfToken.getAttribute('content');
+                form.appendChild(csrfInput);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    };
 });
 </script>
 
