@@ -236,10 +236,19 @@ $(document).ready(function() {
                 $('#dashboardCustomersTable').DataTable().clear().destroy(true);
             }
             
-            // Clean up any cell indexes
-            $('#dashboardCustomersTable').find('td, th').each(function() {
+            // Clean up any cell indexes and DataTable remnants
+            const $table = $('#dashboardCustomersTable');
+            $table.find('td, th').each(function() {
                 delete this._DT_CellIndex;
+                $(this).removeAttr('tabindex style');
             });
+            
+            // Remove any existing DataTable wrapper
+            const $wrapper = $table.closest('.dataTables_wrapper');
+            if ($wrapper.length) {
+                const $originalTable = $table.clone();
+                $wrapper.replaceWith($originalTable);
+            }
             
             // Simple configuration to avoid errors
             $('#dashboardCustomersTable').DataTable({
