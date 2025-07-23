@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,7 +10,7 @@
             .no-print { display: none !important; }
             .page-break { page-break-before: always; }
         }
-        
+
         body {
             font-family: Arial, sans-serif;
             font-size: 12px;
@@ -19,30 +18,30 @@
             margin: 20px;
             color: #333;
         }
-        
+
         .header {
             text-align: center;
             border-bottom: 2px solid #333;
             padding-bottom: 10px;
             margin-bottom: 20px;
         }
-        
+
         .header h1 {
             margin: 0;
             font-size: 24px;
             color: #2c3e50;
         }
-        
+
         .header p {
             margin: 5px 0;
             font-size: 14px;
             color: #666;
         }
-        
+
         .info-section {
             margin-bottom: 20px;
         }
-        
+
         .section-title {
             background-color: #f8f9fa;
             padding: 8px 12px;
@@ -51,29 +50,29 @@
             font-size: 14px;
             margin-bottom: 10px;
         }
-        
+
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-bottom: 15px;
         }
-        
+
         .info-item {
             display: flex;
             margin-bottom: 5px;
         }
-        
+
         .info-label {
             font-weight: bold;
             min-width: 120px;
             color: #555;
         }
-        
+
         .info-value {
             flex: 1;
         }
-        
+
         .balance-card {
             background-color: #e3f2fd;
             border: 2px solid #2196f3;
@@ -82,66 +81,66 @@
             margin: 20px 0;
             border-radius: 5px;
         }
-        
+
         .balance-amount {
             font-size: 24px;
             font-weight: bold;
             color: #1976d2;
         }
-        
+
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 15px;
             margin: 20px 0;
         }
-        
+
         .metric-card {
             text-align: center;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
         }
-        
+
         .metric-value {
             font-size: 18px;
             font-weight: bold;
             color: #2c3e50;
         }
-        
+
         .metric-label {
             font-size: 11px;
             color: #666;
             margin-top: 5px;
         }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
             font-size: 10px;
         }
-        
+
         th, td {
             border: 1px solid #ddd;
             padding: 6px;
             text-align: left;
         }
-        
+
         th {
             background-color: #f8f9fa;
             font-weight: bold;
             text-align: center;
         }
-        
+
         .text-right {
             text-align: right;
         }
-        
+
         .text-center {
             text-align: center;
         }
-        
+
         .badge {
             display: inline-block;
             padding: 2px 6px;
@@ -150,13 +149,13 @@
             border-radius: 3px;
             color: white;
         }
-        
+
         .badge-success { background-color: #28a745; }
         .badge-warning { background-color: #ffc107; color: #000; }
         .badge-danger { background-color: #dc3545; }
         .badge-info { background-color: #17a2b8; }
         .badge-secondary { background-color: #6c757d; }
-        
+
         .print-button {
             position: fixed;
             top: 20px;
@@ -169,11 +168,11 @@
             cursor: pointer;
             font-size: 14px;
         }
-        
+
         .print-button:hover {
             background-color: #0056b3;
         }
-        
+
         .footer {
             margin-top: 30px;
             text-align: center;
@@ -186,7 +185,7 @@
 </head>
 <body>
     <button class="print-button no-print" onclick="window.print()">🖨️ Print</button>
-    
+
     <!-- Header -->
     <div class="header">
         <h1>Customer Profile Report</h1>
@@ -312,8 +311,14 @@
             </thead>
             <tbody>
                 {% for period in quarterly_summary[-8:] %}
-                <tr>
-                    <td class="text-center">{{ period.period_name }}</td>
+                <tr {% if period.is_fy_summary %}style="background-color: #fff3cd; font-weight: bold;"{% endif %}>
+                    <td class="text-center">
+                        {% if period.is_fy_summary %}
+                            📊 {{ period.period_name }}
+                        {% else %}
+                            {{ period.period_name }}
+                        {% endif %}
+                    </td>
                     <td class="text-center">{{ period.start_date.strftime('%d-%m-%Y') }}</td>
                     <td class="text-center">{{ period.end_date.strftime('%d-%m-%Y') }}</td>
                     <td class="text-right">₹{{ "{:,.2f}".format(period.opening_balance) }}</td>
@@ -450,12 +455,12 @@
     <script>
         // Auto-print functionality when page loads (optional)
         // window.onload = function() { window.print(); }
-        
+
         // Enhanced print function
         function printPage() {
             window.print();
         }
-        
+
         // Add keyboard shortcut for printing
         document.addEventListener('keydown', function(e) {
             if (e.ctrlKey && e.key === 'p') {
