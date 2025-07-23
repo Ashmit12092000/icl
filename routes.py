@@ -1530,15 +1530,25 @@ def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterl
         return date(target_year, target_month, target_day)
 
     elif frequency == 'yearly':
-        # Calculate years from ICL start to transaction date
-        years_from_start = transaction_date.year - icl_start_date.year
-        if transaction_date.month < icl_start_date.month or (transaction_date.month == icl_start_date.month and transaction_date.day < icl_start_date.day):
-            years_from_start -= 1
-
-        target_year = icl_start_date.year + years_from_start
-        target_month = icl_start_date.month
-        target_day = min(icl_start_date.day, _get_last_day_of_month(target_year, target_month))
-        return date(target_year, target_month, target_day)
+        # For yearly compounding, periods follow financial year (April to March)
+        # Determine which financial year the transaction falls into
+        if transaction_date.month >= 4:  # April to December
+            fy_start_year = transaction_date.year
+        else:  # January to March
+            fy_start_year = transaction_date.year - 1
+        
+        # Financial year starts on April 1st
+        fy_start = date(fy_start_year, 4, 1)
+        
+        # If transaction is before the first financial year that starts after ICL start
+        if transaction_date < fy_start and icl_start_date < fy_start:
+            # Use ICL start date for the first period
+            return icl_start_date
+        elif transaction_date >= fy_start:
+            return fy_start
+        else:
+            # For transactions in partial first year
+            return icl_start_date
 
     else:  # quarterly (default)
         # Calculate total days from ICL start to transaction date
@@ -1611,14 +1621,23 @@ def _get_period_end_date(transaction_date, icl_start_date, frequency='quarterly'
         return next_month_start - timedelta(days=1)
 
     elif frequency == 'yearly':
-        # Get the period start
+        # For yearly compounding, periods end on March 31st of the financial year
         period_start = _get_period_start_date(transaction_date, icl_start_date, 'yearly')
-
-        # Calculate next year
-        next_year_day = min(period_start.day, _get_last_day_of_month(period_start.year + 1, period_start.month))
-        next_year_start = date(period_start.year + 1, period_start.month, next_year_day)
-
-        return next_year_start - timedelta(days=1)
+        
+        if period_start == icl_start_date and icl_start_date.month != 4:
+            # For the first partial period, end at March 31st of the current financial year
+            if transaction_date.month >= 4:  # April to December
+                fy_end_year = transaction_date.year + 1
+            else:  # January to March
+                fy_end_year = transaction_date.year
+            return date(fy_end_year, 3, 31)
+        else:
+            # For full financial year periods, end on March 31st of the following year
+            if period_start.month == 4:  # April start
+                return date(period_start.year + 1, 3, 31)
+            else:
+                # Should not happen with proper yearly calculation, but fallback
+                return date(period_start.year + 1, 3, 31)
 
     else:  # quarterly (default)
         # Calculate total days from ICL start to transaction date
@@ -1670,6 +1689,10 @@ def _is_period_end(date_to_check, icl_start_date, frequency='quarterly'):
     if not date_to_check or not icl_start_date:
         return False
 
+    if frequency == 'yearly':
+        # For yearly compounding, period ends are always March 31st
+        return date_to_check.month == 3 and date_to_check.day == 31
+    
     # Calculate expected period end for this date
     expected_period_end = _get_period_end_date(date_to_check, icl_start_date, frequency)
 
@@ -1683,7 +1706,7 @@ def _is_quarter_end(date_to_check, icl_start_date):
 
 def _get_all_missing_periods_until_transaction(customer_id, customer, transaction_date):
     """
-    Function to identify missing quarters only between existing transactions.
+    Function to identify missing periods only between existing transactions.
     This ensures no gaps exist between actual transactions, but does not extend beyond the last transaction.
     Returns a list of (start_date, end_date) tuples for missing periods.
     """
@@ -1695,66 +1718,85 @@ def _get_all_missing_periods_until_transaction(customer_id, customer, transactio
     # Get all existing transactions for this customer, sorted by date
     existing_transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
 
-    # Create a set of all quarters that should have transactions
-    covered_quarters = set()
+    # Determine frequency to use
+    frequency_to_use = 'quarterly'
+    if customer.interest_type == 'compound' and customer.compound_frequency:
+        frequency_to_use = customer.compound_frequency
 
-    # Add quarters covered by existing transactions
+    # Create a set of all periods that should have transactions
+    covered_periods = set()
+
+    # Add periods covered by existing transactions
     for txn in existing_transactions:
         if txn.period_from and txn.period_to:
-            quarter_start = _get_quarter_start_date(txn.date, customer.icl_start_date)
-            covered_quarters.add(quarter_start)
+            period_start = _get_period_start_date(txn.date, customer.icl_start_date, frequency_to_use)
+            covered_periods.add(period_start)
 
-    # Add the quarter for the current transaction being added
-    current_quarter_start = _get_quarter_start_date(transaction_date, customer.icl_start_date)
-    covered_quarters.add(current_quarter_start)
+    # Add the period for the current transaction being added
+    current_period_start = _get_period_start_date(transaction_date, customer.icl_start_date, frequency_to_use)
+    covered_periods.add(current_period_start)
 
-    # Only generate quarters between ICL start and current transaction date
+    # Only generate periods between ICL start and current transaction date
     # Do NOT extend to ICL end date
-    expected_quarters = []
+    expected_periods = []
     current_period_start = customer.icl_start_date
 
     # Use only the transaction date as the end boundary, not ICL end date
     end_boundary = transaction_date
 
     while current_period_start <= end_boundary:
-        quarter_start = _get_quarter_start_date(current_period_start, customer.icl_start_date)
-        quarter_end = _get_quarter_end_date(current_period_start, customer.icl_start_date)
+        period_start = _get_period_start_date(current_period_start, customer.icl_start_date, frequency_to_use)
+        period_end = _get_period_end_date(current_period_start, customer.icl_start_date, frequency_to_use)
 
-        # Only add if quarter start is not beyond the transaction date
-        if quarter_start <= end_boundary:
-            expected_quarters.append((quarter_start, quarter_end))
+        # Only add if period start is not beyond the transaction date
+        if period_start <= end_boundary:
+            expected_periods.append((period_start, period_end))
 
-        # Move to next quarter (add 3 months)
-        if current_period_start.month <= 9:
-            current_period_start = current_period_start.replace(month=current_period_start.month + 3)
-        else:
-            # Handle year transition
-            new_month = current_period_start.month + 3 - 12
-            current_period_start = current_period_start.replace(year=current_period_start.year + 1, month=new_month)
+        # Move to next period based on frequency
+        if frequency_to_use == 'yearly':
+            # Move to next financial year (April 1st)
+            if current_period_start.month >= 4:
+                current_period_start = date(current_period_start.year + 1, 4, 1)
+            else:
+                current_period_start = date(current_period_start.year, 4, 1)
+        elif frequency_to_use == 'monthly':
+            # Move to next month
+            if current_period_start.month == 12:
+                current_period_start = current_period_start.replace(year=current_period_start.year + 1, month=1)
+            else:
+                current_period_start = current_period_start.replace(month=current_period_start.month + 1)
+        else:  # quarterly
+            # Move to next quarter (add 3 months)
+            if current_period_start.month <= 9:
+                current_period_start = current_period_start.replace(month=current_period_start.month + 3)
+            else:
+                # Handle year transition
+                new_month = current_period_start.month + 3 - 12
+                current_period_start = current_period_start.replace(year=current_period_start.year + 1, month=new_month)
 
-    # Find missing quarters only between actual transactions
-    for quarter_start, quarter_end in expected_quarters:
-        if quarter_start not in covered_quarters:
-            # Verify this quarter doesn't already have a transaction
-            existing_in_quarter = Transaction.query.filter(
+    # Find missing periods only between actual transactions
+    for period_start, period_end in expected_periods:
+        if period_start not in covered_periods:
+            # Verify this period doesn't already have a transaction
+            existing_in_period = Transaction.query.filter(
                 Transaction.customer_id == customer_id,
-                Transaction.period_from == quarter_start,
-                Transaction.period_to == quarter_end
+                Transaction.period_from == period_start,
+                Transaction.period_to == period_end
             ).first()
 
-            if not existing_in_quarter:
+            if not existing_in_period:
                 # Double-check by also looking for any transaction that covers this period
                 overlapping_txn = Transaction.query.filter(
                     Transaction.customer_id == customer_id,
-                    Transaction.period_from <= quarter_end,
-                    Transaction.period_to >= quarter_start
+                    Transaction.period_from <= period_end,
+                    Transaction.period_to >= period_start
                 ).first()
                 
                 if not overlapping_txn:
-                    missing_periods.append((quarter_start, quarter_end))
-                    logging.debug(f"Found missing quarter: {quarter_start} to {quarter_end}")
+                    missing_periods.append((period_start, period_end))
+                    logging.debug(f"Found missing {frequency_to_use} period: {period_start} to {period_end}")
                 else:
-                    logging.debug(f"Found overlapping transaction for period {quarter_start} to {quarter_end}, skipping")
+                    logging.debug(f"Found overlapping transaction for period {period_start} to {period_end}, skipping")
 
     # Sort missing periods by start date
     missing_periods.sort(key=lambda x: x[0])
@@ -1779,7 +1821,7 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
         logging.debug(f"Transaction already exists for period {period_start} to {period_end}, skipping passive period creation")
         return existing_period_txn
 
-    # Calculate the period in the middle of the quarter for the transaction date
+    # Calculate the period in the middle for the transaction date
     period_middle = period_start + timedelta(days=(period_end - period_start).days // 2)
 
     # Calculate balance before this passive period
@@ -1789,14 +1831,16 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
     ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
 
     current_balance_before_passive = Decimal('0')
+    frequency_to_use = customer.compound_frequency if customer.compound_frequency else 'quarterly'
+    
     for txn in previous_txns:
         current_balance_before_passive += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
-        # For compound interest, add net interest at quarter ends
+        # For compound interest, add net interest at period ends
         if (customer.interest_type == 'compound' and 
             customer.first_compounding_date and 
             txn.date >= customer.first_compounding_date and 
             txn.period_to and 
-            _is_quarter_end(txn.period_to, customer.icl_start_date) and 
+            _is_period_end(txn.period_to, customer.icl_start_date, frequency_to_use) and 
             txn.get_safe_net_amount()):
             current_balance_before_passive += txn.get_safe_net_amount()
 
@@ -1806,25 +1850,25 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
     # Calculate interest for this passive period
     principal_for_calculation = current_balance_before_passive
 
-    # For compound interest, include accumulated net interest from previous quarters only
+    # For compound interest, include accumulated net interest from previous periods only
     if (customer.interest_type == 'compound' and 
         customer.first_compounding_date and 
         period_middle >= customer.first_compounding_date):
 
-        # Get accumulated net interest from transactions before this quarter starts
-        previous_quarter_transactions = Transaction.query.filter(
+        # Get accumulated net interest from transactions before this period starts
+        previous_period_transactions = Transaction.query.filter(
             Transaction.customer_id == customer_id,
             Transaction.date < period_start
         ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
-        accumulated_net_interest_from_previous_quarters = Decimal('0')
+        accumulated_net_interest_from_previous_periods = Decimal('0')
         repayment_adjustment = Decimal('0')
-        for prev_txn in previous_quarter_transactions:
-            accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
+        for prev_txn in previous_period_transactions:
+            accumulated_net_interest_from_previous_periods += prev_txn.get_safe_net_amount()
             if prev_txn.transaction_type == 'repayment':
                 repayment_adjustment += prev_txn.get_safe_net_amount()
 
-        principal_for_calculation = current_balance_before_passive + accumulated_net_interest_from_previous_quarters - repayment_adjustment
+        principal_for_calculation = current_balance_before_passive + accumulated_net_interest_from_previous_periods - repayment_adjustment
 
     # Calculate interest
     int_amount = calculate_interest(principal_for_calculation, customer.annual_rate, no_of_days)
@@ -1840,14 +1884,14 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
     # Balance calculation
     new_balance = current_balance_before_passive
 
-    # For compound interest, add net interest to balance at quarter end
+    # For compound interest, add net interest to balance at period end
     if (customer.interest_type == 'compound' and 
         customer.first_compounding_date and 
         period_middle >= customer.first_compounding_date and 
-        _is_quarter_end(period_end, customer.icl_start_date) and 
+        _is_period_end(period_end, customer.icl_start_date, frequency_to_use) and 
         net_amount):
         new_balance += net_amount
-        logging.debug(f"Passive quarter end: adding net interest {net_amount} to balance")
+        logging.debug(f"Passive {frequency_to_use} period end: adding net interest {net_amount} to balance")
 
     # Create the passive period transaction
     passive_transaction = Transaction(
@@ -2043,8 +2087,66 @@ def _group_transactions_by_period(customer, transactions, period_type):
                 'total_tds': total_tds_in_period.quantize(Decimal('0.01')),
                 'total_net_amount': total_net_amount_in_period.quantize(Decimal('0.01')),
                 'closing_balance': closing_balance_for_period.quantize(Decimal('0.01')),
-                'adjusted_closing_balance': adjusted_closing_balance.quantize(Decimal('0.01')) if (period_type == 'quarterly' and customer.interest_type == 'compound') else closing_balance_for_period.quantize(Decimal('0.01'))
+                'adjusted_closing_balance': adjusted_closing_balance.quantize(Decimal('0.01')) if (period_type == 'quarterly' and customer.interest_type == 'compound') else closing_balance_for_period.quantize(Decimal('0.01')),
+                'is_fy_summary': False
             })
+
+            # Check if this period ends on March 31st (FY end) and add FY summary row
+            if period_type == 'quarterly' and period_end.month == 3 and period_end.day == 31:
+                # Calculate FY summary from April 1st to March 31st
+                fy_start_year = period_end.year - 1 if period_end.month <= 3 else period_end.year
+                fy_start = date(fy_start_year, 4, 1)
+                fy_end = period_end
+
+                # Calculate cumulative totals for the entire FY
+                fy_total_paid = Decimal('0')
+                fy_total_repaid = Decimal('0')
+                fy_total_interest = Decimal('0')
+                fy_total_tds = Decimal('0')
+                fy_total_net_amount = Decimal('0')
+
+                # Get all transactions in this FY period
+                fy_transactions = Transaction.query.filter(
+                    Transaction.customer_id == customer.id,
+                    Transaction.date >= fy_start,
+                    Transaction.date <= fy_end
+                ).all()
+
+                for txn in fy_transactions:
+                    fy_total_paid += txn.get_safe_amount_paid()
+                    fy_total_repaid += txn.get_safe_amount_repaid()
+                    fy_total_interest += txn.get_safe_int_amount()
+                    fy_total_tds += txn.get_safe_tds_amount()
+                    fy_total_net_amount += txn.get_safe_net_amount()
+
+                # Get opening balance at FY start
+                fy_opening_balance = Decimal('0')
+                pre_fy_transactions = Transaction.query.filter(
+                    Transaction.customer_id == customer.id,
+                    Transaction.date < fy_start
+                ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+
+                for txn in pre_fy_transactions:
+                    fy_opening_balance += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+                    fy_opening_balance += txn.get_safe_net_amount()
+
+                # FY closing balance is the same as current period's closing balance
+                fy_closing_balance = adjusted_closing_balance
+
+                summary_data.append({
+                    'period_name': f'FY {fy_start_year}-{fy_start_year + 1} Summary',
+                    'start_date': fy_start,
+                    'end_date': fy_end,
+                    'opening_balance': fy_opening_balance.quantize(Decimal('0.01')),
+                    'total_paid': fy_total_paid.quantize(Decimal('0.01')),
+                    'total_repaid': fy_total_repaid.quantize(Decimal('0.01')),
+                    'total_interest': fy_total_interest.quantize(Decimal('0.01')),
+                    'total_tds': fy_total_tds.quantize(Decimal('0.01')),
+                    'total_net_amount': fy_total_net_amount.quantize(Decimal('0.01')),
+                    'closing_balance': fy_closing_balance.quantize(Decimal('0.01')),
+                    'adjusted_closing_balance': fy_closing_balance.quantize(Decimal('0.01')),
+                    'is_fy_summary': True
+                })
 
         # Move to the next period
         if period_type == 'quarterly':
