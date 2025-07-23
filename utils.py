@@ -228,8 +228,9 @@ def export_to_excel(customer, transactions):
     total_interest = Decimal('0')
     total_tds = Decimal('0')
     total_net_amount = Decimal('0')
+    current_row = start_row + 1
 
-    for row, txn_data in enumerate(processed_transactions, start=start_row + 1):
+    for txn_data in processed_transactions:
         # Accumulate totals
         if txn_data['no_of_days']:
             total_days += Decimal(str(txn_data['no_of_days']))
@@ -255,14 +256,82 @@ def export_to_excel(customer, transactions):
         ]
 
         for col, value in enumerate(data, start=1):
-            cell = worksheet.cell(row=row, column=col, value=value)
+            cell = worksheet.cell(row=current_row, column=col, value=value)
             cell.border = border
             if col > 1:  # Align numbers to right
                 cell.alignment = Alignment(horizontal='right')
 
+        current_row += 1
+
+        # Check if this transaction period ends on March 31st (FY end) and add FY summary row
+        if (txn_data['period_to'] and 
+            txn_data['period_to'].month == 3 and 
+            txn_data['period_to'].day == 31):
+            
+            # Calculate FY summary from April 1st to March 31st
+            fy_start_year = txn_data['period_to'].year - 1
+            fy_start = date(fy_start_year, 4, 1)
+            fy_end = txn_data['period_to']
+
+            # Get all transactions in this FY period from database
+            from models import Transaction
+            fy_transactions = Transaction.query.filter(
+                Transaction.customer_id == customer.id,
+                Transaction.date >= fy_start,
+                Transaction.date <= fy_end
+            ).all()
+
+            # Calculate cumulative totals for the entire FY
+            fy_total_paid = Decimal('0')
+            fy_total_repaid = Decimal('0')
+            fy_total_interest = Decimal('0')
+            fy_total_tds = Decimal('0')
+            fy_total_net_amount = Decimal('0')
+            fy_total_days = Decimal('0')
+
+            for txn in fy_transactions:
+                fy_total_paid += txn.get_safe_amount_paid()
+                fy_total_repaid += txn.get_safe_amount_repaid()
+                fy_total_interest += txn.get_safe_int_amount()
+                fy_total_tds += txn.get_safe_tds_amount()
+                fy_total_net_amount += txn.get_safe_net_amount()
+                if txn.no_of_days:
+                    fy_total_days += Decimal(str(txn.no_of_days))
+
+            # Add FY summary row with special formatting
+            fy_summary_data = [
+                f"FY {fy_start_year}-{fy_start_year + 1} SUMMARY",
+                str(fy_total_paid) if fy_total_paid > 0 else "",
+                str(fy_total_repaid) if fy_total_repaid > 0 else "",
+                str(txn_data['balance']) if txn_data['balance'] is not None else "",  # Use current balance
+                fy_start.strftime('%d-%m-%Y'),
+                fy_end.strftime('%d-%m-%Y'),
+                str(int(fy_total_days)) if fy_total_days > 0 else "",
+                "",  # No single rate for summary
+                str(fy_total_interest.quantize(Decimal('0.01'))) if fy_total_interest > 0 else "",
+                str(fy_total_tds.quantize(Decimal('0.01'))) if fy_total_tds > 0 else "",
+                str(fy_total_net_amount.quantize(Decimal('0.01'))) if fy_total_net_amount > 0 else ""
+            ]
+
+            # Apply special formatting to FY summary row
+            fy_fill = PatternFill(start_color="FFE6CC", end_color="FFE6CC", fill_type="solid")
+            fy_font = Font(bold=True, color="CC6600")
+
+            for col, value in enumerate(fy_summary_data, start=1):
+                cell = worksheet.cell(row=current_row, column=col, value=value)
+                cell.border = border
+                cell.fill = fy_fill
+                cell.font = fy_font
+                if col > 1:  # Align numbers to right
+                    cell.alignment = Alignment(horizontal='right')
+                else:  # Center align the FY summary label
+                    cell.alignment = Alignment(horizontal='center')
+
+            current_row += 1
+
     # Add totals row if there are processed transactions
     if processed_transactions:
-        totals_row = len(processed_transactions) + start_row + 2  # Add space between data and totals
+        totals_row = current_row + 1  # Add space between data and totals
 
         # Add "TOTAL" label
         total_label_cell = worksheet.cell(row=totals_row, column=6, value="TOTAL:")
@@ -390,4 +459,3 @@ def get_period_report(start_date, end_date):
     workbook.save(output)
     output.seek(0)
     return output
-
