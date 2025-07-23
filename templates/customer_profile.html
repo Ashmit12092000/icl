@@ -23,7 +23,7 @@
                     <a href="{{ url_for('export_customer_report', customer_id=customer.id) }}" class="btn btn-info me-2">
                         <i class="fas fa-download me-2"></i>Export Excel
                     </a>
-                    
+
                     <a href="{{ url_for('print_customer_profile', customer_id=customer.id) }}" class="btn btn-success" target="_blank">
                         <i class="fas fa-print me-2"></i>Print Report
                     </a>
@@ -97,7 +97,7 @@
                             {% if customer.get_effective_end_date() %}
                                 <span class="badge bg-warning text-dark">{{ customer.get_effective_end_date().strftime('%d-%m-%Y') }}</span>
                                 {% if customer.get_last_transaction_date() and customer.get_last_transaction_date() == customer.get_effective_end_date() %}
-                                    <small class="text-muted">(Based on last transaction)</small>
+                                    <small class="text-muted">({{ customer.get_last_transaction_date().strftime('%d-%m-%Y') }})</small>
                                 {% endif %}
                             {% else %}
                                 <span class="text-muted">Not determined</span>
@@ -319,8 +319,14 @@
                                 </thead>
                                 <tbody>
                                     {% for period in quarterly_summary %}
-                                    <tr>
-                                        <td>{{ period.period_name }}</td>
+                                    <tr {% if period.is_fy_summary %}class="table-warning fw-bold"{% endif %}>
+                                        <td {% if period.is_fy_summary %}class="fw-bold"{% endif %}>
+                                            {% if period.is_fy_summary %}
+                                                <i class="fas fa-chart-line me-2"></i>{{ period.period_name }}
+                                            {% else %}
+                                                {{ period.period_name }}
+                                            {% endif %}
+                                        </td>
                                         <td>{{ period.start_date.strftime('%d-%m-%Y') }}</td>
                                         <td>{{ period.end_date.strftime('%d-%m-%Y') }}</td>
                                         <td class="text-end">{{ period.opening_balance | safe_currency }}</td>
@@ -329,8 +335,8 @@
                                         <td class="text-end">{{ period.total_interest | safe_currency }}</td>
                                         <td class="text-end">{{ period.total_tds | safe_currency }}</td>
                                         <td class="text-end text-primary">{{ period.total_net_amount | safe_currency }}</td>
-                                        <td>{{ period.closing_balance|safe_currency }}</td>
-                                        <td>{{ period.adjusted_closing_balance|safe_currency }}</td>
+                                        <td class="text-end"><strong>{{ period.closing_balance | safe_currency }}</strong></td>
+                                        <td class="text-end"><strong>{{ period.adjusted_closing_balance | safe_currency }}</strong></td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -941,32 +947,32 @@ $(document).ready(function() {
     $('.period-summary-table table').each(function() {
         const tableElement = this;
         const $table = $(tableElement);
-        
+
         // Skip if table is empty or has no data rows
         if ($table.find('tbody tr').length === 0) {
             return;
         }
-        
+
         // Complete cleanup first
         if ($.fn.DataTable.isDataTable(tableElement)) {
             $table.DataTable().destroy();
         }
-        
+
         // Remove DataTable classes and attributes
         $table.removeClass('dataTable no-footer dtr-inline collapsed')
               .removeAttr('role aria-describedby width style')
               .removeData();
-        
+
         try {
             // Count actual columns in this specific table
             const actualColumnCount = $table.find('thead tr:first th').length;
             const numericColumnTargets = [];
-            
+
             // Dynamically determine numeric columns (typically from column 3 onwards, excluding last if it's actions)
             for (let i = 3; i < actualColumnCount; i++) {
                 numericColumnTargets.push(i);
             }
-            
+
             $table.DataTable({
                 "destroy": true,
                 "paging": false,
@@ -993,17 +999,17 @@ $(document).ready(function() {
         if ($.fn.DataTable.isDataTable('#transactionHistoryTable')) {
             $('#transactionHistoryTable').DataTable().destroy();
         }
-        
+
         // Remove any existing DataTable classes and attributes
         $('#transactionHistoryTable').removeClass('dataTable no-footer dtr-inline collapsed')
                                    .removeAttr('role aria-describedby width style')
                                    .removeData();
-        
+
         try {
             // Count actual columns in the transaction history table
             const $transactionTable = $('#transactionHistoryTable');
             const actualColumnCount = $transactionTable.find('thead tr:first th').length;
-            
+
             // Build column definitions based on actual column count
             const columnDefs = [
                 {
@@ -1011,20 +1017,20 @@ $(document).ready(function() {
                     "orderable": false
                 }
             ];
-            
+
             // Add numeric column formatting for amount columns (columns 3, 4, and 7+ typically)
             const numericColumns = [3, 4]; // Amount Paid, Amount Repaid
             for (let i = 7; i < actualColumnCount - 1; i++) { // Skip the last column if it's actions
                 numericColumns.push(i);
             }
-            
+
             if (numericColumns.length > 0) {
                 columnDefs.push({
                     "targets": numericColumns,
                     "className": "text-end"
                 });
             }
-            
+
             // Add actions column configuration if admin user and actions column exists
             {% if current_user.role == 'admin' %}
             if (actualColumnCount >= 14) { // Ensure actions column exists
