@@ -24,7 +24,7 @@
                         <i class="fas fa-download me-2"></i>Export Excel
                     </a>
 
-                    <a href="{{ url_for('print_customer_profile', customer_id=customer.id) }}" class="btn btn-success" target="_blank">
+                    <a href="{{ url_for('print_customer_profile', customer_id=customer.id) }}" class="btn btn-danger" target="_blank">
                         <i class="fas fa-print me-2"></i>Print Report
                     </a>
                 </div>
@@ -114,13 +114,29 @@
 
                         <dt class="col-sm-4">Loan Status:</dt>
                         <dd class="col-sm-8">
-                            {% if customer.loan_closed %}
-                                <span class="badge bg-danger">Closed</span>
+                            {% set loan_status = customer.get_loan_status() %}
+                            {% if loan_status == 'closed' %}
+                                <span class="badge bg-secondary">Closed</span>
                                 {% if customer.loan_closed_date %}
                                     <small class="text-muted">({{ customer.loan_closed_date.strftime('%d-%m-%Y') }})</small>
                                 {% endif %}
+                            {% elif loan_status == 'overdue' %}
+                                <span class="badge bg-danger">Overdue</span>
+                                {% if customer.loan_overdue_date %}
+                                    <small class="text-muted">(Since {{ customer.loan_overdue_date.strftime('%d-%m-%Y') }})</small>
+                                {% endif %}
+                            {% elif loan_status == 'past_due' %}
+                                <span class="badge bg-warning text-dark">Past Due</span>
+                                <small class="text-muted">({{ (today - customer.icl_end_date).days }} days past ICL end)</small>
                             {% else %}
                                 <span class="badge bg-success">Active</span>
+                            {% endif %}
+                            
+                            {% if customer.loan_extended %}
+                                <span class="badge bg-info ms-1">Extended</span>
+                                {% if customer.original_icl_end_date %}
+                                    <small class="text-muted">(Original: {{ customer.original_icl_end_date.strftime('%d-%m-%Y') }})</small>
+                                {% endif %}
                             {% endif %}
                         </dd>
 
@@ -591,7 +607,56 @@
                             </tbody>
                         </table>
                     </div>
-                    {% else %}
+
+                <!-- Transaction Summary Section -->
+                {% if transactions %}
+                <div class="mt-4">
+                    <div class="card border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Transaction Totals Summary</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <div class="border-end">
+                                        <h5 class="text-info mb-1">
+                                            {% set total_interest = transactions | selectattr('int_amount', 'defined') | selectattr('int_amount', 'ne', none) | sum(attribute='int_amount') | default(0, true) %}
+                                            {{ total_interest | safe_currency }}
+                                        </h5>
+                                        <small class="text-muted">Total Interest Amount</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border-end">
+                                        <h5 class="text-warning mb-1">
+                                            {% set total_tds = transactions | selectattr('tds_amount', 'defined') | selectattr('tds_amount', 'ne', none) | sum(attribute='tds_amount') | default(0, true) %}
+                                            {{ total_tds | safe_currency }}
+                                        </h5>
+                                        <small class="text-muted">Total TDS Amount</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border-end">
+                                        <h5 class="text-success mb-1">
+                                            {% set total_net = transactions | selectattr('net_amount', 'defined') | selectattr('net_amount', 'ne', none) | sum(attribute='net_amount') | default(0, true) %}
+                                            {{ total_net | safe_currency }}
+                                        </h5>
+                                        <small class="text-muted">Total Net Amount</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <h5 class="text-primary mb-1">
+                                        {{ transactions | length }}
+                                    </h5>
+                                    <small class="text-muted">Total Transactions</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
                     <div class="text-center py-4">
                         <i class="fas fa-history fa-3x text-muted mb-3"></i>
                         <h5 class="text-muted">No transactions found</h5>
@@ -608,13 +673,111 @@
         </div>
     </div>
 
-    {% if current_user.role in ['admin', 'data_entry'] and not customer.loan_closed %}
-    <!-- Close Loan Button -->
+    {% if current_user.role == 'admin' and not customer.loan_closed %}
+    <!-- Loan Management Section -->
     <div class="row mt-4">
         <div class="col-12">
-            <button onclick="confirmLoanClose('{{ customer.id }}', '{{ customer.name }}')" class="btn btn-danger">
-                <i class="fas fa-lock me-2"></i>Close Loan
-            </button>
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-cogs me-2"></i>Loan Management (Admin Only)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <!-- Close Loan -->
+                            {% set balance_for_closure = customer.get_current_balance() %}
+                            {% if balance_for_closure <= 10.00 %}
+                            <form method="POST" action="{{ url_for('close_loan', customer_id=customer.id) }}" class="d-inline" 
+                                  onsubmit="return confirm('Are you sure you want to manually close this loan? Current balance: {{ balance_for_closure | safe_currency }}. This action cannot be undone.')">
+                                <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
+                                    <i class="fas fa-lock me-1"></i>Close Loan
+                                </button>
+                            </form>
+                            {% else %}
+                            <button class="btn btn-secondary btn-sm w-100 mb-2" disabled title="Balance must be ≤ ₹10.00 to close manually">
+                                <i class="fas fa-lock me-1"></i>Close Loan (Balance: {{ balance_for_closure | safe_currency }})
+                            </button>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <!-- Extend Loan -->
+                            {% if customer.is_past_icl_end_date() or customer.get_loan_status() == 'past_due' %}
+                            <button class="btn btn-info btn-sm w-100 mb-2" data-bs-toggle="modal" data-bs-target="#extendLoanModal">
+                                <i class="fas fa-calendar-plus me-1"></i>Extend Loan
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-info btn-sm w-100 mb-2" disabled title="Can only extend loans past ICL end date">
+                                <i class="fas fa-calendar-plus me-1"></i>Extend Loan
+                            </button>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <!-- Mark Overdue -->
+                            {% if customer.get_loan_status() == 'past_due' and not customer.loan_overdue %}
+                            <form method="POST" action="{{ url_for('mark_overdue', customer_id=customer.id) }}" class="d-inline" 
+                                  onsubmit="return confirm('Are you sure you want to mark this loan as overdue? This will affect the customer\'s credit status.')">
+                                <button type="submit" class="btn btn-danger btn-sm w-100 mb-2">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Mark Overdue
+                                </button>
+                            </form>
+                            {% elif customer.loan_overdue %}
+                            <button class="btn btn-secondary btn-sm w-100 mb-2" disabled>
+                                <i class="fas fa-exclamation-triangle me-1"></i>Already Overdue
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-danger btn-sm w-100 mb-2" disabled title="Only past due loans can be marked overdue">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Mark Overdue
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if customer.get_loan_status() == 'past_due' %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <i class="fas fa-info-circle me-2 text-warning"></i>
+                        <strong style="color:green;">Notice:This loan is {{ (today - customer.icl_end_date).days }} days past the ICL end date ({{ customer.icl_end_date.strftime('%d-%m-%Y') }}). 
+                        You can extend the loan or mark it as overdue.</strong>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Extend Loan Modal -->
+    <div class="modal fade" id="extendLoanModal" tabindex="-1" aria-labelledby="extendLoanModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="{{ url_for('extend_loan', customer_id=customer.id) }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="extendLoanModalLabel">Extend Loan for {{ customer.name }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="new_end_date" class="form-label">New ICL End Date</label>
+                            <input type="date" class="form-control" id="new_end_date" name="new_end_date" 
+                                    required>
+                            <div class="form-text">
+                                Current ICL End Date: {{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else 'Not set' }}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="extension_reason" class="form-label">Extension Reason</label>
+                            <textarea class="form-control" id="extension_reason" name="extension_reason" rows="3" 
+                                      placeholder="Enter reason for loan extension..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Are you sure you want to extend this loan?')">
+                            <i class="fas fa-calendar-plus me-1"></i>Extend Loan
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     {% endif %}
