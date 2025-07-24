@@ -3,6 +3,7 @@
 {% block title %}Transactions - {{ customer.name }}{% endblock %}
 
 {% block content %}
+
 <div class="container">
     <!-- Header -->
     <div class="row mb-4">
@@ -12,6 +13,23 @@
                 <div>
                     <h1><i class="fas fa-exchange-alt me-2"></i>Transactions</h1>
                     <p class="text-muted">Customer: {{ customer.name }} ({{ customer.icl_no }})</p>
+                {% if transactions|length > 0 %}
+                    {% if current_user.role == 'admin' and not customer.loan_closed %}
+                        {% set balance_for_closure = customer.get_current_balance() %}
+                            {% if balance_for_closure <= 10.00 %}
+                                    <form method="POST" action="{{ url_for('close_loan', customer_id=customer.id) }}" class="d-inline" 
+                                        onsubmit="return confirm('Are you sure you want to  close this loan? Current balance: {{ balance_for_closure | safe_currency }}. This action cannot be undone.')">
+                                        <button type="submit" class="btn btn-warning btn-sm">
+                                            <i class="fas fa-lock me-1"></i>Mark this loan as closed
+                                        </button>
+                                    </form>
+                            {% else %}
+                                    <span class="text-muted small">
+                                        <i class="fas fa-info-circle me-1"></i>Balance must be ≤ ₹10.00 to close manually (Current: {{ balance_for_closure | safe_currency }})
+                                    </span>
+                    {% endif %}
+                {% endif %}
+                {% endif %}
                     {% if customer.loan_closed %}
                     <div class="alert alert-danger">
                         <i class="fas fa-lock me-2"></i>
@@ -335,6 +353,55 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Transaction Summary Section -->
+                    {% if transactions %}
+                    <div class="mt-4">
+                        <div class="card border-primary">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Transaction Totals Summary</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-3">
+                                        <div class="border-end">
+                                            <h5 class="text-info mb-1" id="totalInterest">
+                                                {% set total_interest = transactions | selectattr('int_amount', 'defined') | selectattr('int_amount', 'ne', none) | sum(attribute='int_amount') | default(0, true) %}
+                                                {{ total_interest | safe_currency }}
+                                            </h5>
+                                            <small class="text-muted">Total Interest Amount</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border-end">
+                                            <h5 class="text-warning mb-1" id="totalTds">
+                                                {% set total_tds = transactions | selectattr('tds_amount', 'defined') | selectattr('tds_amount', 'ne', none) | sum(attribute='tds_amount') | default(0, true) %}
+                                                {{ total_tds | safe_currency }}
+                                            </h5>
+                                            <small class="text-muted">Total TDS Amount</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="border-end">
+                                            <h5 class="text-success mb-1" id="totalNet">
+                                                {% set total_net = transactions | selectattr('net_amount', 'defined') | selectattr('net_amount', 'ne', none) | sum(attribute='net_amount') | default(0, true) %}
+                                                {{ total_net | safe_currency }}
+                                            </h5>
+                                            <small class="text-muted">Total Net Amount</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <h5 class="text-primary mb-1" id="totalTransactions">
+                                            {{ transactions | length }}
+                                        </h5>
+                                        <small class="text-muted">Total Transactions</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% else %}
                     <div class="text-center py-4">
                         <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
@@ -386,19 +453,67 @@ $(document).ready(function() {
     const $transactionTable = $('#transactionsTable');
     if ($transactionTable.length && !$.fn.DataTable.isDataTable($transactionTable)) {
         try {
-            $transactionTable.DataTable({
+            const table = $transactionTable.DataTable({
                 "destroy": true,
                 "pageLength": 10,
                 "responsive": true,
                 "order": [[0, "desc"]], // Sort by date descending
                 "language": {
                     "search": "Search transactions:"
+                },
+                "drawCallback": function(settings) {
+                    updateTransactionTotals();
                 }
             });
             console.log('Transaction DataTable initialized successfully');
+            
+            // Initial calculation
+            updateTransactionTotals();
         } catch (error) {
             console.error('Failed to initialize transaction DataTable:', error);
         }
+    }
+
+    // Function to update transaction totals based on visible rows
+    function updateTransactionTotals() {
+        if (!$.fn.DataTable.isDataTable('#transactionsTable')) return;
+        
+        const table = $('#transactionsTable').DataTable();
+        const visibleData = table.rows({ search: 'applied' }).data();
+        
+        let totalInterest = 0;
+        let totalTds = 0;
+        let totalNet = 0;
+        let transactionCount = 0;
+        
+        for (let i = 0; i < visibleData.length; i++) {
+            const row = visibleData[i];
+            // Skip loan closure transactions
+            if ($(table.row(i).node()).hasClass('table-success')) continue;
+            
+            transactionCount++;
+            
+            // Extract numeric values from currency formatted cells
+            const interestCell = $(table.cell(i, 9).node()).text().replace(/[₹,\s-]/g, '');
+            const tdsCell = $(table.cell(i, 10).node()).text().replace(/[₹,\s-]/g, '');
+            const netCell = $(table.cell(i, 11).node()).text().replace(/[₹,\s-]/g, '');
+            
+            if (interestCell && !isNaN(parseFloat(interestCell))) {
+                totalInterest += parseFloat(interestCell);
+            }
+            if (tdsCell && !isNaN(parseFloat(tdsCell))) {
+                totalTds += parseFloat(tdsCell);
+            }
+            if (netCell && !isNaN(parseFloat(netCell))) {
+                totalNet += parseFloat(netCell);
+            }
+        }
+        
+        // Update the summary section
+        $('#totalInterest').text('₹' + totalInterest.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        $('#totalTds').text('₹' + totalTds.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        $('#totalNet').text('₹' + totalNet.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        $('#totalTransactions').text(transactionCount);
     }
 
     // Form validation (client-side)
@@ -488,7 +603,27 @@ $(document).ready(function() {
             console.log('Edit Form Days calculated:', diffDays);
         }
     });
+    function confirmLoanClose(customerId, customerName) {
+        if (confirm(`Are you sure you want to close the loan for "${customerName}"? This action will mark the loan as closed and prevent further transactions.`)) {
+            // Create a form to submit the close loan request
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/customer/${customerId}/close_loan`;
 
+            // Add CSRF token if needed
+            const csrfToken = document.querySelector('meta[name=csrf-token]');
+            if (csrfToken) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrf_token';
+                csrfInput.value = csrfToken.getAttribute('content');
+                form.appendChild(csrfInput);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
     // Form validation for EDIT transaction form
     $('#editTransactionForm').submit(function(e) {
         var amountPaid = parseFloat($('#edit_amount_paid').val()) || 0;
