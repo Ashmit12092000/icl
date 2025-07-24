@@ -51,7 +51,7 @@
                     <div class="d-flex justify-content-between">
                         <div>
                             <h5 class="card-Active Loans">Active Loans </h5>
-                            <h2 class="mb-0">{{ customers | length }}</h2>
+                            <h2 class="mb-0">{{ active_loans }}</h2>
                         </div>
                         <div class="align-self-center">
                             <i class="fas fa-handshake fa-2x"></i>
@@ -166,7 +166,18 @@
                                         <td>{{ customer.annual_rate | safe_percentage }}</td>
                                         <td class="Dcurrency">
                                             {% set balance = customer.get_current_balance() %}
-                                            {% if balance > 0 %}
+                                            {% set loan_status = customer.get_loan_status() %}
+                                            
+                                            {% if loan_status == 'overdue' %}
+                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
+                                                <small class="badge bg-danger ms-1">Overdue</small>
+                                            {% elif loan_status == 'past_due' %}
+                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
+                                                <small class="badge bg-warning text-dark ms-1">Past Due</small>
+                                            {% elif not customer.loan_closed and balance <= 10.00 and balance >= -10.00 %}
+                                                <span class="transaction-neutral">{{ balance|safe_currency }}</span>
+                                                <small class="badge bg-success ms-1">Ready for Closure</small>
+                                            {% elif balance > 0 %}
                                                 <span class="transaction-positive">{{ balance|safe_currency }}</span>
                                             {% elif balance < 0 %}
                                                 <span class="transaction-negative">{{ balance|safe_currency }}</span>
