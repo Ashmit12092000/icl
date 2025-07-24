@@ -39,6 +39,10 @@ class Customer(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     loan_closed = db.Column(db.Boolean, default=False)
     loan_closed_date = db.Column(db.Date)
+    loan_overdue = db.Column(db.Boolean, default=False)
+    loan_overdue_date = db.Column(db.Date)
+    loan_extended = db.Column(db.Boolean, default=False)
+    original_icl_end_date = db.Column(db.Date)
 
     # Relationships
     transactions = db.relationship('Transaction', backref='customer', lazy=True, cascade='all, delete-orphan')
@@ -197,6 +201,21 @@ class Customer(db.Model):
         if self.transactions:
             return max(t.date for t in self.transactions)
         return None
+
+    def get_loan_status(self):
+        """Get the current loan status"""
+        if self.loan_closed:
+            return 'closed'
+        elif self.loan_overdue:
+            return 'overdue'
+        elif self.icl_end_date and date.today() > self.icl_end_date and self.get_current_balance() > Decimal('0'):
+            return 'past_due'
+        else:
+            return 'active'
+
+    def is_past_icl_end_date(self):
+        """Check if current date is past ICL end date"""
+        return self.icl_end_date and date.today() > self.icl_end_date
 
     def __repr__(self):
         return f'<Customer {self.name}>'
