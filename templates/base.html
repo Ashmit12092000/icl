@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Account Management System{% endblock %}</title>
-    
+    <title>{% block title %} ICL Account Management System{% endblock %}</title>
+
     <!-- Bootstrap CSS with Light Theme -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
+
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
-    
+
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -28,13 +28,13 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
         <div class="container">
             <a class="navbar-brand fw-bold text-primary" href="{{ url_for('dashboard') }}">
-                <i class="fas fa-university me-2"></i>Account Management
+                <i class="fas fa-university me-2"></i> ICL Account Management
             </a>
-            
+
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
+
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
@@ -42,7 +42,7 @@
                             <i class="fas fa-tachometer-alt me-1"></i>Dashboard
                         </a>
                     </li>
-                    
+
                     {% if current_user.role in ['admin', 'data_entry'] %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('customer_master') }}">
@@ -50,22 +50,27 @@
                         </a>
                     </li>
                     {% endif %}
-                    
+
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('reports') }}">
                             <i class="fas fa-chart-bar me-1"></i>Reports
                         </a>
                     </li>
-                    
+
                     {% if current_user.role == 'admin' %}
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('overdue_loans') }}">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Overdue Loans
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('admin_panel') }}">
-                            <i class="fas fa-cog me-1"></i>Admin
+                            <i class="fas fa-cog me-1"></i>Admin Panel
                         </a>
                     </li>
                     {% endif %}
                 </ul>
-                
+
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -114,23 +119,23 @@
     <!-- Footer -->
     <footer class="bg-light border-top py-4 mt-5">
         <div class="container text-center">
-            <p class="text-muted mb-0">&copy; 2025 Account Management System. All rights reserved.</p>
+            <p class="text-muted mb-0">&copy; 2025 ICL Account Management System. All rights reserved.</p>
         </div>
     </footer>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    
+
     <!-- DataTables JS -->
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    
+
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-    
+
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>
