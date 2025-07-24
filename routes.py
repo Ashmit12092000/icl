@@ -83,6 +83,13 @@ def logout():
 def dashboard():
     customers = Customer.query.filter_by(is_active=True).all()
     total_customers = len(customers)
+    total_outstanding = 0
+    active_loans = 0
+    for customer in customers:
+        balance = customer.get_current_balance()
+        total_outstanding += balance
+        if balance > 0:
+            active_loans += 1
 
     # Calculate total outstanding balance - Fixed NaN issue
     total_balance = Decimal('0')
@@ -100,7 +107,7 @@ def dashboard():
                            customers=customers,
                            total_customers=total_customers,
                            total_balance=total_balance,
-                           recent_transactions=recent_transactions)
+                           recent_transactions=recent_transactions,active_loans=active_loans)
 
 @app.route('/customer_master', methods=['GET', 'POST'])
 @data_entry_required
@@ -225,20 +232,177 @@ def edit_customer(customer_id):
 @app.route('/customer/<int:customer_id>/close_loan', methods=['POST'])
 @admin_required
 def close_loan(customer_id):
-    """Close a customer's loan"""
+    """Close a customer's loan manually (for admin)"""
     customer = Customer.query.get_or_404(customer_id)
 
     try:
+        # Check if loan is already closed
+        if customer.loan_closed:
+            flash(f'Loan for customer "{customer.name}" is already closed!', 'warning')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Get current balance to check if loan can be closed
+        current_balance = customer.get_current_balance()
+        
+        # Only allow closure if balance is approximately zero or negative (overpaid)
+        if current_balance > Decimal('10.00'):
+            flash(f'Cannot close loan with outstanding balance of {current_balance}. Balance must be ≤ ₹10.00 to close manually.', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Create loan closure transaction
+        closure_transaction = Transaction(
+            customer_id=customer_id,
+            date=date.today(),
+            amount_paid=None,
+            amount_repaid=None,
+            balance=Decimal('0'),  # Set balance to zero on closure
+            period_from=None,
+            period_to=None,
+            no_of_days=None,
+            int_rate=None,
+            int_amount=None,
+            tds_amount=None,
+            net_amount=None,
+            transaction_type='loan_closure',
+            created_by=current_user.id
+        )
+
+        db.session.add(closure_transaction)
+
+        # Mark loan as closed and clear overdue status
         customer.loan_closed = True
         customer.loan_closed_date = date.today()
+        customer.loan_overdue = False
+        customer.loan_overdue_date = None
         db.session.commit()
-        flash(f'Loan for customer "{customer.name}" has been closed successfully!', 'success')
+        
+        flash(f'Loan for customer "{customer.name}" has been manually closed successfully!', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error closing loan for customer "{customer.name}": {e}', 'error')
         app.logger.error(f"Error closing loan for customer {customer_id}: {e}")
 
     return redirect(url_for('customer_profile', customer_id=customer_id))
+
+@app.route('/customer/<int:customer_id>/extend_loan', methods=['POST'])
+@admin_required
+def extend_loan(customer_id):
+    """Extend a customer's loan (for admin)"""
+    customer = Customer.query.get_or_404(customer_id)
+
+    try:
+        # Check if loan is already closed
+        if customer.loan_closed:
+            flash(f'Cannot extend a closed loan for customer "{customer.name}".', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        new_end_date = datetime.strptime(request.form['new_end_date'], '%Y-%m-%d').date()
+        extension_reason = request.form.get('extension_reason', '')
+
+        # Validate new end date
+        if customer.icl_end_date and new_end_date <= customer.icl_end_date:
+            flash('New end date must be after the current ICL end date.', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        if new_end_date <= date.today():
+            flash('New end date must be in the future.', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Store original ICL end date if this is the first extension
+        if not customer.loan_extended:
+            customer.original_icl_end_date = customer.icl_end_date
+
+        # Update ICL end date and mark as extended
+        customer.icl_end_date = new_end_date
+        customer.loan_extended = True
+        customer.loan_overdue = False
+        customer.loan_overdue_date = None
+        
+        # Update extension reason
+        if extension_reason:
+            customer.icl_extension = extension_reason
+
+        db.session.commit()
+        
+        flash(f'Loan for customer "{customer.name}" has been extended to {new_end_date.strftime("%d-%m-%Y")} successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error extending loan for customer "{customer.name}": {e}', 'error')
+        app.logger.error(f"Error extending loan for customer {customer_id}: {e}")
+
+    return redirect(url_for('customer_profile', customer_id=customer_id))
+
+@app.route('/customer/<int:customer_id>/mark_overdue', methods=['POST'])
+@admin_required
+def mark_overdue(customer_id):
+    """Mark a customer's loan as overdue (for admin)"""
+    customer = Customer.query.get_or_404(customer_id)
+
+    try:
+        # Check if loan is already closed
+        if customer.loan_closed:
+            flash(f'Cannot mark a closed loan as overdue for customer "{customer.name}".', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Check if loan is already overdue
+        if customer.loan_overdue:
+            flash(f'Loan for customer "{customer.name}" is already marked as overdue.', 'warning')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Check if there's an outstanding balance
+        current_balance = customer.get_current_balance()
+        if current_balance <= Decimal('0'):
+            flash(f'Cannot mark loan as overdue with zero or negative balance.', 'error')
+            return redirect(url_for('customer_profile', customer_id=customer_id))
+
+        # Mark loan as overdue
+        customer.loan_overdue = True
+        customer.loan_overdue_date = date.today()
+        db.session.commit()
+        
+        flash(f'Loan for customer "{customer.name}" has been marked as overdue.', 'warning')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error marking loan as overdue for customer "{customer.name}": {e}', 'error')
+        app.logger.error(f"Error marking loan as overdue for customer {customer_id}: {e}")
+
+    return redirect(url_for('customer_profile', customer_id=customer_id))
+
+@app.route('/overdue_loans')
+@admin_required
+def overdue_loans():
+    """View all overdue loans"""
+    # Get loans that are past ICL end date with outstanding balance
+    past_due_customers = Customer.query.filter(
+        Customer.is_active == True,
+        Customer.loan_closed == False,
+        Customer.icl_end_date < date.today()
+    ).all()
+
+    # Filter customers with outstanding balance
+    overdue_customers = []
+    past_due_customers_list = []
+    
+    for customer in past_due_customers:
+        balance = customer.get_current_balance()
+        if balance > Decimal('0'):
+            if customer.loan_overdue:
+                overdue_customers.append({
+                    'customer': customer,
+                    'balance': balance,
+                    'days_overdue': (date.today() - customer.loan_overdue_date).days if customer.loan_overdue_date else 0
+                })
+            else:
+                days_past_due = (date.today() - customer.icl_end_date).days
+                past_due_customers_list.append({
+                    'customer': customer,
+                    'balance': balance,
+                    'days_past_due': days_past_due
+                })
+
+    return render_template('overdue_loans.html', 
+                         overdue_customers=overdue_customers,
+                         past_due_customers=past_due_customers_list)
 
 @app.route('/customer/<int:customer_id>/delete', methods=['POST'])
 @admin_required
@@ -297,11 +461,14 @@ def transactions(customer_id):
                 transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
                 return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
 
-            # Check if transaction date is beyond ICL end date
-            if customer.icl_end_date and transaction_date > customer.icl_end_date:
-                flash(f'Transaction date cannot be beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")})', 'error')
-                transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
-                return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
+            # For overdue loans, allow transactions but show warning
+            if customer.loan_overdue and transaction_date > customer.icl_end_date:
+                flash(f'Adding transaction to overdue loan. Loan was due on {customer.icl_end_date.strftime("%d-%m-%Y")}.', 'warning')
+
+            # For active loans, check if transaction date is beyond ICL end date
+            elif not customer.loan_overdue and customer.icl_end_date and transaction_date > customer.icl_end_date:
+                # Allow transactions beyond ICL end date but show warning
+                flash(f'Transaction date is beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")}). Interest will continue to accrue.', 'warning')
 
             # Only include transactions before this one to calculate correct principal
             previous_txns = Transaction.query.filter(
@@ -619,7 +786,7 @@ def transactions(customer_id):
                         # Repayment — interest on (previous balance + accumulated interest from previous quarters - repayment adjustments) - current repaid
                         principal_for_interest_calculation = current_balance_before_this_txn + accumulated_net_interest_from_previous_quarters - repayment_adjustment - amount_repaid
                     else:
-                        # Passive period — interest on (previous balance + accumulated```python
+                        
 
                         principal_for_interest_calculation = current_balance_before_this_txn + accumulated_net_interest_from_previous_quarters - repayment_adjustment
 
@@ -763,84 +930,120 @@ def transactions(customer_id):
             if (customer.icl_end_date and 
                 transaction_date == customer.icl_end_date and 
                 amount_repaid > Decimal('0')):
-                
-                # For ICL end date repayments, ensure the repayment transaction includes proper period and interest calculation
-                if period_from and period_to and no_of_days and no_of_days > 0:
-                    # Calculate the final interest on the period including the final period before repayment
-                    principal_for_final_interest = current_balance_before_this_txn
+
+                # Check if there's already a passive period transaction that ends on ICL end date
+                existing_icl_end_transaction = Transaction.query.filter(
+                    Transaction.customer_id == customer_id,
+                    Transaction.period_to == customer.icl_end_date,
+                    Transaction.transaction_type == 'passive'
+                ).first()
+
+                if existing_icl_end_transaction:
+                    # Update the existing passive period transaction to include the repayment
+                    logging.debug(f"Found existing passive period transaction {existing_icl_end_transaction.id} ending on ICL end date")
                     
-                    # Handle accumulated interest calculation based on interest type
-                    if customer.interest_type == 'compound' and customer.first_compounding_date:
-                        frequency_for_final = customer.compound_frequency if customer.compound_frequency else 'quarterly'
-                        final_period_start = _get_period_start_date(customer.icl_end_date, customer.icl_start_date, frequency_for_final)
-                        
-                        # Get accumulated net interest from transactions before this period starts
-                        previous_period_transactions = Transaction.query.filter(
-                            Transaction.customer_id == customer_id,
-                            Transaction.date < final_period_start
-                        ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
-                        
-                        accumulated_net_interest = Decimal('0')
-                        repayment_adjustment = Decimal('0')
-                        for prev_txn in previous_period_transactions:
-                            accumulated_net_interest += prev_txn.get_safe_net_amount()
-                            if prev_txn.transaction_type == 'repayment':
-                                repayment_adjustment += prev_txn.get_safe_net_amount()
-                        
-                        principal_for_final_interest = current_balance_before_this_txn + accumulated_net_interest - repayment_adjustment
-                    else:
-                        # For simple interest, only use the current balance before repayment
+                    # Update the existing transaction with repayment details
+                    existing_icl_end_transaction.amount_repaid = amount_repaid
+                    existing_icl_end_transaction.transaction_type = 'repayment'
+                    existing_icl_end_transaction.balance = new_balance  # Use calculated balance
+                    
+                    # Don't create a new transaction, use the existing one
+                    db.session.delete(transaction)  # Remove the new transaction we were about to create
+                    transaction = existing_icl_end_transaction  # Use the existing one instead
+                    
+                    logging.debug(f"Updated existing transaction {transaction.id} with repayment amount {amount_repaid}")
+                else:
+                    # No existing passive period transaction, proceed with normal ICL end date logic
+                    # For ICL end date repayments, ensure the repayment transaction includes proper period and interest calculation
+                    if period_from and period_to and no_of_days and no_of_days > 0:
+                        # Calculate the final interest on the period including the final period before repayment
                         principal_for_final_interest = current_balance_before_this_txn
-                    
-                    # Calculate interest and TDS for the final period
-                    int_amount = calculate_interest(principal_for_final_interest, customer.annual_rate, no_of_days)
-                    
-                    # Calculate TDS
-                    if customer.tds_applicable and int_amount:
-                        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
-                        tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
-                        net_amount = int_amount - tds_amount
-                    else:
-                        tds_amount = Decimal('0')
-                        net_amount = int_amount
-                    
-                    # Update the transaction with calculated values
-                    transaction.int_amount = int_amount
-                    transaction.tds_amount = tds_amount
-                    transaction.net_amount = net_amount
-                    
-                    logging.debug(f"ICL end date repayment: Calculated interest {int_amount}, TDS {tds_amount}, net {net_amount} using principal {principal_for_final_interest}")
-                
-                # Set the final balance after repayment to zero (loan closure)
-                transaction.balance = Decimal('0')
-                
-                # Create loan closure entry for ICL end date
-                final_entry = Transaction(
-                    customer_id=customer_id,
-                    date=customer.icl_end_date,
-                    amount_paid=None,
-                    amount_repaid=None,  # The repayment is already recorded in the main transaction
-                    balance=Decimal('0'),  # Set balance to zero on closure
-                    period_from=None,
-                    period_to=None,
-                    no_of_days=None,
-                    int_rate=None,
-                    int_amount=None,
-                    tds_amount=None,
-                    net_amount=None,
-                    transaction_type='loan_closure',
-                    created_by=current_user.id
-                )
-                
-                db.session.add(final_entry)
 
-                # Mark loan as closed
-                customer.loan_closed = True
-                customer.loan_closed_date = customer.icl_end_date
-                db.session.add(customer)
+                        # Handle accumulated interest calculation based on interest type
+                        if customer.interest_type == 'compound' and customer.first_compounding_date:
+                            frequency_for_final = customer.compound_frequency if customer.compound_frequency else 'quarterly'
+                            final_period_start = _get_period_start_date(customer.icl_end_date, customer.icl_start_date, frequency_for_final)
 
-                flash('Loan fully repaid and closed successfully!', 'success')
+                            # Get accumulated net interest from transactions before this period starts
+                            previous_period_transactions = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date < final_period_start
+                            ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+                            accumulated_net_interest = Decimal('0')
+                            repayment_adjustment = Decimal('0')
+                            for prev_txn in previous_period_transactions:
+                                accumulated_net_interest += prev_txn.get_safe_net_amount()
+                                if prev_txn.transaction_type == 'repayment':
+                                    repayment_adjustment += prev_txn.get_safe_net_amount()
+
+                            principal_for_final_interest = current_balance_before_this_txn + accumulated_net_interest - repayment_adjustment
+                        else:
+                            # For simple interest, only use the current balance before repayment
+                            principal_for_final_interest = current_balance_before_this_txn
+
+                        # Calculate interest and TDS for the final period
+                        int_amount = calculate_interest(principal_for_final_interest, customer.annual_rate, no_of_days)
+
+                        # Calculate TDS
+                        if customer.tds_applicable and int_amount:
+                            tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                            tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
+                            net_amount = int_amount - tds_amount
+                        else:
+                            tds_amount = Decimal('0')
+                            net_amount = int_amount
+
+                        # Update the transaction with calculated values
+                        transaction.int_amount = int_amount
+                        transaction.tds_amount = tds_amount
+                        transaction.net_amount = net_amount
+
+                        logging.debug(f"ICL end date repayment: Calculated interest {int_amount}, TDS {tds_amount}, net {net_amount} using principal {principal_for_final_interest}")
+
+                    # Update balance to calculated value
+                    transaction.balance = new_balance
+
+                # Check if balance is approximately zero (-10 to +10) for automatic closure
+                if abs(new_balance) <= Decimal('10.00'):
+                    # Create loan closure entry for ICL end date
+                    final_entry = Transaction(
+                        customer_id=customer_id,
+                        date=customer.icl_end_date,
+                        amount_paid=None,
+                        amount_repaid=None,  # The repayment is already recorded in the main transaction
+                        balance=Decimal('0'),  # Set balance to zero on closure
+                        period_from=None,
+                        period_to=None,
+                        no_of_days=None,
+                        int_rate=None,
+                        int_amount=None,
+                        tds_amount=None,
+                        net_amount=None,
+                        transaction_type='loan_closure',
+                        created_by=current_user.id
+                    )
+
+                    db.session.add(final_entry)
+
+                    # Mark loan as closed
+                    customer.loan_closed = True
+                    customer.loan_closed_date = customer.icl_end_date
+                    db.session.add(customer)
+
+                    flash('Loan automatically closed due to near-zero balance on ICL end date!', 'success')
+                else:
+                    flash(f'ICL end date repayment processed. Remaining balance: {new_balance}', 'info')
             else:
+                # Check for early full repayment (before ICL end date)
+                if (amount_repaid > Decimal('0') and 
+                    customer.icl_end_date and 
+                    transaction_date < customer.icl_end_date and 
+                    abs(new_balance) <= Decimal('10.00')):
+                    
+                    flash(f'Early full repayment detected! Balance is now {new_balance}. '
+                          f'Admin can manually close this loan from the customer profile page.', 'info')
+                
                 # Auto-update ICL end date to last transaction date if it's later
                 last_txn_date = customer.get_last_transaction_date()
                 if last_txn_date and (not customer.icl_end_date or last_txn_date > customer.icl_end_date):
@@ -1311,7 +1514,7 @@ def delete_transaction(transaction_id):
         db.session.delete(transaction) # Mark for deletion
         db.session.commit() # Commit deletion first
 
-        # After deletion, recalculate all transactions from the deleted transaction's date onwards.
+        # After deletion,# recalculate all transactions from the deleted transaction's date onwards.
         # This is CRITICAL for maintaining data integrity.
         if recalculate_customer_transactions(customer_id, start_date=transaction_date):
             db.session.commit() # Commit changes from recalculation
@@ -1476,20 +1679,68 @@ def recalculate_customer_transactions(customer_id, start_date=None):
             # Update balance - always start with principal movements
             new_transaction_balance = current_running_balance
 
-            # For compound interest, add net interest to balance only at quarter end
-            # CRITICAL: Do NOT add interest to balance during mid-quarter periods
-            if (customer.interest_type == 'compound' and 
-                customer.first_compounding_date and 
-                transaction.date >= customer.first_compounding_date and 
-                transaction.period_to and 
-                _is_quarter_end(transaction.period_to, customer.icl_start_date) and 
-                transaction.net_amount):
-                new_transaction_balance += transaction.net_amount
-                # Update running balance to include interest for next transaction
-                current_running_balance += transaction.net_amount
-                logging.debug(f"Quarter end: added net interest {transaction.net_amount} to balance")
+            # For compound interest customers, we need to show accumulated balance including compounded interest
+            if customer.interest_type == 'compound' and customer.first_compounding_date:
+                # For compound interest, calculate accumulated balance including all previous quarter-end interest
+                accumulated_interest_balance = Decimal('0')
+
+                # Get all previous transactions to calculate accumulated interest
+                previous_txns_for_balance = Transaction.query.filter(
+                    Transaction.customer_id == customer_id,
+                    Transaction.date < transaction.date
+                ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+
+                # Add net interest from all previous quarter-end transactions
+                for prev_txn in previous_txns_for_balance:
+                    if (prev_txn.date >= customer.first_compounding_date and 
+                        prev_txn.period_to and 
+                        _is_quarter_end(prev_txn.period_to, customer.icl_start_date) and 
+                        prev_txn.net_amount):
+                        accumulated_interest_balance += prev_txn.net_amount
+                        logging.debug(f"Added previous quarter-end interest {prev_txn.net_amount} to accumulated balance")
+
+                # For current transaction, add interest if it's a quarter-end
+                if (transaction.date >= customer.first_compounding_date and 
+                    transaction.period_to and 
+                    _is_quarter_end(transaction.period_to, customer.icl_start_date) and 
+                    transaction.net_amount):
+                    accumulated_interest_balance += transaction.net_amount
+                    # Update running balance to include interest for next transaction
+                    current_running_balance += transaction.net_amount
+                    logging.debug(f"Quarter end: added current transaction interest {transaction.net_amount} to balance")
+
+                # Apply repayment adjustment for compound interest customers
+                repayment_adjustment = Decimal('0')
+                icl_end_quarter_start = None
+                if customer.icl_end_date:
+                    icl_end_quarter_start = _get_quarter_start_date(customer.icl_end_date, customer.icl_start_date)
+
+                # Find quarters with repayment transactions (excluding ICL end quarter)
+                repayment_quarters = set()
+                all_txns_up_to_current = Transaction.query.filter(
+                    Transaction.customer_id == customer_id,
+                    Transaction.date <= transaction.date
+                ).all()
+
+                for txn in all_txns_up_to_current:
+                    if txn.transaction_type == 'repayment' and txn.period_to:
+                        txn_quarter_start = _get_quarter_start_date(txn.date, customer.icl_start_date)
+                        if icl_end_quarter_start is None or txn_quarter_start != icl_end_quarter_start:
+                            repayment_quarters.add(txn_quarter_start)
+
+                # Calculate repayment adjustment
+                for txn in all_txns_up_to_current:
+                    if txn.transaction_type == 'repayment':
+                        txn_quarter_start = _get_quarter_start_date(txn.date, customer.icl_start_date)
+                        if txn_quarter_start in repayment_quarters:
+                            repayment_adjustment += txn.get_safe_net_amount()
+
+                # Final accumulated balance for compound interest
+                new_transaction_balance = current_running_balance + accumulated_interest_balance - repayment_adjustment
+                logging.debug(f"Compound interest - Final balance: {current_running_balance} + {accumulated_interest_balance} - {repayment_adjustment} = {new_transaction_balance}")
             else:
-                logging.debug(f"Mid-quarter recalc: interest {transaction.net_amount} calculated but NOT added to principal balance")
+                # For simple interest or before first compounding date, just use principal balance
+                logging.debug(f"Simple interest or before compounding - Balance: {new_transaction_balance}")
 
             transaction.balance = new_transaction_balance.quantize(Decimal('0.01'))
 
@@ -1536,10 +1787,10 @@ def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterl
             fy_start_year = transaction_date.year
         else:  # January to March
             fy_start_year = transaction_date.year - 1
-        
+
         # Financial year starts on April 1st
         fy_start = date(fy_start_year, 4, 1)
-        
+
         # If transaction is before the first financial year that starts after ICL start
         if transaction_date < fy_start and icl_start_date < fy_start:
             # Use ICL start date for the first period
@@ -1623,7 +1874,7 @@ def _get_period_end_date(transaction_date, icl_start_date, frequency='quarterly'
     elif frequency == 'yearly':
         # For yearly compounding, periods end on March 31st of the financial year
         period_start = _get_period_start_date(transaction_date, icl_start_date, 'yearly')
-        
+
         if period_start == icl_start_date and icl_start_date.month != 4:
             # For the first partial period, end at March 31st of the current financial year
             if transaction_date.month >= 4:  # April to December
@@ -1692,7 +1943,7 @@ def _is_period_end(date_to_check, icl_start_date, frequency='quarterly'):
     if frequency == 'yearly':
         # For yearly compounding, period ends are always March 31st
         return date_to_check.month == 3 and date_to_check.day == 31
-    
+
     # Calculate expected period end for this date
     expected_period_end = _get_period_end_date(date_to_check, icl_start_date, frequency)
 
@@ -1791,7 +2042,7 @@ def _get_all_missing_periods_until_transaction(customer_id, customer, transactio
                     Transaction.period_from <= period_end,
                     Transaction.period_to >= period_start
                 ).first()
-                
+
                 if not overlapping_txn:
                     missing_periods.append((period_start, period_end))
                     logging.debug(f"Found missing {frequency_to_use} period: {period_start} to {period_end}")
@@ -1816,7 +2067,7 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
         Transaction.period_from == period_start,
         Transaction.period_to == period_end
     ).first()
-    
+
     if existing_period_txn:
         logging.debug(f"Transaction already exists for period {period_start} to {period_end}, skipping passive period creation")
         return existing_period_txn
@@ -1832,7 +2083,7 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
 
     current_balance_before_passive = Decimal('0')
     frequency_to_use = customer.compound_frequency if customer.compound_frequency else 'quarterly'
-    
+
     for txn in previous_txns:
         current_balance_before_passive += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
         # For compound interest, add net interest at period ends
