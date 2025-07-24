@@ -1,0 +1,272 @@
+
+{% extends "base.html" %}
+
+{% block title %}Overdue Loans - Account Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="fas fa-exclamation-triangle me-2 text-danger"></i>Overdue Loan Management</h1>
+            <p class="text-muted">Manage loans that are past their ICL end date</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Overdue Loans</h5>
+                            <h2 class="mb-0">{{ overdue_customers|length }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Past Due (Not Marked)</h5>
+                            <h2 class="mb-0">{{ past_due_customers|length }}</h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h5 class="card-title">Total Outstanding</h5>
+                            <h2 class="mb-0">
+                                {% set total_overdue = (overdue_customers + past_due_customers) | sum(attribute='balance') %}
+                                {{ total_overdue | safe_currency }}
+                            </h2>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-rupee-sign fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overdue Loans Table -->
+    {% if overdue_customers %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Marked Overdue Loans</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="overdueLoanTable">
+                            <thead>
+                                <tr>
+                                    <th>ICL No</th>
+                                    <th>Customer Name</th>
+                                    <th>Original ICL End</th>
+                                    <th>Days Overdue</th>
+                                    <th>Outstanding Balance</th>
+                                    <th>Overdue Since</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in overdue_customers %}
+                                <tr>
+                                    <td>{{ item.customer.icl_no }}</td>
+                                    <td>
+                                        <a href="{{ url_for('customer_profile', customer_id=item.customer.id) }}" class="text-decoration-none">
+                                            {{ item.customer.name }}
+                                        </a>
+                                    </td>
+                                    <td>{{ item.customer.original_icl_end_date.strftime('%d-%m-%Y') if item.customer.original_icl_end_date else item.customer.icl_end_date.strftime('%d-%m-%Y') }}</td>
+                                    <td>
+                                        <span class="badge bg-danger">{{ item.days_overdue }} days</span>
+                                    </td>
+                                    <td class="text-end">{{ item.balance | safe_currency }}</td>
+                                    <td>{{ item.customer.loan_overdue_date.strftime('%d-%m-%Y') if item.customer.loan_overdue_date else '-' }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('customer_profile', customer_id=item.customer.id) }}" class="btn btn-outline-primary">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                            <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#extendLoanModal{{ item.customer.id }}">
+                                                <i class="fas fa-calendar-plus"></i> Extend
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Past Due Loans Table -->
+    {% if past_due_customers %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5><i class="fas fa-clock me-2"></i>Past Due Loans (Awaiting Action)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="pastDueLoanTable">
+                            <thead>
+                                <tr>
+                                    <th>ICL No</th>
+                                    <th>Customer Name</th>
+                                    <th>ICL End Date</th>
+                                    <th>Days Past Due</th>
+                                    <th>Outstanding Balance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in past_due_customers %}
+                                <tr>
+                                    <td>{{ item.customer.icl_no }}</td>
+                                    <td>
+                                        <a href="{{ url_for('customer_profile', customer_id=item.customer.id) }}" class="text-decoration-none">
+                                            {{ item.customer.name }}
+                                        </a>
+                                    </td>
+                                    <td>{{ item.customer.icl_end_date.strftime('%d-%m-%Y') }}</td>
+                                    <td>
+                                        <span class="badge bg-warning text-dark">{{ item.days_past_due }} days</span>
+                                    </td>
+                                    <td class="text-end">{{ item.balance | safe_currency }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('customer_profile', customer_id=item.customer.id) }}" class="btn btn-outline-primary">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                            <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#extendLoanModal{{ item.customer.id }}">
+                                                <i class="fas fa-calendar-plus"></i> Extend
+                                            </button>
+                                            <form method="POST" action="{{ url_for('mark_overdue', customer_id=item.customer.id) }}" class="d-inline">
+                                                <button type="submit" class="btn btn-outline-danger" 
+                                                        onclick="return confirm('Mark this loan as overdue?')">
+                                                    <i class="fas fa-exclamation-triangle"></i> Mark Overdue
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Extension Modals -->
+    {% for item in (overdue_customers + past_due_customers) %}
+    <div class="modal fade" id="extendLoanModal{{ item.customer.id }}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="{{ url_for('extend_loan', customer_id=item.customer.id) }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Extend Loan for {{ item.customer.name }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="new_end_date{{ item.customer.id }}" class="form-label">New ICL End Date</label>
+                            <input type="date" class="form-control" id="new_end_date{{ item.customer.id }}" name="new_end_date" required >
+                            <div class="form-text">
+                                Current: {{ item.customer.icl_end_date.strftime('%d-%m-%Y') }}
+                                {% if item.customer.original_icl_end_date %}
+                                | Original: {{ item.customer.original_icl_end_date.strftime('%d-%m-%Y') }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="extension_reason{{ item.customer.id }}" class="form-label">Extension Reason</label>
+                            <textarea class="form-control" id="extension_reason{{ item.customer.id }}" name="extension_reason" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Extend Loan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not overdue_customers and not past_due_customers %}
+    <div class="row">
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h4 class="text-success">No Overdue Loans</h4>
+                <p class="text-muted">All loans are current or have been properly managed.</p>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Back Button -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+$(document).ready(function() {
+    // Initialize DataTables
+    if ($('#overdueLoanTable').length) {
+        $('#overdueLoanTable').DataTable({
+            order: [[3, 'desc']], // Sort by days overdue
+            pageLength: 25,
+            responsive: true
+        });
+    }
+    
+    if ($('#pastDueLoanTable').length) {
+        $('#pastDueLoanTable').DataTable({
+            order: [[3, 'desc']], // Sort by days past due
+            pageLength: 25,
+            responsive: true
+        });
+    }
+});
+</script>
+{% endblock %}
