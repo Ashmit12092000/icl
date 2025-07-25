@@ -287,122 +287,271 @@ def close_loan(customer_id):
 @app.route('/customer/<int:customer_id>/extend_loan', methods=['POST'])
 @admin_required
 def extend_loan(customer_id):
-    """Extend a customer's loan (for admin)"""
+    """Extend a customer's loan with comprehensive validation and logging"""
     customer = Customer.query.get_or_404(customer_id)
 
     try:
-        # Check if loan is already closed
+        # Comprehensive validation checks
         if customer.loan_closed:
-            flash(f'Cannot extend a closed loan for customer "{customer.name}".', 'error')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+            flash(f'Cannot extend a closed loan for customer "{customer.name}". Loan was closed on {customer.loan_closed_date.strftime("%d-%m-%Y") if customer.loan_closed_date else "unknown date"}.', 'error')
+            return redirect(url_for('overdue_loans'))
+
+        # Check if customer has outstanding balance
+        current_balance = customer.get_current_balance()
+        if current_balance <= Decimal('0'):
+            flash(f'Cannot extend loan for customer "{customer.name}" with zero or negative balance (₹{current_balance}).', 'error')
+            return redirect(url_for('overdue_loans'))
 
         new_end_date = datetime.strptime(request.form['new_end_date'], '%Y-%m-%d').date()
-        extension_reason = request.form.get('extension_reason', '')
+        extension_reason = request.form.get('extension_reason', '').strip()
 
-        # Validate new end date
-        if customer.icl_end_date and new_end_date <= customer.icl_end_date:
-            flash('New end date must be after the current ICL end date.', 'error')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+        # Enhanced validation
+        if not extension_reason:
+            flash('Extension reason is required and cannot be empty.', 'error')
+            return redirect(url_for('overdue_loans'))
 
-        if new_end_date <= date.today():
-            flash('New end date must be in the future.', 'error')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+        if len(extension_reason) < 10:
+            flash('Extension reason must be at least 10 characters long for proper documentation.', 'error')
+            return redirect(url_for('overdue_loans'))
+
+        # Date validation with edge cases
+        today = date.today()
+        if customer.icl_end_date:
+            if new_end_date <= customer.icl_end_date:
+                flash(f'New end date ({new_end_date.strftime("%d-%m-%Y")}) must be after the current ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")}).', 'error')
+                return redirect(url_for('overdue_loans'))
+        
+        if new_end_date <= today:
+            flash(f'New end date ({new_end_date.strftime("%d-%m-%Y")}) must be in the future (after {today.strftime("%d-%m-%Y")}).', 'error')
+            return redirect(url_for('overdue_loans'))
+
+        # Check for reasonable extension period (not more than 5 years)
+        max_extension_date = today + timedelta(days=5*365)  # 5 years
+        if new_end_date > max_extension_date:
+            flash(f'Extension period too long. Maximum allowed extension date is {max_extension_date.strftime("%d-%m-%Y")}.', 'warning')
+            return redirect(url_for('overdue_loans'))
 
         # Store original ICL end date if this is the first extension
-        if not customer.loan_extended:
+        if not customer.loan_extended and customer.icl_end_date:
             customer.original_icl_end_date = customer.icl_end_date
 
-        # Update ICL end date and mark as extended
+        # Calculate extension period for logging
+        old_end_date = customer.icl_end_date or customer.icl_start_date
+        extension_days = (new_end_date - old_end_date).days
+
+        # Update loan details
         customer.icl_end_date = new_end_date
         customer.loan_extended = True
         customer.loan_overdue = False
         customer.loan_overdue_date = None
 
-        # Update extension reason
-        if extension_reason:
-            customer.icl_extension = extension_reason
+        # Update extension reason with timestamp and user info
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user_info = f"Extended by {current_user.username} on {timestamp}"
+        full_reason = f"{extension_reason}\n\n[{user_info}]"
+        
+        customer.icl_extension = full_reason
+
+        # Create audit log entry (you might want to add an audit table)
+        logging.info(f"Loan extension: Customer {customer.name} (ID: {customer_id}) extended by {extension_days} days. New end date: {new_end_date}. Reason: {extension_reason}")
 
         db.session.commit()
 
-        flash(f'Loan for customer "{customer.name}" has been extended to {new_end_date.strftime("%d-%m-%Y")} successfully!', 'success')
+        # Success message with details
+        flash(f'✅ Loan successfully extended for "{customer.name}"!\n'
+              f'📅 New end date: {new_end_date.strftime("%d-%m-%Y")}\n'
+              f'⏱️ Extension period: {extension_days} days\n'
+              f'💰 Outstanding balance: ₹{current_balance:,.2f}', 'success')
+
+    except ValueError as ve:
+        db.session.rollback()
+        flash(f'Invalid date format provided. Please use a valid date.', 'error')
+        app.logger.error(f"Date validation error for customer {customer_id}: {ve}")
     except Exception as e:
         db.session.rollback()
-        flash(f'Error extending loan for customer "{customer.name}": {e}', 'error')
-        app.logger.error(f"Error extending loan for customer {customer_id}: {e}")
+        flash(f'Unexpected error extending loan for customer "{customer.name}": {str(e)}', 'error')
+        app.logger.error(f"Error extending loan for customer {customer_id}: {e}", exc_info=True)
 
-    return redirect(url_for('customer_profile', customer_id=customer_id))
+    return redirect(url_for('overdue_loans'))
 
 @app.route('/customer/<int:customer_id>/mark_overdue', methods=['POST'])
 @admin_required
 def mark_overdue(customer_id):
-    """Mark a customer's loan as overdue (for admin)"""
+    """Mark a customer's loan as overdue with comprehensive validation and audit trail"""
     customer = Customer.query.get_or_404(customer_id)
+    today = date.today()
 
     try:
-        # Check if loan is already closed
+        # Comprehensive validation checks
         if customer.loan_closed:
-            flash(f'Cannot mark a closed loan as overdue for customer "{customer.name}".', 'error')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+            flash(f'❌ Cannot mark a closed loan as overdue for customer "{customer.name}". '
+                  f'Loan was closed on {customer.loan_closed_date.strftime("%d-%m-%Y") if customer.loan_closed_date else "unknown date"}.', 'error')
+            return redirect(url_for('overdue_loans'))
 
-        # Check if loan is already overdue
         if customer.loan_overdue:
-            flash(f'Loan for customer "{customer.name}" is already marked as overdue.', 'warning')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+            days_already_overdue = (today - customer.loan_overdue_date).days if customer.loan_overdue_date else 0
+            flash(f'⚠️ Loan for customer "{customer.name}" is already marked as overdue '
+                  f'({days_already_overdue} days since {customer.loan_overdue_date.strftime("%d-%m-%Y") if customer.loan_overdue_date else "unknown date"}).', 'warning')
+            return redirect(url_for('overdue_loans'))
 
-        # Check if there's an outstanding balance
+        # Check outstanding balance
         current_balance = customer.get_current_balance()
         if current_balance <= Decimal('0'):
-            flash(f'Cannot mark loan as overdue with zero or negative balance.', 'error')
-            return redirect(url_for('customer_profile', customer_id=customer_id))
+            flash(f'❌ Cannot mark loan as overdue for customer "{customer.name}" with balance of ₹{current_balance}. '
+                  f'Only loans with positive outstanding balance can be marked overdue.', 'error')
+            return redirect(url_for('overdue_loans'))
 
-        # Mark loan as overdue
+        # Check if loan is actually past due date
+        if not customer.icl_end_date:
+            flash(f'⚠️ Warning: Customer "{customer.name}" has no ICL end date set. '
+                  f'Please verify loan terms before marking as overdue.', 'warning')
+        elif customer.icl_end_date >= today:
+            days_until_due = (customer.icl_end_date - today).days
+            flash(f'⚠️ Warning: Loan for customer "{customer.name}" is not yet due. '
+                  f'ICL end date is {customer.icl_end_date.strftime("%d-%m-%Y")} ({days_until_due} days from now). '
+                  f'Are you sure you want to mark it as overdue?', 'warning')
+
+        # Calculate days past due for audit log
+        days_past_due = 0
+        if customer.icl_end_date and today > customer.icl_end_date:
+            days_past_due = (today - customer.icl_end_date).days
+
+        # Mark loan as overdue with proper audit trail
         customer.loan_overdue = True
-        customer.loan_overdue_date = date.today()
+        customer.loan_overdue_date = today
+
+        # Create detailed audit log
+        audit_info = {
+            'customer_id': customer_id,
+            'customer_name': customer.name,
+            'icl_no': customer.icl_no,
+            'outstanding_balance': float(current_balance),
+            'icl_end_date': customer.icl_end_date.strftime('%Y-%m-%d') if customer.icl_end_date else None,
+            'days_past_due': days_past_due,
+            'marked_overdue_date': today.strftime('%Y-%m-%d'),
+            'marked_by_user': current_user.username,
+            'marked_by_user_id': current_user.id
+        }
+
+        logging.warning(f"LOAN MARKED OVERDUE: {audit_info}")
+
+        # Calculate penalty implications
+        daily_interest = _calculate_daily_interest(current_balance, customer.annual_rate)
+        monthly_penalty = daily_interest * 30
+
         db.session.commit()
 
-        flash(f'Loan for customer "{customer.name}" has been marked as overdue.', 'warning')
+        # Comprehensive success message
+        flash(f'🚨 Loan marked as overdue for customer "{customer.name}"!\n'
+              f'📋 ICL No: {customer.icl_no}\n'
+              f'💰 Outstanding: ₹{current_balance:,.2f}\n'
+              f'📅 Days Past Due: {days_past_due} days\n'
+              f'💸 Daily Interest: ₹{daily_interest:,.2f}\n'
+              f'⚠️ Monthly Penalty: ≈₹{monthly_penalty:,.2f}\n'
+              f'👤 Marked by: {current_user.username}', 'warning')
+
+        # Log successful operation
+        logging.info(f"Loan successfully marked overdue for customer {customer_id} by user {current_user.username}")
+
     except Exception as e:
         db.session.rollback()
-        flash(f'Error marking loan as overdue for customer "{customer.name}": {e}', 'error')
-        app.logger.error(f"Error marking loan as overdue for customer {customer_id}: {e}")
+        error_msg = f'Unexpected error marking loan as overdue for customer "{customer.name}": {str(e)}'
+        flash(f'❌ {error_msg}', 'error')
+        app.logger.error(f"Error marking loan as overdue for customer {customer_id}: {e}", exc_info=True)
 
-    return redirect(url_for('customer_profile', customer_id=customer_id))
+    return redirect(url_for('overdue_loans'))
 
 @app.route('/overdue_loans')
 @admin_required
 def overdue_loans():
-    """View all overdue loans"""
-    # Get loans that are past ICL end date with outstanding balance
-    past_due_customers = Customer.query.filter(
+    """View all overdue loans with comprehensive analysis"""
+    today = date.today()
+    
+    # Get all active customers with loans
+    all_customers = Customer.query.filter(
         Customer.is_active == True,
-        Customer.loan_closed == False,
-        Customer.icl_end_date < date.today()
+        Customer.loan_closed == False
     ).all()
 
-    # Filter customers with outstanding balance
+    # Categorize customers based on their loan status
     overdue_customers = []
     past_due_customers_list = []
-
-    for customer in past_due_customers:
+    
+    for customer in all_customers:
         balance = customer.get_current_balance()
+        
+        # Only process customers with outstanding balance
         if balance > Decimal('0'):
+            # Check if loan is already marked as overdue
             if customer.loan_overdue:
+                days_overdue = (today - customer.loan_overdue_date).days if customer.loan_overdue_date else 0
+                # Ensure minimum 1 day overdue for display consistency
+                days_overdue = max(1, days_overdue)
+                
                 overdue_customers.append({
                     'customer': customer,
                     'balance': balance,
-                    'days_overdue': (date.today() - customer.loan_overdue_date).days if customer.loan_overdue_date else 0
+                    'days_overdue': days_overdue,
+                    'priority': _calculate_priority(days_overdue, balance),
+                    'daily_interest': _calculate_daily_interest(balance, customer.annual_rate),
+                    'accrued_penalty': _calculate_accrued_penalty(balance, customer.annual_rate, days_overdue)
                 })
-            else:
-                days_past_due = (date.today() - customer.icl_end_date).days
+            
+            # Check if loan is past ICL end date but not marked overdue
+            elif customer.icl_end_date and today > customer.icl_end_date:
+                days_past_due = (today - customer.icl_end_date).days
+                
+                # Handle edge case where ICL end date is today (same day)
+                if days_past_due == 0:
+                    days_past_due = 1
+                
                 past_due_customers_list.append({
                     'customer': customer,
                     'balance': balance,
-                    'days_past_due': days_past_due
+                    'days_past_due': days_past_due,
+                    'risk_level': _calculate_risk_level(days_past_due, balance),
+                    'daily_interest': _calculate_daily_interest(balance, customer.annual_rate),
+                    'potential_loss': _calculate_potential_loss(balance, customer.annual_rate, days_past_due)
                 })
+            
+            # Edge case: ICL end date is null but customer has balance (data integrity issue)
+            elif not customer.icl_end_date and balance > Decimal('0'):
+                # Calculate based on last transaction date or ICL start date
+                reference_date = customer.get_last_transaction_date() or customer.icl_start_date
+                if reference_date and (today - reference_date).days > 365:  # Assume 1 year default term
+                    days_past_due = (today - reference_date).days - 365
+                    
+                    past_due_customers_list.append({
+                        'customer': customer,
+                        'balance': balance,
+                        'days_past_due': days_past_due,
+                        'risk_level': 'data_issue',
+                        'daily_interest': _calculate_daily_interest(balance, customer.annual_rate),
+                        'potential_loss': _calculate_potential_loss(balance, customer.annual_rate, days_past_due),
+                        'data_issue': True
+                    })
+
+    # Sort by priority/risk level
+    overdue_customers.sort(key=lambda x: (x['priority'], x['days_overdue']), reverse=True)
+    past_due_customers_list.sort(key=lambda x: (x.get('risk_level') == 'critical', x['days_past_due']), reverse=True)
+
+    # Calculate summary statistics
+    total_overdue_amount = sum(item['balance'] for item in overdue_customers)
+    total_past_due_amount = sum(item['balance'] for item in past_due_customers_list)
+    critical_cases = sum(1 for item in overdue_customers if item['days_overdue'] > 90)
+    high_risk_cases = sum(1 for item in past_due_customers_list if item['days_past_due'] > 30)
 
     return render_template('overdue_loans.html', 
                          overdue_customers=overdue_customers,
-                         past_due_customers=past_due_customers_list)
+                         past_due_customers=past_due_customers_list,
+                         timedelta=timedelta,
+                         summary_stats={
+                             'total_overdue_amount': total_overdue_amount,
+                             'total_past_due_amount': total_past_due_amount,
+                             'critical_cases': critical_cases,
+                             'high_risk_cases': high_risk_cases,
+                             'total_cases': len(overdue_customers) + len(past_due_customers_list)
+                         })
 
 @app.route('/customer/<int:customer_id>/delete', methods=['POST'])
 @admin_required
@@ -844,25 +993,26 @@ def transactions(customer_id):
                 # Calculate balance after repayment for post-payment period
                 balance_after_repayment = current_balance_before_this_txn - amount_repaid
 
-                # For compound interest, include accumulated net interest from previous quarters only
+                # For compound interest, include accumulated net interest from previous periods only
                 if (customer.interest_type == 'compound' and 
                     customer.first_compounding_date and 
                     post_payment_start >= customer.first_compounding_date):
 
-                    # Get accumulated net interest from transactions before this quarter starts
-                    previous_quarter_transactions = Transaction.query.filter(
+                    # Get the period start date for this transaction using customer's frequency
+                    frequency_for_post_payment = customer.compound_frequency if customer.compound_frequency else 'quarterly'
+                    period_start_for_post_payment = _get_period_start_date(post_payment_start, customer.icl_start_date, frequency_for_post_payment)
+
+                    # Get accumulated net interest from transactions before this period starts
+                    previous_period_transactions = Transaction.query.filter(
                         Transaction.customer_id == customer_id,
-                        Transaction.date < quarter_start
+                        Transaction.date < period_start_for_post_payment
                     ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
-                    accumulated_net_interest_from_previous_quarters = Decimal('0')
-                    repayment_adjustment = Decimal('0')
-                    for prev_txn in previous_quarter_transactions:
-                        accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
-                        if prev_txn.transaction_type == 'repayment':
-                            repayment_adjustment += prev_txn.get_safe_net_amount()
+                    accumulated_net_interest_from_previous_periods = Decimal('0')
+                    for prev_txn in previous_period_transactions:
+                        accumulated_net_interest_from_previous_periods += prev_txn.get_safe_net_amount()
 
-                    principal_for_post_payment = balance_after_repayment + accumulated_net_interest_from_previous_quarters - repayment_adjustment
+                    principal_for_post_payment = balance_after_repayment + accumulated_net_interest_from_previous_periods
                 else:
                     principal_for_post_payment = balance_after_repayment
 
@@ -962,13 +1112,10 @@ def transactions(customer_id):
                             ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
                             accumulated_net_interest = Decimal('0')
-                            repayment_adjustment = Decimal('0')
                             for prev_txn in previous_period_transactions:
                                 accumulated_net_interest += prev_txn.get_safe_net_amount()
-                                if prev_txn.transaction_type == 'repayment':
-                                    repayment_adjustment += prev_txn.get_safe_net_amount()
 
-                            principal_for_final_interest = current_balance_before_this_txn + accumulated_net_interest - repayment_adjustment
+                            principal_for_final_interest = current_balance_before_this_txn + accumulated_net_interest
                         else:
                             # For simple interest, only use the current balance before repayment
                             principal_for_final_interest = current_balance_before_this_txn
@@ -2077,6 +2224,50 @@ def _create_passive_period_transaction(customer_id, customer, period_start, peri
     logging.debug(f"Created passive period transaction: {period_start} to {period_end}, interest: {int_amount}")
 
     return passive_transaction
+
+def _calculate_priority(days_overdue, balance):
+    """Calculate priority level for overdue loans"""
+    if days_overdue > 90:
+        return 'critical'
+    elif days_overdue > 30:
+        return 'high'
+    elif days_overdue > 7:
+        return 'medium'
+    else:
+        return 'low'
+
+def _calculate_risk_level(days_past_due, balance):
+    """Calculate risk level for past due loans"""
+    if days_past_due > 90:
+        return 'critical'
+    elif days_past_due > 30:
+        return 'high'
+    elif days_past_due > 7:
+        return 'medium'
+    else:
+        return 'low'
+
+def _calculate_daily_interest(balance, annual_rate):
+    """Calculate daily interest amount"""
+    if not balance or not annual_rate:
+        return Decimal('0')
+    return (balance * annual_rate / Decimal('100') / Decimal('365')).quantize(Decimal('0.01'))
+
+def _calculate_accrued_penalty(balance, annual_rate, days_overdue):
+    """Calculate accrued penalty interest for overdue loans"""
+    if not balance or not annual_rate or not days_overdue:
+        return Decimal('0')
+    daily_interest = _calculate_daily_interest(balance, annual_rate)
+    # Apply penalty rate (e.g., 2% additional penalty)
+    penalty_rate = Decimal('1.02')  # 2% penalty
+    return (daily_interest * penalty_rate * days_overdue).quantize(Decimal('0.01'))
+
+def _calculate_potential_loss(balance, annual_rate, days_past_due):
+    """Calculate potential loss for past due loans"""
+    if not balance or not annual_rate or not days_past_due:
+        return Decimal('0')
+    daily_interest = _calculate_daily_interest(balance, annual_rate)
+    return (daily_interest * days_past_due).quantize(Decimal('0.01'))
 
 def _group_transactions_by_period(customer, transactions, period_type):
     """
