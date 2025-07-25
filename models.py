@@ -90,64 +90,9 @@ class Customer(db.Model):
 
         calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
 
-        # For compound interest customers only, subtract net amounts from repayment transactions after repayment quarters
-        # BUT exclude ICL end date quarter from adjustment
-        total_repayment_net_amount = Decimal('0')
-        if self.interest_type == 'compound':
-            # Find periods that contain repayment transactions (based on customer's frequency)
-            frequency_to_use = self.compound_frequency if self.compound_frequency else 'quarterly'
-            repayment_periods = set()
-            icl_end_period_start = None
-            
-            # Identify ICL end date period if ICL end date exists
-            if self.icl_end_date and self.icl_start_date:
-                try:
-                    from routes import _get_period_start_date
-                    icl_end_period_start = _get_period_start_date(self.icl_end_date, self.icl_start_date, frequency_to_use)
-                    logging.debug(f"  ICL end date period starts: {icl_end_period_start}")
-                except ImportError:
-                    icl_end_period_start = None
-            
-            for t in self.transactions:
-                if t.transaction_type == 'repayment' and t.period_to:
-                    # Get the period start for this repayment transaction
-                    period_start = None
-                    if self.icl_start_date:
-                        try:
-                            from routes import _get_period_start_date
-                            period_start = _get_period_start_date(t.date, self.icl_start_date, frequency_to_use)
-                            
-                            # Only add to repayment periods if it's NOT the ICL end date period
-                            if icl_end_period_start is None or period_start != icl_end_period_start:
-                                repayment_periods.add(period_start)
-                                logging.debug(f"  Added repayment period: {period_start} (not ICL end period)")
-                            else:
-                                logging.debug(f"  Skipping repayment adjustment for ICL end date period: {period_start}")
-                        except ImportError:
-                            pass
+        # Repayment adjustment logic removed as requested
 
-            # Only apply adjustment for transactions after repayment periods (excluding ICL end period)
-            for t in self.transactions:
-                if t.transaction_type == 'repayment':
-                    # Check if this transaction's period has been identified as a repayment period
-                    if self.icl_start_date:
-                        try:
-                            from routes import _get_period_start_date
-                            txn_period_start = _get_period_start_date(t.date, self.icl_start_date, frequency_to_use)
-                            if txn_period_start in repayment_periods:
-                                repayment_net_amount = t.get_safe_net_amount()
-                                total_repayment_net_amount += repayment_net_amount
-                                logging.debug(f"  Found repayment transaction {t.id} with net amount: {repayment_net_amount} in repayment {frequency_to_use} period")
-                        except ImportError:
-                            pass
-
-            # Subtract repayment net amounts from calculated balance for compound interest customers only
-            if total_repayment_net_amount > Decimal('0'):
-                adjusted_balance = calculated_balance - total_repayment_net_amount
-                logging.debug(f"  Compound interest - Adjusted balance: {calculated_balance} - {total_repayment_net_amount} = {adjusted_balance}")
-                calculated_balance = adjusted_balance
-
-        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, repayment_adjustment={total_repayment_net_amount if self.interest_type == 'compound' else 'N/A'}, final_calculated_balance={calculated_balance}")
+        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, final_calculated_balance={calculated_balance}")
         logging.debug(f"FINAL BALANCE RETURNED: {calculated_balance}")
         return calculated_balance
 
