@@ -92,15 +92,21 @@
                         <dt class="col-sm-4">End Date:</dt>
                         <dd class="col-sm-8">{{ customer.icl_end_date.strftime('%d-%m-%Y') if customer.icl_end_date else 'Not set' }}</dd>
 
-                        <dt class="col-sm-4">Effective End Date:</dt>
+                        <dt class="col-sm-4">ICL End Date:</dt>
                         <dd class="col-sm-8">
-                            {% if customer.get_effective_end_date() %}
-                                <span class="badge bg-warning text-dark">{{ customer.get_effective_end_date().strftime('%d-%m-%Y') }}</span>
-                                {% if customer.get_last_transaction_date() and customer.get_last_transaction_date() == customer.get_effective_end_date() %}
-                                    <small class="text-muted">({{ customer.get_last_transaction_date().strftime('%d-%m-%Y') }})</small>
-                                {% endif %}
+                            {% if customer.icl_end_date %}
+                                <span class="badge bg-warning text-dark">{{ customer.icl_end_date.strftime('%d-%m-%Y') }}</span>
                             {% else %}
-                                <span class="text-muted">Not determined</span>
+                                <span class="text-muted">Not set</span>
+                            {% endif %}
+                        </dd>
+
+                        <dt class="col-sm-4">Last Transaction:</dt>
+                        <dd class="col-sm-8">
+                            {% if customer.get_last_transaction_date() %}
+                                <span class="text-info">{{ customer.get_last_transaction_date().strftime('%d-%m-%Y') }}</span>
+                            {% else %}
+                                <span class="text-muted">No transactions</span>
                             {% endif %}
                         </dd>
 
