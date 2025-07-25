@@ -90,8 +90,6 @@ class Customer(db.Model):
 
         calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
 
-        # Repayment adjustment logic removed as requested
-
         logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, final_calculated_balance={calculated_balance}")
         logging.debug(f"FINAL BALANCE RETURNED: {calculated_balance}")
         return calculated_balance
