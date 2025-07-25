@@ -459,4 +459,3 @@ def get_period_report(start_date, end_date):
     workbook.save(output)
     output.seek(0)
     return output
-
