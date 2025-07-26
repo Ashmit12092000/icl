@@ -1,1 +1,6 @@
 currently in yearly compunding it is not generating the rest period transaction automatically . suppose if user icl start date is 01/12/2024 and icl end date is 30/06/2025 . so if calculate yearly end date according to icl start date but on FY period (March 31 )it should split on that to display the FY summary . for ex; if a deposit made of 20/12/2025 , its year end date should be calculated from icl start date . but 31 march is standard FY ends so split the transactions from 20/12/2024 to 31/03/2025 and automatcially create rest of the remainng period transaction , sincle icl end date of this cutomer is 30/06/2025 so it should calculate from 01/04/2025 to 30/06/2025. suppose aonther deposite happend on 16/01/2025 . then the transaction split will be like this . 20/12/2024 to 15/01/2025 , and 16/01/2025 to 31/03/2025 . and then rest period calculation on new priniciple .
+
+
+
+
+Create seperate methods for yearly compunding calculation to avoid conflicts error , Enhance my yearly compounding logic to automatically generate a passive interest transaction after each Financial Year ends (March 31), continuing from April 1 up to the ICL end date, only if the ICL end date goes beyond March 31 and no new payment/repaid transactions exist in the next FY yet. This ensures full interest accrual up to the ICL end date
