@@ -610,6 +610,13 @@ def transactions(customer_id):
                 transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
                 return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
 
+            # Validate transaction date against ICL end date for manual passive transactions
+            is_manual_passive = (amount_paid == Decimal('0') and amount_repaid == Decimal('0'))
+            if is_manual_passive and customer.icl_end_date and transaction_date > customer.icl_end_date:
+                flash(f'Manual passive transaction date cannot be beyond ICL end date ({customer.icl_end_date.strftime("%d-%m-%Y")}). Please select a date on or before the ICL end date.', 'error')
+                transactions = Transaction.query.filter_by(customer_id=customer_id).order_by(Transaction.date.desc()).all()
+                return render_template('transactions.html', customer=customer, transactions=transactions, default_period_from=default_period_from)
+
             # For overdue loans, allow transactions but show warning
             if customer.loan_overdue and transaction_date > customer.icl_end_date:
                 flash(f'Adding transaction to overdue loan. Loan was due on {customer.icl_end_date.strftime("%d-%m-%Y")}.', 'warning')
@@ -776,107 +783,175 @@ def transactions(customer_id):
                     # Initialize post-payment period variables for non-repayment cases
                     create_post_payment_period = False
 
-                    # For other cases (deposits or compound interest), use existing logic
-                    # Check if there's an ongoing period that needs to be split
-                    ongoing_txn = Transaction.query.filter(
-                        Transaction.customer_id == customer_id,
-                        Transaction.period_from <= transaction_date,
-                        Transaction.period_to >= transaction_date
-                    ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
+                    # Special handling for yearly compounding
+                    if customer.interest_type == 'compound' and customer.compound_frequency == 'yearly':
+                        # Handle yearly compounding with FY period splitting and passive period updates
+                        period_from, period_to, should_create_post_fy_period, post_fy_start, post_fy_end = _calculate_yearly_compounding_periods(
+                            customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_this_txn, current_user.id
+                        )
 
-                    if ongoing_txn and ongoing_txn.date != transaction_date:
-                        # Split the ongoing period
-                        # For repayments: current transaction should be in the period ending on repayment date
-                        # For deposits: current transaction starts a new period from transaction date
+                        # Check for existing transactions that need splitting
+                        existing_period_txn = Transaction.query.filter(
+                            Transaction.customer_id == customer_id,
+                            Transaction.period_from <= transaction_date,
+                            Transaction.period_to >= transaction_date,
+                            Transaction.date < transaction_date,
+                            Transaction.transaction_type != 'passive'  # Don't split passive periods as they're being recalculated
+                        ).order_by(Transaction.date.desc()).first()
 
-                        if amount_repaid > Decimal('0'):
-                            # Repayment: transaction belongs to period ending on repayment date
-                            period_from = ongoing_txn.period_from
-                            period_to = transaction_date
+                        if existing_period_txn:
+                            # Split the existing transaction at the new transaction date
+                            existing_period_txn.period_to = transaction_date - timedelta(days=1)
+                            existing_period_txn.no_of_days = (existing_period_txn.period_to - existing_period_txn.period_from).days + 1
 
-                            # Update the ongoing transaction's period_to to day before current transaction
-                            ongoing_txn.period_to = transaction_date - timedelta(days=1)
-                        else:
-                            # Deposit: transaction starts new period from transaction date
-                            period_from = transaction_date
-                            period_to = ongoing_txn.period_to
+                            # Recalculate interest for the split period
+                            if existing_period_txn.no_of_days > 0:
+                                prev_balance = Decimal('0')
+                                prev_txns = Transaction.query.filter(
+                                    Transaction.customer_id == customer_id,
+                                    Transaction.date < existing_period_txn.date
+                                ).all()
 
-                            # Update the ongoing transaction's period_to to day before current transaction
-                            ongoing_txn.period_to = transaction_date - timedelta(days=1)
+                                for prev_txn in prev_txns:
+                                    prev_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+                                    # Add accumulated FY interest for yearly compounding
+                                    if (prev_txn.period_to and 
+                                        _is_yearly_period_end(prev_txn.period_to) and 
+                                        prev_txn.get_safe_net_amount()):
+                                        prev_balance += prev_txn.get_safe_net_amount()
 
-                        # Recalculate the ongoing transaction's no_of_days and interest
-                        if ongoing_txn.period_from and ongoing_txn.period_to:
-                            ongoing_txn.no_of_days = (ongoing_txn.period_to - ongoing_txn.period_from).days + 1
+                                if existing_period_txn.get_safe_amount_paid() > Decimal('0'):
+                                    principal_for_existing = prev_balance + existing_period_txn.get_safe_amount_paid()
+                                else:
+                                    principal_for_existing = prev_balance
 
-                            # Recalculate interest for theongoing transaction with new period
-                            principal_for_ongoing = Decimal('0')
-                            previous_balance = Decimal('0')
-
-                            # Get balance before ongoing transaction
-                            prev_txns = Transaction.query.filter(
-                                Transaction.customer_id == customer_id,
-                                Transaction.date < ongoing_txn.date
-                            ).all()
-
-                            for prev_txn in prev_txns:
-                                previous_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
-
-                            if ongoing_txn.get_safe_amount_paid() > Decimal('0'):
-                                principal_for_ongoing = previous_balance + ongoing_txn.get_safe_amount_paid()
-                            elif ongoing_txn.get_safe_amount_repaid() > Decimal('0'):
-                                principal_for_ongoing = previous_balance - ongoing_txn.get_safe_amount_repaid()
-                            else:
-                                principal_for_ongoing = previous_balance
-
-                            # Recalculate interest
-                            if ongoing_txn.no_of_days > 0:
-                                ongoing_txn.int_amount = calculate_interest(principal_for_ongoing, customer.annual_rate, ongoing_txn.no_of_days)
+                                existing_period_txn.int_amount = calculate_interest(principal_for_existing, customer.annual_rate, existing_period_txn.no_of_days)
 
                                 # Recalculate TDS
-                                if customer.tds_applicable and ongoing_txn.int_amount:
+                                if customer.tds_applicable and existing_period_txn.int_amount:
                                     tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
-                                    ongoing_txn.tds_amount = ongoing_txn.int_amount * (tds_rate_to_use / Decimal('100'))
-                                    ongoing_txn.net_amount = ongoing_txn.int_amount - ongoing_txn.tds_amount
+                                    existing_period_txn.tds_amount = existing_period_txn.int_amount * (tds_rate_to_use / Decimal('100'))
+                                    existing_period_txn.net_amount = existing_period_txn.int_amount - existing_period_txn.tds_amount
                                 else:
-                                    ongoing_txn.tds_amount = Decimal('0')
-                                    ongoing_txn.net_amount = ongoing_txn.int_amount
+                                    existing_period_txn.tds_amount = Decimal('0')
+                                    existing_period_txn.net_amount = existing_period_txn.int_amount
 
-                            db.session.add(ongoing_txn)
-                            logging.debug(f"Split ongoing transaction {ongoing_txn.id}: period updated to {ongoing_txn.period_from} - {ongoing_txn.period_to}")
+                            db.session.add(existing_period_txn)
+                            logging.debug(f"Split existing yearly transaction {existing_period_txn.id}: period updated to {existing_period_txn.period_from} - {existing_period_txn.period_to}")
 
+                        # Set current transaction period (up to March 31 or transaction date)
+                        if amount_paid > Decimal('0'):
+                            # For deposits, period starts from transaction date
+                            period_from = transaction_date
+                        if customer.icl_end_date and period_to > customer.icl_end_date:
+                            period_to = customer.icl_end_date
+                            # If period is capped by ICL end date, no need for post-FY period
+                            should_create_post_fy_period = False
+                            logging.debug(f"Yearly period capped by ICL end date: {period_to}")
+                        # Mark for post-FY period creation if needed
+                        if should_create_post_fy_period:
+                            create_post_payment_period = True
+                            post_payment_start = post_fy_start
+                            post_payment_end = post_fy_end
                     else:
-                        # No ongoing period to split, calculate normally
-                        last_txn = Transaction.query.filter(
+                        # Original logic for non-yearly compounding
+                        # Check if there's an ongoing period that needs to be split
+                        ongoing_txn = Transaction.query.filter(
                             Transaction.customer_id == customer_id,
-                            Transaction.date < transaction_date
+                            Transaction.period_from <= transaction_date,
+                            Transaction.period_to >= transaction_date
                         ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
 
-                        if last_txn and last_txn.period_to:
-                            # Period starts from day after last transaction's period_to
-                            period_from = last_txn.period_to + timedelta(days=1)
-                        else:
-                            # First transaction - start from transaction date or customer's ICL start date
-                            if customer.icl_start_date and transaction_date >= customer.icl_start_date:
-                                period_from = transaction_date
-                            else:
-                                period_from = customer.icl_start_date or transaction_date
+                        if ongoing_txn and ongoing_txn.date != transaction_date:
+                            # Split the ongoing period
+                            if amount_repaid > Decimal('0'):
+                                # Repayment: transaction belongs to period ending on repayment date
+                                period_from = ongoing_txn.period_from
+                                period_to = transaction_date
 
-                        # Calculate period_to based on interest type and frequency, but respect ICL end date
-                        if customer.interest_type == 'compound' and customer.compound_frequency:
-                            # For compound interest, use the customer's specified frequency
-                            calculated_period_end = _get_period_end_date(transaction_date, customer.icl_start_date, customer.compound_frequency)
-                            # Use the earlier of period end or ICL end date
-                            period_to = min(calculated_period_end, customer.icl_end_date) if customer.icl_end_date else calculated_period_end
-                        elif customer.interest_type == 'simple':
-                            # For simple interest, use quarterly periods as default
-                            calculated_quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
-                            # Use the earlier of quarter end or ICL end date
-                            period_to = min(calculated_quarter_end, customer.icl_end_date) if customer.icl_end_date else calculated_quarter_end
+                                # Update the ongoing transaction's period_to to day before current transaction
+                                ongoing_txn.period_to = transaction_date - timedelta(days=1)
+                            else:
+                                # Deposit: transaction starts new period from transaction date
+                                period_from = transaction_date
+                                period_to = ongoing_txn.period_to
+
+                                # Update the ongoing transaction's period_to to day before current transaction
+                                ongoing_txn.period_to = transaction_date - timedelta(days=1)
+
+                            # Recalculate the ongoing transaction's no_of_days and interest
+                            if ongoing_txn.period_from and ongoing_txn.period_to:
+                                ongoing_txn.no_of_days = (ongoing_txn.period_to - ongoing_txn.period_from).days + 1
+
+                                # Recalculate interest for the ongoing transaction with new period
+                                principal_for_ongoing = Decimal('0')
+                                previous_balance = Decimal('0')
+
+                                # Get balance before ongoing transaction
+                                prev_txns = Transaction.query.filter(
+                                    Transaction.customer_id == customer_id,
+                                    Transaction.date < ongoing_txn.date
+                                ).all()
+
+                                for prev_txn in prev_txns:
+                                    previous_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+
+                                if ongoing_txn.get_safe_amount_paid() > Decimal('0'):
+                                    principal_for_ongoing = previous_balance + ongoing_txn.get_safe_amount_paid()
+                                elif ongoing_txn.get_safe_amount_repaid() > Decimal('0'):
+                                    principal_for_ongoing = previous_balance - ongoing_txn.get_safe_amount_repaid()
+                                else:
+                                    principal_for_ongoing = previous_balance
+
+                                # Recalculate interest
+                                if ongoing_txn.no_of_days > 0:
+                                    ongoing_txn.int_amount = calculate_interest(principal_for_ongoing, customer.annual_rate, ongoing_txn.no_of_days)
+
+                                    # Recalculate TDS
+                                    if customer.tds_applicable and ongoing_txn.int_amount:
+                                        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                                        ongoing_txn.tds_amount = ongoing_txn.int_amount * (tds_rate_to_use / Decimal('100'))
+                                        ongoing_txn.net_amount = ongoing_txn.int_amount - ongoing_txn.tds_amount
+                                    else:
+                                        ongoing_txn.tds_amount = Decimal('0')
+                                        ongoing_txn.net_amount = ongoing_txn.int_amount
+
+                                db.session.add(ongoing_txn)
+                                logging.debug(f"Split ongoing transaction {ongoing_txn.id}: period updated to {ongoing_txn.period_from} - {ongoing_txn.period_to}")
+
                         else:
-                            # For compound interest without specified frequency, use quarterly as default
-                            calculated_period_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
-                            # Use the earlier of calculated period end or ICL end date
-                            period_to = min(calculated_period_end, customer.icl_end_date) if customer.icl_end_date else calculated_period_end
+                            # No ongoing period to split, calculate normally
+                            last_txn = Transaction.query.filter(
+                                Transaction.customer_id == customer_id,
+                                Transaction.date < transaction_date
+                            ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
+
+                            if last_txn and last_txn.period_to:
+                                # Period starts from day after last transaction's period_to
+                                period_from = last_txn.period_to + timedelta(days=1)
+                            else:
+                                # First transaction - start from transaction date or customer's ICL start date
+                                if customer.icl_start_date and transaction_date >= customer.icl_start_date:
+                                    period_from = transaction_date
+                                else:
+                                    period_from = customer.icl_start_date or transaction_date
+
+                            # Calculate period_to based on interest type and frequency, but respect ICL end date
+                            if customer.interest_type == 'compound' and customer.compound_frequency:
+                                # For compound interest, use the customer's specified frequency
+                                calculated_period_end = _get_period_end_date(transaction_date, customer.icl_start_date, customer.compound_frequency)
+                                # Use the earlier of period end or ICL end date
+                                period_to = min(calculated_period_end, customer.icl_end_date) if customer.icl_end_date else calculated_period_end
+                            elif customer.interest_type == 'simple':
+                                # For simple interest, use quarterly periods as default
+                                calculated_quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                                # Use the earlier of quarter end or ICL end date
+                                period_to = min(calculated_quarter_end, customer.icl_end_date) if customer.icl_end_date else calculated_quarter_end
+                            else:
+                                # For compound interest without specified frequency, use quarterly as default
+                                calculated_period_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
+                                # Use the earlier of calculated period end or ICL end date
+                                period_to = min(calculated_period_end, customer.icl_end_date) if customer.icl_end_date else calculated_period_end
 
             int_amount = tds_amount = net_amount = None
             no_of_days = None
@@ -952,13 +1027,26 @@ def transactions(customer_id):
                 customer.first_compounding_date and 
                 transaction_date >= customer.first_compounding_date and 
                 period_to and 
-                _is_period_end(period_to, customer.icl_start_date, customer.compound_frequency or 'quarterly') and 
                 net_amount):
-                new_balance += net_amount
-                logging.debug(f"Period end ({customer.compound_frequency or 'quarterly'}): adding net interest {net_amount} to balance")
+                
+                # Check if this is a period end based on frequency
+                is_period_end_for_compounding = False
+                
+                if customer.compound_frequency == 'yearly':
+                    # For yearly compounding, add interest only at FY ends (March 31)
+                    is_period_end_for_compounding = _is_yearly_period_end(period_to)
+                else:
+                    # For other frequencies, use the general period end check
+                    is_period_end_for_compounding = _is_period_end(period_to, customer.icl_start_date, customer.compound_frequency or 'quarterly')
+                
+                if is_period_end_for_compounding:
+                    new_balance += net_amount
+                    logging.debug(f"Period end ({customer.compound_frequency or 'quarterly'}): adding net interest {net_amount} to balance")
+                else:
+                    logging.debug(f"Mid-period transaction: interest {net_amount} calculated but NOT added to principal balance")
             else:
                 if customer.interest_type == 'compound' and net_amount:
-                    logging.debug(f"Mid-period transaction: interest {net_amount} calculated but NOT added to principal balance")
+                    logging.debug(f"Before first compounding date or simple interest: interest {net_amount} calculated but NOT added to principal balance")
 
             # Determine transaction type
             transaction_type = 'passive'  # Default
@@ -988,7 +1076,7 @@ def transactions(customer_id):
             db.session.add(transaction)
             db.session.flush()  # Make transaction available for queries without full commit
 
-            # Create post-payment period for compound interest repayments if needed
+            # Create post-payment period for compound interest repayments or post-FY periods for yearly compounding
             if create_post_payment_period and post_payment_start <= post_payment_end:
                 # Calculate balance after repayment for post-payment period
                 balance_after_repayment = current_balance_before_this_txn - amount_repaid
@@ -1066,6 +1154,14 @@ def transactions(customer_id):
 
                     db.session.add(post_payment_transaction)
                     logging.debug(f"Created post-payment period transaction: {post_payment_start} to {post_payment_end}, interest: {post_payment_int_amount}")
+
+            # For yearly compounding, recalculate passive periods after FY end if needed
+            if (customer.interest_type == 'compound' and 
+                customer.compound_frequency == 'yearly'):
+                
+                # Recalculate passive periods for remaining time after FY end with updated principal
+                _recalculate_yearly_passive_periods_after_transaction(customer_id, customer, transaction_date, current_user.id)
+                logging.debug(f"Recalculated yearly passive periods after transaction on: {transaction_date}")
 
             # Special handling for ICL end date repayments
             if (customer.icl_end_date and 
@@ -1813,6 +1909,372 @@ def recalculate_customer_transactions(customer_id, start_date=None):
         logging.error(f"Error during recalculation for customer {customer_id}: {e}", exc_info=True)
         return False
 
+def _get_yearly_period_start_date(transaction_date, icl_start_date):
+    """
+    Calculate the period start date for yearly compounding based on Financial Year (April to March).
+    """
+    if not transaction_date or not icl_start_date:
+        return transaction_date
+
+    # Determine which financial year the transaction falls into
+    if transaction_date.month >= 4:  # April to December
+        fy_start_year = transaction_date.year
+    else:  # January to March
+        fy_start_year = transaction_date.year - 1
+
+    # Standard Financial year starts on April 1st
+    fy_start = date(fy_start_year, 4, 1)
+
+    # Special case: if ICL start date is after April 1st of the first FY,
+    # use ICL start date for the first partial period
+    if icl_start_date > fy_start and transaction_date < date(fy_start_year + 1, 4, 1):
+        # First partial financial year - use ICL start date
+        return icl_start_date
+    elif transaction_date < fy_start:
+        # Transaction is before current FY start, use previous FY start
+        return date(fy_start_year - 1, 4, 1)
+    else:
+        # Use current financial year start
+        return fy_start
+
+def _get_yearly_period_end_date(transaction_date, icl_start_date):
+    """
+    Calculate the period end date for yearly compounding (always March 31st).
+    """
+    if not transaction_date or not icl_start_date:
+        return transaction_date
+
+    # For yearly compounding, periods always end on March 31st of the financial year
+    if transaction_date.month >= 4:  # April to December
+        fy_end_year = transaction_date.year + 1
+    else:  # January to March
+        fy_end_year = transaction_date.year
+
+    return date(fy_end_year, 3, 31)
+
+def _create_yearly_passive_period_for_remaining_time(customer_id, customer, fy_end_date, created_by_user_id):
+    """
+    Create passive period transaction for time remaining after FY end until ICL end date.
+    This handles the case where ICL end date goes beyond March 31.
+    """
+    if not customer.icl_end_date or customer.icl_end_date <= fy_end_date:
+        return None
+
+    # Check if there are any existing transactions in the next FY period
+    next_fy_start = fy_end_date + timedelta(days=1)  # April 1st
+    
+    existing_next_fy_txn = Transaction.query.filter(
+        Transaction.customer_id == customer_id,
+        Transaction.date >= next_fy_start,
+        Transaction.date <= customer.icl_end_date
+    ).first()
+
+    if existing_next_fy_txn:
+        logging.debug(f"Existing transaction found in next FY period, skipping passive period creation")
+        return None
+
+    # Create passive period from April 1st to ICL end date
+    period_start = next_fy_start
+    period_end = customer.icl_end_date
+    
+    # Calculate middle date for the transaction
+    period_middle = period_start + timedelta(days=(period_end - period_start).days // 2)
+
+    # Get balance before this passive period (including accumulated interest up to FY end)
+    previous_txns = Transaction.query.filter(
+        Transaction.customer_id == customer_id,
+        Transaction.date <= fy_end_date
+    ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+
+    current_balance_before_passive = Decimal('0')
+    accumulated_fy_interest = Decimal('0')
+
+    for txn in previous_txns:
+        current_balance_before_passive += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+        # For yearly compounding, add net interest at FY ends
+        if (txn.period_to and 
+            txn.period_to.month == 3 and 
+            txn.period_to.day == 31 and 
+            txn.get_safe_net_amount()):
+            accumulated_fy_interest += txn.get_safe_net_amount()
+
+    # Principal for interest calculation includes accumulated FY interest
+    principal_for_calculation = current_balance_before_passive + accumulated_fy_interest
+
+    # Calculate days for this passive period
+    no_of_days = (period_end - period_start).days + 1
+
+    # Calculate interest for this passive period
+    int_amount = calculate_interest(principal_for_calculation, customer.annual_rate, no_of_days)
+
+    # Calculate TDS
+    tds_amount = Decimal('0')
+    if customer.tds_applicable and int_amount:
+        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+        tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
+
+    net_amount = int_amount - tds_amount
+
+    # Balance calculation - principal + accumulated interest (no compounding mid-period)
+    new_balance = current_balance_before_passive + accumulated_fy_interest
+
+    # Create the passive period transaction
+    passive_transaction = Transaction(
+        customer_id=customer_id,
+        date=period_middle,
+        amount_paid=None,
+        amount_repaid=None,
+        balance=new_balance,
+        period_from=period_start,
+        period_to=period_end,
+        no_of_days=no_of_days,
+        int_rate=customer.annual_rate,
+        int_amount=int_amount,
+        tds_amount=tds_amount,
+        net_amount=net_amount,
+        transaction_type='passive',
+        created_by=created_by_user_id
+    )
+
+    db.session.add(passive_transaction)
+    logging.debug(f"Created yearly passive period transaction for remaining time: {period_start} to {period_end}, interest: {int_amount}")
+
+    return passive_transaction
+
+def _handle_yearly_compounding_transaction(customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_txn, created_by_user_id):
+    """
+    Separate method to handle yearly compounding transactions with proper FY period management.
+    This ensures accurate calculation and automatic passive period generation.
+    """
+    # Get FY period boundaries for this transaction
+    fy_start = _get_yearly_period_start_date(transaction_date, customer.icl_start_date)
+    fy_end = _get_yearly_period_end_date(transaction_date, customer.icl_start_date)
+
+    # Clean up existing passive periods that need recalculation
+    _cleanup_future_passive_periods(customer_id, transaction_date)
+
+    # Determine transaction period boundaries
+    if transaction_date <= fy_end:
+        # Transaction is within current FY
+        period_from = transaction_date if amount_paid > Decimal('0') else fy_start
+        period_to = fy_end
+        should_create_post_fy_period = customer.icl_end_date and customer.icl_end_date > fy_end
+        post_fy_start = fy_end + timedelta(days=1) if should_create_post_fy_period else None
+        post_fy_end = customer.icl_end_date if should_create_post_fy_period else None
+    else:
+        # Transaction spans beyond FY end
+        period_from = fy_start
+        period_to = fy_end
+        should_create_post_fy_period = True
+        post_fy_start = fy_end + timedelta(days=1)
+        post_fy_end = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
+
+    return period_from, period_to, should_create_post_fy_period, post_fy_start, post_fy_end
+
+def _cleanup_future_passive_periods(customer_id, from_date):
+    """
+    Clean up passive periods that need recalculation after a new transaction.
+    """
+    future_passive_periods = Transaction.query.filter(
+        Transaction.customer_id == customer_id,
+        Transaction.date >= from_date,
+        Transaction.transaction_type == 'passive'
+    ).all()
+
+    for passive_txn in future_passive_periods:
+        logging.debug(f"Deleting outdated passive period transaction {passive_txn.id} for recalculation")
+        db.session.delete(passive_txn)
+
+def _calculate_yearly_fy_end_principal(customer_id, fy_end_date):
+    """
+    Calculate the principal at FY end including all transactions and accumulated interest up to March 31.
+    For yearly compounding, ALL net interest within the FY should be compounded.
+    """
+    # Get the FY start date (April 1st of the financial year)
+    if fy_end_date.month == 3:  # March 31st
+        fy_start_year = fy_end_date.year - 1
+    else:
+        fy_start_year = fy_end_date.year
+    
+    fy_start_date = date(fy_start_year, 4, 1)
+    
+    # Get all transactions up to FY end (March 31)
+    fy_transactions = Transaction.query.filter(
+        Transaction.customer_id == customer_id,
+        Transaction.date <= fy_end_date
+    ).order_by(Transaction.date.asc(), Transaction.created_at.asc()).all()
+
+    # Calculate cumulative principal movements
+    cumulative_principal = Decimal('0')
+    
+    for txn in fy_transactions:
+        cumulative_principal += txn.get_safe_amount_paid() - txn.get_safe_amount_repaid()
+
+    # For yearly compounding, add ALL net interest from ALL transactions within the current FY
+    # This includes both transactions that end on March 31st AND transactions within the FY period
+    accumulated_fy_interest = Decimal('0')
+    
+    for txn in fy_transactions:
+        # Include net interest from transactions that fall within the current FY
+        if (txn.period_from and txn.period_from >= fy_start_date and 
+            txn.period_to and txn.period_to <= fy_end_date and 
+            txn.get_safe_net_amount()):
+            accumulated_fy_interest += txn.get_safe_net_amount()
+            logging.debug(f"Added FY interest {txn.get_safe_net_amount()} from transaction {txn.id} (period: {txn.period_from} to {txn.period_to})")
+        # Also include transactions that end exactly on March 31st (FY end)
+        elif (txn.period_to and 
+              txn.period_to.month == 3 and 
+              txn.period_to.day == 31 and 
+              txn.get_safe_net_amount()):
+            accumulated_fy_interest += txn.get_safe_net_amount()
+            logging.debug(f"Added FY end interest {txn.get_safe_net_amount()} from transaction {txn.id}")
+
+    total_principal_at_fy_end = cumulative_principal + accumulated_fy_interest
+    
+    logging.debug(f"FY end principal calculation (FY {fy_start_year}-{fy_start_year + 1}): cumulative_principal={cumulative_principal}, accumulated_fy_interest={accumulated_fy_interest}, total={total_principal_at_fy_end}")
+    
+    return total_principal_at_fy_end
+
+def _calculate_yearly_compounding_periods(customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_txn, created_by_user_id):
+    """
+    Handle yearly compounding calculation with automatic FY period splitting and passive period updates.
+    For manual passive transactions, calculate only till the user-selected date.
+    """
+    # Check if this is a manual passive transaction (both amounts are zero)
+    is_manual_passive = (amount_paid == Decimal('0') and amount_repaid == Decimal('0'))
+    
+    if is_manual_passive:
+        # For manual passive transactions, calculate period till the selected date only
+        # Validate transaction date against ICL end date
+        effective_transaction_date = transaction_date
+        if customer.icl_end_date and transaction_date > customer.icl_end_date:
+            effective_transaction_date = customer.icl_end_date
+            logging.debug(f"Manual passive transaction date {transaction_date} beyond ICL end date, adjusted to {effective_transaction_date}")
+        
+        # Get FY start for the transaction date
+        fy_start = _get_yearly_period_start_date(effective_transaction_date, customer.icl_start_date)
+        
+        # For manual passive transactions, period ends on the selected date (or ICL end date if earlier)
+        period_from = fy_start
+        period_to = effective_transaction_date
+        
+        # No post-FY period creation for manual passive transactions
+        should_create_post_fy_period = False
+        post_fy_start = None
+        post_fy_end = None
+        
+        logging.debug(f"Manual passive transaction: period from {period_from} to {period_to}")
+        
+        return period_from, period_to, should_create_post_fy_period, post_fy_start, post_fy_end
+    else:
+        # For regular transactions, use the existing logic
+        return _handle_yearly_compounding_transaction(customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_txn, created_by_user_id)
+
+def _recalculate_yearly_passive_periods_after_transaction(customer_id, customer, transaction_date, created_by_user_id):
+    """
+    Recalculate all passive periods after a transaction for yearly compounding.
+    Uses the new separate calculation method for accuracy.
+    """
+    if not customer.icl_end_date:
+        return
+
+    # Check if we need to create passive periods after this transaction
+    current_fy_end = _get_yearly_period_end_date(transaction_date, customer.icl_start_date)
+    
+    # Only create passive periods if ICL end date goes beyond current FY end
+    if customer.icl_end_date <= current_fy_end:
+        return
+
+    # Check if there are any existing transactions in the next FY period
+    next_fy_start = current_fy_end + timedelta(days=1)  # April 1st
+    
+    existing_next_fy_txn = Transaction.query.filter(
+        Transaction.customer_id == customer_id,
+        Transaction.date >= next_fy_start,
+        Transaction.date <= customer.icl_end_date,
+        Transaction.transaction_type != 'passive'
+    ).first()
+
+    if existing_next_fy_txn:
+        logging.debug(f"Existing non-passive transaction found in next FY period, skipping passive period creation")
+        return
+
+    # Use the new separate method to calculate FY end principal correctly
+    principal_for_calculation = _calculate_yearly_fy_end_principal(customer_id, current_fy_end)
+
+    # Create passive period from April 1st to ICL end date with updated principal
+    period_start = next_fy_start
+    period_end = customer.icl_end_date
+    
+    # Calculate middle date for the transaction
+    period_middle = period_start + timedelta(days=(period_end - period_start).days // 2)
+
+    # Calculate days for this passive period
+    no_of_days = (period_end - period_start).days + 1
+
+    if no_of_days > 0 and principal_for_calculation > Decimal('0'):
+        # Check if there's already a passive period with these exact dates
+        existing_passive_period = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.period_from == period_start,
+            Transaction.period_to == period_end,
+            Transaction.transaction_type == 'passive'
+        ).first()
+
+        # Calculate interest for this passive period
+        int_amount = calculate_interest(principal_for_calculation, customer.annual_rate, no_of_days)
+
+        # Calculate TDS
+        tds_amount = Decimal('0')
+        if customer.tds_applicable and int_amount:
+            tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+            tds_amount = int_amount * (tds_rate_to_use / Decimal('100'))
+
+        net_amount = int_amount - tds_amount
+
+        # Balance calculation for yearly compounding - includes the principal that will earn interest next period
+        new_balance = principal_for_calculation
+
+        if existing_passive_period:
+            # Update the existing passive period transaction
+            existing_passive_period.int_amount = int_amount
+            existing_passive_period.tds_amount = tds_amount
+            existing_passive_period.net_amount = net_amount
+            existing_passive_period.balance = new_balance
+            existing_passive_period.no_of_days = no_of_days
+            existing_passive_period.int_rate = customer.annual_rate
+            
+            db.session.add(existing_passive_period)
+            logging.debug(f"Updated existing yearly passive period transaction {existing_passive_period.id}: {period_start} to {period_end}, principal: {principal_for_calculation}, interest: {int_amount}")
+        else:
+            # Create the updated passive period transaction
+            passive_transaction = Transaction(
+                customer_id=customer_id,
+                date=period_middle,
+                amount_paid=None,
+                amount_repaid=None,
+                balance=new_balance,
+                period_from=period_start,
+                period_to=period_end,
+                no_of_days=no_of_days,
+                int_rate=customer.annual_rate,
+                int_amount=int_amount,
+                tds_amount=tds_amount,
+                net_amount=net_amount,
+                transaction_type='passive',
+                created_by=created_by_user_id
+            )
+
+            db.session.add(passive_transaction)
+            logging.debug(f"Created new yearly passive period transaction: {period_start} to {period_end}, principal: {principal_for_calculation}, interest: {int_amount}")
+
+def _split_yearly_transaction_at_fy_end(customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_txn, created_by_user_id):
+    """
+    Split yearly compounding transaction at FY end (March 31) if transaction spans across FY boundary.
+    Returns tuple: (period_from, period_to, should_create_post_fy_period, post_fy_start, post_fy_end)
+    """
+    return _calculate_yearly_compounding_periods(customer_id, customer, transaction_date, amount_paid, amount_repaid, current_balance_before_txn, created_by_user_id)
+
 def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterly'):
     """
     Calculate the period start date based on transaction date, ICL start date, and frequency.
@@ -1820,7 +2282,9 @@ def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterl
     if not transaction_date or not icl_start_date:
         return transaction_date
 
-    if frequency == 'monthly':
+    if frequency == 'yearly':
+        return _get_yearly_period_start_date(transaction_date, icl_start_date)
+    elif frequency == 'monthly':
         # Calculate total months from ICL start to transaction date
         months_from_start = (transaction_date.year - icl_start_date.year) * 12 + (transaction_date.month - icl_start_date.month)
 
@@ -1835,31 +2299,6 @@ def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterl
 
         target_day = min(icl_start_date.day, _get_last_day_of_month(target_year, target_month))
         return date(target_year, target_month, target_day)
-
-    elif frequency == 'yearly':
-        # For yearly compounding, use financial year logic (April to March)
-        # but align with customer's ICL start date pattern
-
-        # Determine which financial year the transaction falls into
-        if transaction_date.month >= 4:  # April to December
-            fy_start_year = transaction_date.year
-        else:  # January to March
-            fy_start_year = transaction_date.year - 1
-
-        # Financial year starts on April 1st
-        fy_start = date(fy_start_year, 4, 1)
-
-        # Special case: if ICL start date is after April 1st of the first FY,
-        # use ICL start date for the first period
-        if icl_start_date > fy_start and transaction_date < date(fy_start_year + 1, 4, 1):
-            # First partial financial year - use ICL start date
-            return icl_start_date
-        elif transaction_date < fy_start:
-            # Transaction is before current FY start, use previous FY start
-            return date(fy_start_year - 1, 4, 1)
-        else:
-            # Use current financial year start
-            return fy_start
 
     else:  # quarterly (default)
         # Calculate total days from ICL start to transaction date
@@ -1918,7 +2357,9 @@ def _get_period_end_date(transaction_date, icl_start_date, frequency='quarterly'
     if not transaction_date or not icl_start_date:
         return transaction_date
 
-    if frequency == 'monthly':
+    if frequency == 'yearly':
+        return _get_yearly_period_end_date(transaction_date, icl_start_date)
+    elif frequency == 'monthly':
         # Get the period start
         period_start = _get_period_start_date(transaction_date, icl_start_date, 'monthly')
 
@@ -1930,26 +2371,6 @@ def _get_period_end_date(transaction_date, icl_start_date, frequency='quarterly'
             next_month_start = date(period_start.year, period_start.month + 1, next_month_day)
 
         return next_month_start - timedelta(days=1)
-
-    elif frequency == 'yearly':
-        # For yearly compounding, periods end on March 31st of the financial year
-        period_start = _get_period_start_date(transaction_date, icl_start_date, 'yearly')
-
-        # Special case for first partial period starting from ICL start date
-        if period_start == icl_start_date and icl_start_date.month != 4:
-            # For the first partial period, end at March 31st of the current financial year
-            if transaction_date.month >= 4:  # April to December
-                fy_end_year = transaction_date.year + 1
-            else:  # January to March
-                fy_end_year = transaction_date.year
-            return date(fy_end_year, 3, 31)
-        else:
-            # For full financial year periods, end on March 31st of the following year
-            if period_start.month == 4:  # April start
-                return date(period_start.year + 1, 3, 31)
-            else:
-                # Should not happen with proper yearly calculation, but fallback
-                return date(period_start.year + 1, 3, 31)
 
     else:  # quarterly (default)
         # Calculate total days from ICL start to transaction date
@@ -1994,6 +2415,12 @@ def _get_quarter_end_date(transaction_date, icl_start_date):
     """
     return _get_period_end_date(transaction_date, icl_start_date, 'quarterly')
 
+def _is_yearly_period_end(date_to_check):
+    """
+    Check if a given date is March 31st (Financial Year end).
+    """
+    return date_to_check.month == 3 and date_to_check.day == 31
+
 def _is_period_end(date_to_check, icl_start_date, frequency='quarterly'):
     """
     Check if a given date falls at the end of a financial period, based on the customer's ICL start date and frequency.
@@ -2002,8 +2429,7 @@ def _is_period_end(date_to_check, icl_start_date, frequency='quarterly'):
         return False
 
     if frequency == 'yearly':
-        # For yearly compounding, period ends are always March 31st (financial year end)
-        return date_to_check.month == 3 and date_to_check.day == 31
+        return _is_yearly_period_end(date_to_check)
 
     # Calculate expected period end for this date
     expected_period_end = _get_period_end_date(date_to_check, icl_start_date, frequency)
