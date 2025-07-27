@@ -585,6 +585,7 @@
                                            name="new_end_date" 
                                            required 
                                            min="{{ (item.customer.icl_end_date + timedelta(days=1)).strftime('%Y-%m-%d') if item.customer.icl_end_date else '' }}"
+                                           data-current-end-date="{{ item.customer.icl_end_date.strftime('%Y-%m-%d') if item.customer.icl_end_date else '' }}"
                                            onchange="calculateExtension({{ item.customer.id }})">
                                 </div>
                             </div>
@@ -841,28 +842,83 @@ function confirmMarkOverdue(customerName) {
 }
 
 function calculateExtension(customerId) {
-    const newEndDate = new Date($(`#new_end_date${customerId}`).val());
-    const currentEndDate = new Date($(`#extendLoanModal${customerId}`).find('.card-body p:contains("Current End Date:")').text().split(': ')[1]);
+    const newEndDateInput = $(`#new_end_date${customerId}`);
+    const newEndDateValue = newEndDateInput.val();
+    const currentEndDateValue = newEndDateInput.data('current-end-date');
     
-    if (newEndDate && currentEndDate) {
-        const diffTime = Math.abs(newEndDate - currentEndDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const diffMonths = Math.round(diffDays / 30);
-        
-        $(`#extensionPeriod${customerId}`).html(`
-            <strong>${diffDays} days</strong> (≈ ${diffMonths} month${diffMonths !== 1 ? 's' : ''})
-        `);
-        
-        // Calculate impact (simplified calculation)
-        const balance = parseFloat($(`#extendLoanModal${customerId}`).find('.card-body p:contains("Outstanding:")').text().replace(/[^0-9.-]+/g, ""));
-        const rate = parseFloat($(`#extendLoanModal${customerId}`).find('.card-body p:contains("Interest Rate:")').text().replace(/[^0-9.-]+/g, ""));
-        
+    if (!newEndDateValue || !currentEndDateValue) {
+        $(`#extensionPeriod${customerId}`).html('Select a new end date to see extension period');
+        return;
+    }
+    
+    const newEndDate = new Date(newEndDateValue);
+    const currentEndDate = new Date(currentEndDateValue);
+    
+    // Validate dates
+    if (isNaN(newEndDate.getTime()) || isNaN(currentEndDate.getTime())) {
+        $(`#extensionPeriod${customerId}`).html('Invalid date selection');
+        return;
+    }
+    
+    if (newEndDate <= currentEndDate) {
+        $(`#extensionPeriod${customerId}`).html('New date must be after current end date');
+        return;
+    }
+    
+    // Calculate difference in milliseconds
+    const diffTime = newEndDate.getTime() - currentEndDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Calculate months more accurately
+    let diffMonths = 0;
+    let tempDate = new Date(currentEndDate);
+    
+    while (tempDate < newEndDate) {
+        tempDate.setMonth(tempDate.getMonth() + 1);
+        if (tempDate <= newEndDate) {
+            diffMonths++;
+        }
+    }
+    
+    // If no full months, show as fraction
+    if (diffMonths === 0 && diffDays > 0) {
+        diffMonths = (diffDays / 30).toFixed(1);
+    }
+    
+    $(`#extensionPeriod${customerId}`).html(`
+        <strong>${diffDays} days</strong> (≈ ${diffMonths} month${diffMonths != 1 ? 's' : ''})
+    `);
+    
+    // Calculate financial impact
+    const modal = $(`#extendLoanModal${customerId}`);
+    const balanceText = modal.find('.card-body p:contains("Outstanding:")').text();
+    const rateText = modal.find('.card-body p:contains("Interest Rate:")').text();
+    
+    // Extract balance more safely
+    let balance = 0;
+    const balanceMatch = balanceText.match(/₹([\d,]+\.?\d*)/);
+    if (balanceMatch) {
+        balance = parseFloat(balanceMatch[1].replace(/,/g, ''));
+    }
+    
+    // Extract rate more safely
+    let rate = 0;
+    const rateMatch = rateText.match(/(\d+\.?\d*)%/);
+    if (rateMatch) {
+        rate = parseFloat(rateMatch[1]);
+    }
+    
+    if (balance > 0 && rate > 0 && diffDays > 0) {
         const additionalInterest = (balance * rate / 100 / 365) * diffDays;
         const newTotal = balance + additionalInterest;
         
-        $(`#additionalInterest${customerId}`).text(`₹${additionalInterest.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
-        $(`#extensionCost${customerId}`).text(`₹${additionalInterest.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
-        $(`#newTotalAmount${customerId}`).text(`₹${newTotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
+        $(`#additionalInterest${customerId}`).text(`₹${additionalInterest.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+        $(`#extensionCost${customerId}`).text(`₹${additionalInterest.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+        $(`#newTotalAmount${customerId}`).text(`₹${newTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else {
+        $(`#additionalInterest${customerId}`).text('₹0.00');
+        $(`#extensionCost${customerId}`).text('₹0.00');
+        $(`#newTotalAmount${customerId}`).text('₹0.00');
     }
 }
 
