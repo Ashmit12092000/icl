@@ -70,6 +70,13 @@ class Customer(db.Model):
             if t.transaction_type == 'loan_closure':
                 logging.debug(f"  Skipping loan closure transaction {t.id}")
                 continue
+            
+            # Handle opening balance transactions - they represent carried forward balance
+            if t.transaction_type == 'opening_balance':
+                safe_opening_balance = t.get_safe_amount_paid()
+                total_principal_paid += safe_opening_balance
+                logging.debug(f"  Added opening balance: {safe_opening_balance} from transaction {t.id}")
+                continue
 
             safe_paid = t.get_safe_amount_paid()
             logging.debug(f"  get_safe_amount_paid() returned: {safe_paid} (type: {type(safe_paid)})")
@@ -231,7 +238,8 @@ class Transaction(db.Model):
             'deposit': 'Deposit',
             'repayment': 'Repayment', 
             'passive': 'Passive Period',
-            'loan_closure': 'Loan Closed'
+            'loan_closure': 'Loan Closed',
+            'opening_balance': 'Opening Balance'
         }
         return type_mapping.get(self.transaction_type, 'Unknown')
 
