@@ -5,3 +5,6 @@ okay now the repayment period is coming right but the days is showing in negativ
 
 
 so currently repayment starting date is calculating wrong date , suppose in my case . i have made 4 deposit transaction starting from 01/04/2023, followed by on 06/04/2023 , 19/04/2023 & 30/05/2023 . so when i'm making a repayment transaction on 08/06/2024 it is creating period from 30/05/2023 to 07/06/2023 where as it should start from 08/06/2023 .
+
+
+so it worked but some more issue is there . for repayment transaction it is giving wrong values initially and then when i'm editing that transction and saving again without changing any values then it is giving correct values . find the root cause of this problem and fix that for compounf interests users
