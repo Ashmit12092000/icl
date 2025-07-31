@@ -12,3 +12,41 @@ so it worked but some more issue is there . for repayment transaction it is givi
 In the current repayment logic for compund interest quarterly users , there is one scenario if there is any transaction happened after the repayment transaction then it will delete the passive period transaction and the end date of repayment transaction will get shifted as per new transaction date . Suppose on 8th June a repayment transaction happened then it create passive period transaction from 9th June till end of quarter date . 30june. But I added another deposit transaction on 26th June so it will the delete the passive period transaction as it is no longer valid and then the repayment transaction will be recalculated with end of a day before of new transaction date . This is working but ahead in some other quarter I'm doing back to back repayment transaction then it is merging both transaction by applying this logic . It should merge it should split the transaction if there are back to back repayment transaction. Find some workaround for this . But do not the delete the logic which I was using in June quarter. Find something other dynamic solution
 
 Now I also need to fix the _handle_repayment_recalculation_after_new_transaction function to prevent it from extending repayment periods when there are multiple repayments
+
+- The first quarter works because there’s no previous accumulated interest.
+- For subsequent quarters, the code adds up net interest from previous quarters only, but if there is a mistake in how transactions are grouped, or how the previous quarter’s interest is accumulated, it could cause incorrect principal calculation for compounding.
+
+**Key code locations handling this:**
+- In the transaction POST logic (search for `# For compound interest, include accumulated net interest only from previous quarters (not current quarter)` at line ~1041).
+- In the recalculation logic (`recalculate_customer_transactions`), where it adds up net interest from previous quarters (see lines ~1788-1801).
+- `_is_quarter_end` and `_get_quarter_start_date`/_`_get_quarter_end_date` handle period boundaries.
+
+**What to check/fix:**
+1. **Accumulation of net interest from previous quarters:**  
+   - Ensure that when calculating the principal for a new quarter, you are only adding the net interest from transactions whose period_to is at a quarter-end (not all previous transactions).
+2. **The selection of transactions:**  
+   - When you sum up previous net interest, double-check that you are not skipping or double-counting any quarters.
+3. **Balance update at quarter end:**  
+   - The actual compounding (adding net interest to balance) only happens if it is the last transaction of the quarter.
+
+**Example of possible buggy logic:**
+```python
+previous_quarter_transactions = Transaction.query.filter(
+    Transaction.customer_id == customer_id,
+    Transaction.date < quarter_start
+).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+accumulated_net_interest_from_previous_quarters = Decimal('0')
+for prev_txn in previous_quarter_transactions:
+    accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
+```
+This adds ALL previous net interest, but you should only add those where `prev_txn.period_to` is a quarter-end.
+
+**Suggested fix:**
+Change the accumulation logic to:
+```python
+for prev_txn in previous_quarter_transactions:
+    if _is_quarter_end(prev_txn.period_to, customer.icl_start_date):
+        accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
+```
+This ensures only past quarter-end interests are compounded.
