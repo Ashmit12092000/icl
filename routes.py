@@ -698,105 +698,86 @@ def transactions(customer_id):
                             net_outstanding_balance += txn.get_safe_net_amount()
 
                     current_balance_before_this_txn = net_outstanding_balance
-                # Handle repayments - check for missing periods before repayment and create passive periods if needed
+                # Handle repayments - split periods for both simple and compound interest users
                 if amount_repaid > Decimal('0'):
-                    # Check if there's an ongoing period that needs to be split for the repayment
-                    ongoing_txn = Transaction.query.filter(
+                    # For repayments (both simple and compound), create two periods:
+                    # Period 1: Period start to repayment date 
+                    # Period 2: Day after repayment to period end (interest calculated on reduced principal)
+
+                    frequency_to_use = customer.compound_frequency if customer.interest_type == 'compound' and customer.compound_frequency else 'quarterly'
+                    period_start_for_repayment = _get_period_start_date(transaction_date, customer.icl_start_date, frequency_to_use)
+                    period_end_for_repayment = _get_period_end_date(transaction_date, customer.icl_start_date, frequency_to_use)
+
+                    # Check if there's an existing transaction in this period that needs splitting
+                    existing_period_txn = Transaction.query.filter(
                         Transaction.customer_id == customer_id,
-                        Transaction.period_from <= transaction_date,
-                        Transaction.period_to >= transaction_date,
+                        Transaction.period_from == period_start_for_repayment,
+                        Transaction.period_to == period_end_for_repayment,
                         Transaction.date < transaction_date
-                    ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
+                    ).order_by(Transaction.date.desc()).first()
 
-                    if ongoing_txn:
-                        # Update the ongoing transaction's period to end day before repayment
-                        ongoing_txn.period_to = transaction_date - timedelta(days=1)
-                        ongoing_txn.no_of_days = (ongoing_txn.period_to - ongoing_txn.period_from).days + 1
+                    if existing_period_txn:
+                        # Split the existing period transaction
+                        existing_period_txn.period_to = transaction_date - timedelta(days=1)
+                        existing_period_txn.no_of_days = (existing_period_txn.period_to - existing_period_txn.period_from).days + 1
 
-                        # Recalculate the ongoing transaction's interest with new period
-                        if ongoing_txn.no_of_days > 0:
-                            principal_for_ongoing = Decimal('0')
-                            previous_balance = Decimal('0')
-
-                            # Get balance before ongoing transaction
+                        # Recalculate interest for the split period (but don't add to principal for mid-period)
+                        if existing_period_txn.no_of_days > 0:
+                            prev_balance = Decimal('0')
                             prev_txns = Transaction.query.filter(
                                 Transaction.customer_id == customer_id,
-                                Transaction.date < ongoing_txn.date
+                                Transaction.date < existing_period_txn.date
                             ).all()
 
                             for prev_txn in prev_txns:
-                                previous_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
+                                prev_balance += prev_txn.get_safe_amount_paid() - prev_txn.get_safe_amount_repaid()
 
-                            # For compound interest, include accumulated interest from previous quarters only
-                            if (customer.interest_type == 'compound' and 
-                                customer.first_compounding_date and 
-                                ongoing_txn.date >= customer.first_compounding_date):
-                                
-                                quarter_start = _get_quarter_start_date(ongoing_txn.date, customer.icl_start_date)
-                                previous_quarter_transactions = Transaction.query.filter(
+                            # For compound interest, include accumulated net interest from PREVIOUS PERIODS only
+                            if (customer.first_compounding_date and 
+                                existing_period_txn.date >= customer.first_compounding_date):
+                                # Get accumulated net interest only from transactions before this period starts
+                                previous_period_transactions = Transaction.query.filter(
                                     Transaction.customer_id == customer_id,
-                                    Transaction.date < quarter_start
+                                    Transaction.date < period_start_for_repayment
                                 ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
-                                accumulated_net_interest_from_previous_quarters = Decimal('0')
-                                for prev_txn in previous_quarter_transactions:
-                                    accumulated_net_interest_from_previous_quarters += prev_txn.get_safe_net_amount()
+                                accumulated_net_interest_from_previous_periods = Decimal('0')
+                                for prev_txn in previous_period_transactions:
+                                    accumulated_net_interest_from_previous_periods += prev_txn.get_safe_net_amount()
 
-                                if ongoing_txn.get_safe_amount_paid() > Decimal('0'):
-                                    principal_for_ongoing = previous_balance + accumulated_net_interest_from_previous_quarters + ongoing_txn.get_safe_amount_paid()
+                                if existing_period_txn.get_safe_amount_paid() > Decimal('0'):
+                                    principal_for_existing = prev_balance + accumulated_net_interest_from_previous_periods + existing_period_txn.get_safe_amount_paid()
                                 else:
-                                    principal_for_ongoing = previous_balance + accumulated_net_interest_from_previous_quarters
+                                    principal_for_existing = prev_balance + accumulated_net_interest_from_previous_periods
                             else:
-                                if ongoing_txn.get_safe_amount_paid() > Decimal('0'):
-                                    principal_for_ongoing = previous_balance + ongoing_txn.get_safe_amount_paid()
+                                if existing_period_txn.get_safe_amount_paid() > Decimal('0'):
+                                    principal_for_existing = prev_balance + existing_period_txn.get_safe_amount_paid()
                                 else:
-                                    principal_for_ongoing = previous_balance
+                                    principal_for_existing = prev_balance
 
-                            # Recalculate interest
-                            ongoing_txn.int_amount = calculate_interest(principal_for_ongoing, customer.annual_rate, ongoing_txn.no_of_days)
+                            existing_period_txn.int_amount = calculate_interest(principal_for_existing, customer.annual_rate, existing_period_txn.no_of_days)
 
                             # Recalculate TDS
-                            if customer.tds_applicable and ongoing_txn.int_amount:
+                            if customer.tds_applicable and existing_period_txn.int_amount:
                                 tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
-                                ongoing_txn.tds_amount = ongoing_txn.int_amount * (tds_rate_to_use / Decimal('100'))
-                                ongoing_txn.net_amount = ongoing_txn.int_amount - ongoing_txn.tds_amount
+                                existing_period_txn.tds_amount = existing_period_txn.int_amount * (tds_rate_to_use / Decimal('100'))
+                                existing_period_txn.net_amount = existing_period_txn.int_amount - existing_period_txn.tds_amount
                             else:
-                                ongoing_txn.tds_amount = Decimal('0')
-                                ongoing_txn.net_amount = ongoing_txn.int_amount
+                                existing_period_txn.tds_amount = Decimal('0')
+                                existing_period_txn.net_amount = existing_period_txn.int_amount
 
-                        db.session.add(ongoing_txn)
-                        logging.debug(f"Split ongoing transaction {ongoing_txn.id}: period updated to {ongoing_txn.period_from} - {ongoing_txn.period_to}")
+                        db.session.add(existing_period_txn)
+                        logging.debug(f"Split existing period transaction {existing_period_txn.id}: period updated to {existing_period_txn.period_from} - {existing_period_txn.period_to}")
 
-                    else:
-                        # No ongoing transaction found - check if we need to create a passive period before repayment
-                        # Get the current quarter start date
-                        quarter_start = _get_quarter_start_date(transaction_date, customer.icl_start_date)
-                        
-                        # Check if repayment date is after quarter start (meaning there's a gap)
-                        if transaction_date > quarter_start:
-                            # Check if there's already a transaction covering the period from quarter start to repayment
-                            existing_period_txn = Transaction.query.filter(
-                                Transaction.customer_id == customer_id,
-                                Transaction.period_from == quarter_start,
-                                Transaction.period_to >= transaction_date - timedelta(days=1)
-                            ).first()
-                            
-                            if not existing_period_txn:
-                                # Create passive period from quarter start to day before repayment
-                                passive_period_start = quarter_start
-                                passive_period_end = transaction_date - timedelta(days=1)
-                                
-                                logging.debug(f"Creating passive period before repayment: {passive_period_start} to {passive_period_end}")
-                                _create_passive_period_transaction(customer_id, customer, passive_period_start, passive_period_end, current_user.id)
+                    # Current repayment transaction (Period 1): Period start to repayment date
+                    period_from = period_start_for_repayment
+                    # Use transaction date, but don't exceed ICL end date
+                    period_to = min(transaction_date, customer.icl_end_date) if customer.icl_end_date else transaction_date
 
-                    # Repayment transaction gets period from repayment date to quarter end
-                    period_from = transaction_date
-                    # Calculate quarter end for the repayment date
-                    calculated_quarter_end = _get_quarter_end_date(transaction_date, customer.icl_start_date)
-                    # Use the earlier of quarter end or ICL end date
-                    period_to = min(calculated_quarter_end, customer.icl_end_date) if customer.icl_end_date else calculated_quarter_end
-                    
-                    logging.debug(f"Repayment period: {period_from} to {period_to}")
+                    # For repayments (both simple and compound), schedule creation of post-payment period after this transaction is saved
+                    create_post_payment_period = True
+                    post_payment_start = transaction_date + timedelta(days=1)
+                    post_payment_end = min(period_end_for_repayment, customer.icl_end_date) if customer.icl_end_date else period_end_for_repayment
 
                 else:
                     # Initialize post-payment period variables for non-repayment cases
@@ -890,29 +871,13 @@ def transactions(customer_id):
 
                                 # Update the ongoing transaction's period_to to day before current transaction
                                 ongoing_txn.period_to = transaction_date - timedelta(days=1)
-                            elif amount_paid > Decimal('0'):
+                            else:
                                 # Deposit: transaction starts new period from transaction date
                                 period_from = transaction_date
                                 period_to = ongoing_txn.period_to
 
                                 # Update the ongoing transaction's period_to to day before current transaction
                                 ongoing_txn.period_to = transaction_date - timedelta(days=1)
-                            else:
-                                # Passive transaction: check if it's on the same date as ongoing transaction's end
-                                if transaction_date == ongoing_txn.period_to:
-                                    # Same date as period end - create 1-day period for passive transaction
-                                    period_from = transaction_date
-                                    period_to = transaction_date
-                                    
-                                    # Update the ongoing transaction's period_to to day before current transaction
-                                    ongoing_txn.period_to = transaction_date - timedelta(days=1)
-                                else:
-                                    # Different date - use ongoing period logic
-                                    period_from = ongoing_txn.period_from
-                                    period_to = ongoing_txn.period_to
-
-                                    # Update the ongoing transaction's period_to to day before current transaction
-                                    ongoing_txn.period_to = transaction_date - timedelta(days=1)
 
                             # Recalculate the ongoing transaction's no_of_days and interest
                             if ongoing_txn.period_from and ongoing_txn.period_to:
@@ -962,38 +927,13 @@ def transactions(customer_id):
                             ).order_by(Transaction.date.desc(), Transaction.created_at.desc()).first()
 
                             if last_txn and last_txn.period_to:
-                                # Check if there's a gap between last transaction's period_to and current transaction date
-                                expected_next_period_start = last_txn.period_to + timedelta(days=1)
-                                
-                                if transaction_date > expected_next_period_start:
-                                    # There's a gap - create passive period for the gap
-                                    gap_start = expected_next_period_start
-                                    gap_end = transaction_date - timedelta(days=1)
-                                    
-                                    logging.debug(f"Creating passive period for gap: {gap_start} to {gap_end}")
-                                    _create_passive_period_transaction(customer_id, customer, gap_start, gap_end, current_user.id)
-                                
-                                # For deposit transactions, period always starts from transaction date
-                                if amount_paid > Decimal('0'):
-                                    period_from = transaction_date
-                                else:
-                                    period_from = expected_next_period_start
+                                # Period starts from day after last transaction's period_to
+                                period_from = last_txn.period_to + timedelta(days=1)
                             else:
-                                # First transaction or no previous period_to
-                                if amount_paid > Decimal('0'):
-                                    # For deposit transactions, always start from transaction date
+                                # First transaction - start from transaction date or customer's ICL start date
+                                if customer.icl_start_date and transaction_date >= customer.icl_start_date:
                                     period_from = transaction_date
-                                    
-                                    # Check if we need to create a passive period before this deposit
-                                    if customer.icl_start_date and transaction_date > customer.icl_start_date:
-                                        # Create passive period from ICL start to day before transaction
-                                        passive_start = customer.icl_start_date
-                                        passive_end = transaction_date - timedelta(days=1)
-                                        
-                                        logging.debug(f"Creating initial passive period before first deposit: {passive_start} to {passive_end}")
-                                        _create_passive_period_transaction(customer_id, customer, passive_start, passive_end, current_user.id)
                                 else:
-                                    # For passive transactions, use ICL start date or transaction date
                                     period_from = customer.icl_start_date or transaction_date
 
                             # Calculate period_to based on interest type and frequency, but respect ICL end date
@@ -1135,6 +1075,85 @@ def transactions(customer_id):
 
             db.session.add(transaction)
             db.session.flush()  # Make transaction available for queries without full commit
+
+            # Create post-payment period for compound interest repayments or post-FY periods for yearly compounding
+            if create_post_payment_period and post_payment_start <= post_payment_end:
+                # Calculate balance after repayment for post-payment period
+                balance_after_repayment = current_balance_before_this_txn - amount_repaid
+
+                # For compound interest, include accumulated net interest from previous periods only
+                if (customer.interest_type == 'compound' and 
+                    customer.first_compounding_date and 
+                    post_payment_start >= customer.first_compounding_date):
+
+                    # Get the period start date for this transaction using customer's frequency
+                    frequency_for_post_payment = customer.compound_frequency if customer.compound_frequency else 'quarterly'
+                    period_start_for_post_payment = _get_period_start_date(post_payment_start, customer.icl_start_date, frequency_for_post_payment)
+
+                    # Get accumulated net interest from transactions before this period starts
+                    previous_period_transactions = Transaction.query.filter(
+                        Transaction.customer_id == customer_id,
+                        Transaction.date < period_start_for_post_payment
+                    ).order_by(Transaction.date.asc(), Transaction.id.asc()).all()
+
+                    accumulated_net_interest_from_previous_periods = Decimal('0')
+                    for prev_txn in previous_period_transactions:
+                        accumulated_net_interest_from_previous_periods += prev_txn.get_safe_net_amount()
+
+                    principal_for_post_payment = balance_after_repayment + accumulated_net_interest_from_previous_periods
+                else:
+                    principal_for_post_payment = balance_after_repayment
+
+                # Calculate days for post-payment period
+                post_payment_days = (post_payment_end - post_payment_start).days + 1
+
+                if post_payment_days > 0 and principal_for_post_payment > Decimal('0'):
+                    # Calculate interest for post-payment period
+                    post_payment_int_amount = calculate_interest(principal_for_post_payment, customer.annual_rate, post_payment_days)
+
+                    # Calculate TDS for post-payment period
+                    post_payment_tds_amount = Decimal('0')
+                    if customer.tds_applicable and post_payment_int_amount:
+                        tds_rate_to_use = customer.tds_percentage or Decimal('10.00')
+                        post_payment_tds_amount = post_payment_int_amount * (tds_rate_to_use / Decimal('100'))
+
+                    post_payment_net_amount = post_payment_int_amount - post_payment_tds_amount
+
+                    # Calculate balance for post-payment period
+                    post_payment_balance = balance_after_repayment
+
+                    # For compound interest, add net interest to balance at period end
+                    if (customer.interest_type == 'compound' and 
+                        customer.first_compounding_date and 
+                        post_payment_start >= customer.first_compounding_date and 
+                        _is_period_end(post_payment_end, customer.icl_start_date, customer.compound_frequency or 'quarterly') and 
+                        post_payment_net_amount):
+                        post_payment_balance += post_payment_net_amount
+                        logging.debug(f"Post-payment period end ({customer.compound_frequency or 'quarterly'}): adding net interest {post_payment_net_amount} to balance")
+
+                    # Create post-payment period transaction
+                    # Use a date slightly after the repayment date for chronological ordering
+                    post_payment_date = post_payment_start + timedelta(days=(post_payment_end - post_payment_start).days // 2)
+
+                    post_payment_transaction = Transaction(
+                        customer_id=customer_id,
+                        date=post_payment_date,
+                        amount_paid=None,  # No amount paid in post-payment period
+                        amount_repaid=None,  # No amount repaid in post-payment period
+                        balance=post_payment_balance,
+                        period_from=post_payment_start,
+                        period_to=post_payment_end,
+                        no_of_days=post_payment_days,
+                        int_rate=customer.annual_rate,
+                        int_amount=post_payment_int_amount,
+                        tds_amount=post_payment_tds_amount,
+                        net_amount=post_payment_net_amount,
+                        transaction_type='passive',
+                        created_by=current_user.id
+                    )
+
+                    db.session.add(post_payment_transaction)
+                    logging.debug(f"Created post-payment period transaction: {post_payment_start} to {post_payment_end}, interest: {post_payment_int_amount}")
 
             # For yearly compounding, recalculate passive periods after FY end if needed
             if (customer.interest_type == 'compound' and 
@@ -2282,15 +2301,11 @@ def _get_period_start_date(transaction_date, icl_start_date, frequency='quarterl
         return date(target_year, target_month, target_day)
 
     else:  # quarterly (default)
-        # Calculate total months from ICL start to transaction date (more accurate than days)
-        months_from_start = (transaction_date.year - icl_start_date.year) * 12 + (transaction_date.month - icl_start_date.month)
-        
-        # Account for day difference within the month
-        if transaction_date.day < icl_start_date.day:
-            months_from_start -= 1
+        # Calculate total days from ICL start to transaction date
+        days_from_start = (transaction_date - icl_start_date).days
 
         # Calculate which quarter this transaction falls into (0-based)
-        quarter_number = months_from_start // 3
+        quarter_number = days_from_start // 90  # 90 days per quarter (approximately)
 
         # Calculate the exact quarter start date
         # Each quarter is exactly 3 months from the ICL start date
@@ -2358,15 +2373,11 @@ def _get_period_end_date(transaction_date, icl_start_date, frequency='quarterly'
         return next_month_start - timedelta(days=1)
 
     else:  # quarterly (default)
-        # Calculate total months from ICL start to transaction date (more accurate than days)
-        months_from_start = (transaction_date.year - icl_start_date.year) * 12 + (transaction_date.month - icl_start_date.month)
-        
-        # Account for day difference within the month
-        if transaction_date.day < icl_start_date.day:
-            months_from_start -= 1
+        # Calculate total days from ICL start to transaction date
+        days_from_start = (transaction_date - icl_start_date).days
 
         # Calculate which quarter this transaction falls into (0-based)
-        quarter_number = months_from_start // 3
+        quarter_number = days_from_start // 90  # 90 days per quarter (approximately)
 
         # Calculate the exact quarter end date
         # Each quarter is exactly 3 months from the ICL start date
