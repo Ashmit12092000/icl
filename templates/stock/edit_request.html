@@ -1,0 +1,154 @@
+
+{% extends "base.html" %}
+
+{% block title %}Edit Request {{ request.request_no }} -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Edit Request {{ request.request_no }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Modify your request details and items
+            </p>
+        </div>
+    </div>
+
+    <!-- Request Form -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <form method="POST" action="{{ url_for('stock_issue.update_request', request_id=request.id) }}">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <!-- Location -->
+                    <div>
+                        <label for="location_id" class="block text-sm font-medium text-gray-300">Location <span class="text-red-500">*</span></label>
+                        <select id="location_id" name="location_id" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">Select Location</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}" {% if location.id == request.location_id %}selected{% endif %}>
+                                {{ location.code }} - {{ location.office }}, {{ location.room }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Purpose -->
+                    <div>
+                        <label for="purpose" class="block text-sm font-medium text-gray-300">Purpose <span class="text-red-500">*</span></label>
+                        <input type="text" id="purpose" name="purpose" value="{{ request.purpose }}" required maxlength="200" class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Remarks -->
+                <div class="mt-6">
+                    <label for="remarks" class="block text-sm font-medium text-gray-300">Remarks</label>
+                    <textarea id="remarks" name="remarks" rows="3" class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Any additional remarks...">{{ request.remarks or '' }}</textarea>
+                </div>
+
+                <!-- Items Section -->
+                <div class="mt-8">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-white">Requested Items</h3>
+                        <button type="button" onclick="addItemRow()" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                            <i class="fas fa-plus mr-2"></i>Add Item
+                        </button>
+                    </div>
+
+                    <div id="items-container" class="space-y-4">
+                        {% for line in request.issue_lines %}
+                        <div class="item-row bg-gray-700 p-4 rounded-lg">
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300">Item <span class="text-red-500">*</span></label>
+                                    <select name="item_id[]" required class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                        <option value="">Select Item</option>
+                                        {% for item in items %}
+                                        <option value="{{ item.id }}" {% if item.id == line.item_id %}selected{% endif %}>
+                                            {{ item.code }} - {{ item.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300">Quantity <span class="text-red-500">*</span></label>
+                                    <input type="number" name="quantity[]" value="{{ line.quantity_requested }}" min="1" step="1" required class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-300">Remarks</label>
+                                    <input type="text" name="item_remarks[]" value="{{ line.remarks or '' }}" maxlength="200" class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="button" onclick="removeItemRow(this)" class="w-full px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="px-6 py-4 bg-gray-700 border-t border-gray-600 sm:px-6">
+                <div class="flex justify-end space-x-3">
+                    <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="inline-flex justify-center py-2 px-4 border border-gray-500 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 focus:outline-none">
+                        Cancel
+                    </a>
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                        <i class="fas fa-save mr-2"></i>Update Request
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function addItemRow() {
+    const container = document.getElementById('items-container');
+    const newRow = document.createElement('div');
+    newRow.className = 'item-row bg-gray-700 p-4 rounded-lg';
+    newRow.innerHTML = `
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-300">Item <span class="text-red-500">*</span></label>
+                <select name="item_id[]" required class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">Select Item</option>
+                    {% for item in items %}
+                    <option value="{{ item.id }}">{{ item.code }} - {{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300">Quantity <span class="text-red-500">*</span></label>
+                <input type="number" name="quantity[]" min="1" step="1" required class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300">Remarks</label>
+                <input type="text" name="item_remarks[]" maxlength="200" class="mt-1 block w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex items-end">
+                <button type="button" onclick="removeItemRow(this)" class="w-full px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none">
+                    <i class="fas fa-trash"></i> Remove
+                </button>
+            </div>
+        </div>
+    `;
+    container.appendChild(newRow);
+}
+
+function removeItemRow(button) {
+    const container = document.getElementById('items-container');
+    if (container.children.length > 1) {
+        button.closest('.item-row').remove();
+    } else {
+        alert('At least one item is required.');
+    }
+}
+</script>
+
+{% endblock %}

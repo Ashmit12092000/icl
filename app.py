@@ -1,145 +1,92 @@
 import os
 import logging
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, render_template, redirect, url_for
+from flask_migrate import Migrate
 from flask_login import LoginManager
-from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
+from database import db
 
-# Set up logging
+# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-class Base(DeclarativeBase):
-    pass
-
-db = SQLAlchemy(model_class=Base)
+migrate = Migrate()
 login_manager = LoginManager()
 
-# create the app
-app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # needed for url_for to generate with https
+def create_app():
+    app = Flask(__name__)
 
-# configure the database - SQLite only
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///loan_management.db"
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
-}
+    # Configuration
+    app.config.from_object('config.Config')
+    app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# initialize the app with the extension, flask-sqlalchemy >= 3.0.x
-db.init_app(app)
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = 'Please log in to access this page.'
 
-# Initialize Flask-Login
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
+    # Import models to ensure they're registered
+    from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, Audit
 
-@login_manager.user_loader
-def load_user(user_id):
-    from models import User
-    return User.query.get(int(user_id))
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.query.get(int(user_id))
 
-# Template filters for handling NaN issues
-@app.template_filter('safe_decimal')
-def safe_decimal_filter(value):
-    """Convert Decimal/None values to safe JavaScript numbers"""
-    if value is None:
-        return 0.0
-    try:
-        from decimal import Decimal
-        if isinstance(value, Decimal):
-            return float(value)
-        return float(value) if value else 0.0
-    except (ValueError, TypeError):
-        return 0.0
+    # Register blueprints
+    from auth import auth_bp
+    from views.main import main_bp
+    from views.masters import masters_bp
+    from views.stock_entry import stock_entry_bp
+    from views.stock_issue import stock_issue_bp
+    from views.approvals import approvals_bp
+    from views.user_management import user_management_bp
+    from views.warehouse_management import warehouse_management_bp
+    from views.low_stock import low_stock_bp
+    from views.location_inventory import location_inventory_bp
+    from views.reports import reports_bp
 
-@app.template_filter('safe_currency')
-def safe_currency_filter(value):
-    """Format currency values safely"""
-    if value is None:
-        return "₹0.00"
-    try:
-        from decimal import Decimal
-        if isinstance(value, Decimal):
-            return f"₹{float(value):,.2f}"
-        return f"₹{float(value):,.2f}" if value else "₹0.00"
-    except (ValueError, TypeError):
-        return "₹0.00"
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(main_bp)
+    app.register_blueprint(masters_bp, url_prefix='/masters')
+    app.register_blueprint(stock_entry_bp, url_prefix='/stock')
+    app.register_blueprint(stock_issue_bp, url_prefix='/requests')
+    app.register_blueprint(approvals_bp, url_prefix='/approvals')
+    app.register_blueprint(user_management_bp, url_prefix='/admin')
+    app.register_blueprint(warehouse_management_bp, url_prefix='/warehouse')
+    app.register_blueprint(low_stock_bp, url_prefix='/low-stock')
+    app.register_blueprint(location_inventory_bp, url_prefix='/location-inventory')
+    app.register_blueprint(reports_bp, url_prefix='/reports')
 
-@app.template_filter('safe_percentage')
-def safe_percentage_filter(value):
-    """Format percentage values safely"""
-    if value is None:
-        return "0.00%"
-    try:
-        from decimal import Decimal
-        if isinstance(value, Decimal):
-            return f"{float(value):.2f}%"
-        return f"{float(value):.2f}%" if value else "0.00%"
-    except (ValueError, TypeError):
-        return "0.00%"
+    # Create tables and create single superadmin demo account
+    with app.app_context():
+        db.create_all()
 
-@app.template_filter('safe_number')
-def safe_number_filter(value):
-    """Format numbers safely for display"""
-    if value is None:
-        return "0"
-    try:
-        from decimal import Decimal
-        if isinstance(value, Decimal):
-            return f"{float(value):,.2f}"
-        return f"{float(value):,.2f}" if value else "0"
-    except (ValueError, TypeError):
-        return "0"
+        # Create single superadmin demo account if no users exist
+        if User.query.count() == 0:
+            from werkzeug.security import generate_password_hash
+            admin_user = User(
+                username='admin',
+                password_hash=generate_password_hash('admin123'),
+                full_name='System Administrator',
+                email='admin@company.com',
+                role=UserRole.SUPERADMIN,
+                is_active=True
+            )
+            db.session.add(admin_user)
+            db.session.commit()
 
-with app.app_context():
-    # Make sure to import the models here or their tables won't be created
-    import models  # noqa: F401
-    import routes  # noqa: F401
-    
-    db.create_all()
-    
-    # Create default users if they don't exist
-    from models import User
-    from werkzeug.security import generate_password_hash
-    
-    # Create admin user
-    admin_user = User.query.filter_by(username='admin').first()
-    if not admin_user:
-        admin_user = User(
-            username='admin',
-            email='admin@example.com',
-            password_hash=generate_password_hash('admin123'),
-            role='admin'
-        )
-        db.session.add(admin_user)
-    
-    # Create data entry user
-    data_entry_user = User.query.filter_by(username='dataentry').first()
-    if not data_entry_user:
-        data_entry_user = User(
-            username='dataentry',
-            email='dataentry@example.com',
-            password_hash=generate_password_hash('dataentry123'),
-            role='data_entry'
-        )
-        db.session.add(data_entry_user)
-    
-    # Create normal user
-    normal_user = User.query.filter_by(username='user').first()
-    if not normal_user:
-        normal_user = User(
-            username='user',
-            email='user@example.com',
-            password_hash=generate_password_hash('user123'),
-            role='normal_user'
-        )
-        db.session.add(normal_user)
-    
-    try:
-        db.session.commit()
-        print("Default users created/verified successfully")
-    except Exception as e:
+    @app.errorhandler(404)
+    def not_found(error):
+        return render_template('404.html'), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
         db.session.rollback()
-        print(f"Error creating default users: {e}")
+        return render_template('500.html'), 500
+
+    return app
+
+# Create the app instance
+app = create_app()

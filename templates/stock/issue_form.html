@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Issue Stock - Request {{ request.request_no }} -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Issue Stock - Request {{ request.request_no }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Process approved stock request
+            </p>
+        </div>
+    </div>
+
+    <!-- Request Summary -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Request Summary</h3>
+            <div class="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                    <span class="text-sm text-gray-400">Requester:</span>
+                    <span class="ml-2 text-sm text-white">{{ request.requester.full_name }}</span>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-400">Department:</span>
+                    <span class="ml-2 text-sm text-white">{{ request.department.name }}</span>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-400">Location:</span>
+                    <span class="ml-2 text-sm text-white">{{ request.location.code }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issue Form -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Issue Items</h3>
+            <p class="mt-1 text-sm text-gray-400">
+                Specify the actual quantities to be issued
+            </p>
+        </div>
+        <div class="border-t border-gray-700">
+            <form method="POST" action="{{ url_for('stock_issue.process_issue', request_id=request.id) }}">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Requested</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Available</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Issue Quantity</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                        {% for line in request.issue_lines %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                                <div>
+                                    <div class="font-medium">{{ line.item.code }}</div>
+                                    <div class="text-gray-400">{{ line.item.name }}</div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ line.quantity_requested }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                {% set available = stock_balances[line.item_id] %}
+                                <span class="{% if available >= line.quantity_requested %}text-green-400{% else %}text-red-400{% endif %}">
+                                    {{ available }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                <input type="hidden" name="line_id[]" value="{{ line.id }}">
+                                <input type="number" 
+                                       name="quantity_issued[]" 
+                                       step="0.01" 
+                                       min="0" 
+                                       max="{{ [line.quantity_requested, stock_balances[line.item_id]]|min }}"
+                                       value="{{ line.quantity_requested if stock_balances[line.item_id] >= line.quantity_requested else stock_balances[line.item_id] }}"
+                                       class="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                       required>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="px-6 py-4 bg-gray-700">
+                    <div class="flex justify-end space-x-3">
+                        <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="inline-flex justify-center py-2 px-4 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-800 hover:bg-gray-700 focus:outline-none">
+                            Cancel
+                        </a>
+                        <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none">
+                            <i class="fas fa-shipping-fast mr-2"></i>Issue Stock
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stock Warnings -->
+    {% set has_insufficient = false %}
+    {% for line in request.issue_lines %}
+        {% if stock_balances[line.item_id] < line.quantity_requested %}
+            {% set has_insufficient = true %}
+        {% endif %}
+    {% endfor %}
+
+    {% if has_insufficient %}
+    <div class="bg-red-900 border border-red-800 rounded-md p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-red-400"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-200">Insufficient Stock Warning</h3>
+                <div class="mt-2 text-sm text-red-200">
+                    Some items have insufficient stock. The system has automatically adjusted the issue quantities to match available stock.
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Instructions -->
+    <div class="bg-blue-900 border border-blue-800 rounded-md p-4">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-400"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-200">Instructions</h3>
+                <div class="mt-2 text-sm text-blue-200">
+                    <ul class="list-disc list-inside space-y-1">
+                        <li>Verify the quantities before issuing stock.</li>
+                        <li>You can issue partial quantities if full stock is not available.</li>
+                        <li>Stock will be automatically deducted from the selected location.</li>
+                        <li>This action cannot be undone once completed.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

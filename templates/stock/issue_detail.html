@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block title %}Request {{ request.request_number }} - Stock Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Request Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.stock_issues') }}">Stock Issues</a></li>
+                    <li class="breadcrumb-item active">{{ request.request_number }}</li>
+                </ol>
+            </nav>
+
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-file-alt me-2"></i>Request {{ request.request_number }}</h2>
+                <div>
+                    {% set status_class = {
+                        'draft': 'bg-secondary',
+                        'pending': 'bg-warning',
+                        'approved': 'bg-success',
+                        'rejected': 'bg-danger',
+                        'issued': 'bg-info',
+                        'conditional_approved': 'bg-primary'
+                    } %}
+                    <span class="badge {{ status_class.get(request.status, 'bg-secondary') }} fs-6">
+                        {{ request.status.replace('_', ' ').title() }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Request Details -->
+        <div class="col-lg-8">
+            <!-- Request Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Request Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Request Number:</strong></td>
+                                    <td>{{ request.request_number }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Requester:</strong></td>
+                                    <td>
+                                        {{ request.requester.name }}
+                                        <small class="text-muted">({{ request.requester.emp_id }})</small>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Department:</strong></td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ request.department.code }}</span>
+                                        {{ request.department.name }}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Purpose:</strong></td>
+                                    <td>{{ request.purpose }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>{{ request.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created By:</strong></td>
+                                    <td>{{ request.creator.username }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Request Items -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Requested Items</h5>
+                    {% if request.status == 'draft' and current_user.id == request.created_by %}
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                        <i class="fas fa-plus me-1"></i>Add Item
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if request.items %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Location</th>
+                                        <th>Requested</th>
+                                        <th>Available</th>
+                                        <th>Status</th>
+                                        {% if request.status == 'issued' %}
+                                        <th>Issued</th>
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in request.items %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ item.item.code }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ item.item.name }}</small>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info">{{ item.location.office }}</span>
+                                            <br>
+                                            <small>{{ item.location.room_store }}</small>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-warning">{{ item.quantity_requested }}</span>
+                                        </td>
+                                        <td id="available-{{ item.item_id }}-{{ item.location_id }}">
+                                            <span class="badge bg-secondary">Loading...</span>
+                                        </td>
+                                        <td>
+                                            {% if request.status == 'issued' %}
+                                                <span class="badge bg-success">Issued</span>
+                                            {% elif request.status == 'approved' %}
+                                                <span class="badge bg-info">Ready to Issue</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Pending</span>
+                                            {% endif %}
+                                        </td>
+                                        {% if request.status == 'issued' %}
+                                        <td>
+                                            <span class="badge bg-success">{{ item.quantity_issued }}</span>
+                                        </td>
+                                        {% endif %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-inbox fa-2x text-muted mb-3"></i>
+                            <h6 class="text-muted">No items added yet</h6>
+                            {% if request.status == 'draft' and current_user.id == request.created_by %}
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                                <i class="fas fa-plus me-2"></i>Add First Item
+                            </button>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Panel -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-cogs me-2"></i>Actions</h5>
+                </div>
+                <div class="card-body">
+                    {% if request.status == 'draft' and current_user.id == request.created_by %}
+                        {% if request.items %}
+                        <a href="{{ url_for('main.submit_issue_request', id=request.id) }}" 
+                           class="btn btn-success w-100 mb-2"
+                           onclick="return confirm('Are you sure you want to submit this request for approval?')">
+                            <i class="fas fa-paper-plane me-2"></i>Submit for Approval
+                        </a>
+                        {% else %}
+                        <button class="btn btn-success w-100 mb-2" disabled>
+                            <i class="fas fa-paper-plane me-2"></i>Add Items First
+                        </button>
+                        {% endif %}
+                    {% elif request.status == 'pending' and current_user.role == 'hod' and request.department.hod_id == current_user.id %}
+                        <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <input type="hidden" name="action" value="approve">
+                            <button type="submit" class="btn btn-success w-100 mb-2"
+                                    onclick="return confirm('Are you sure you want to approve this request?')">
+                                <i class="fas fa-check me-2"></i>Approve Request
+                            </button>
+                        </form>
+
+                        <button type="button" class="btn btn-danger w-100 mb-2" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                            <i class="fas fa-times me-2"></i>Reject Request
+                        </button>
+                    {% elif request.status == 'conditional_approved' and current_user.role == 'hod' and request.department.hod_id == current_user.id %}
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            This request was conditionally approved and is waiting for your final approval.
+                        </div>
+
+                        <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            <input type="hidden" name="action" value="approve">
+                            <button type="submit" class="btn btn-success w-100 mb-2"
+                                    onclick="return confirm('Are you sure you want to give final approval?')">
+                                <i class="fas fa-check me-2"></i>Final Approval
+                            </button>
+                        </form>
+
+                        <button type="button" class="btn btn-danger w-100 mb-2" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                            <i class="fas fa-times me-2"></i>Reject Request
+                        </button>
+                    {% elif request.status == 'approved' and current_user.role == 'admin' %}
+                        <a href="{{ url_for('main.issue_stock', id=request.id) }}" 
+                           class="btn btn-primary w-100 mb-2"
+                           onclick="return confirm('Are you sure you want to issue the stock for this request?')">
+                            <i class="fas fa-shipping-fast me-2"></i>Issue Stock
+                        </a>
+                    {% elif request.status == 'issued' %}
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Stock has been issued successfully.
+                            {% if request.issued_at %}
+                            <br><small>Issued on: {{ request.issued_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            {% endif %}
+                        </div>
+                    {% elif request.status == 'rejected' %}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Request was rejected.
+                            {% if request.rejection_reason %}
+                            <br><strong>Reason:</strong> {{ request.rejection_reason }}
+                            {% endif %}
+                        </div>
+                        {% if current_user.id == request.created_by %}
+                        <small class="text-muted">You can edit this request and resubmit.</small>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Approval Timeline -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-primary"></div>
+                            <div class="timeline-content">
+                                <h6>Request Created</h6>
+                                <small class="text-muted">{{ request.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p class="mb-0">By {{ request.creator.username }}</p>
+                            </div>
+                        </div>
+
+                        {% if request.status != 'draft' %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-warning"></div>
+                            <div class="timeline-content">
+                                <h6>Submitted for Approval</h6>
+                                <small class="text-muted">{{ request.updated_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if request.conditional_approved_by %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-info"></div>
+                            <div class="timeline-content">
+                                <h6>Conditionally Approved</h6>
+                                <small class="text-muted">{{ request.conditional_approved_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p class="mb-0">By {{ request.conditional_approver.username }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if request.hod_approved_by %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-success"></div>
+                            <div class="timeline-content">
+                                <h6>Approved</h6>
+                                <small class="text-muted">{{ request.hod_approved_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p class="mb-0">By {{ request.hod_approver.username }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if request.issued_by %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-info"></div>
+                            <div class="timeline-content">
+                                <h6>Stock Issued</h6>
+                                <small class="text-muted">{{ request.issued_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p class="mb-0">By {{ request.issuer.username }}</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+{% if request.status == 'draft' and current_user.id == request.created_by %}
+<div class="modal fade" id="addItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Item to Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.add_issue_item', id=request.id) }}">
+                {{ item_form.hidden_tag() }}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        {{ item_form.item_id.label(class="form-label") }}
+                        {{ item_form.item_id(class="form-select", id="itemSelect") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ item_form.location_id.label(class="form-label") }}
+                        {{ item_form.location_id(class="form-select", id="locationSelect") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ item_form.quantity_requested.label(class="form-label") }}
+                        {{ item_form.quantity_requested(class="form-control") }}
+                    </div>
+                    <div id="stockInfo" class="alert alert-info" style="display: none;">
+                        Available stock: <span id="availableStock">0</span>
+                    </div>
+                    <div class="mb-3">
+                        {{ item_form.description.label(class="form-label") }}
+                        {{ item_form.description(class="form-control", rows="3") }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Reject Modal -->
+{% if (request.status == 'pending' and current_user.role == 'hod' and request.department.hod_id == current_user.id) or (request.status == 'conditional_approved' and current_user.role == 'hod' and request.department.hod_id == current_user.id) %}
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reject Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="action" value="reject">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        {{ approval_form.rejection_reason.label(class="form-label") }}
+                        {{ approval_form.rejection_reason(class="form-control", rows="4", required=True) }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Reject Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load available stock for each item
+    {% for item in request.items %}
+    fetch(`/api/stock_balance/{{ item.item_id }}/{{ item.location_id }}`)
+        .then(response => response.json())
+        .then(data => {
+            const element = document.getElementById('available-{{ item.item_id }}-{{ item.location_id }}');
+            const balance = data.balance;
+            const badgeClass = balance > 0 ? 'bg-success' : 'bg-danger';
+            element.innerHTML = `<span class="badge ${badgeClass}">${balance}</span>`;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('available-{{ item.item_id }}-{{ item.location_id }}').innerHTML = '<span class="badge bg-secondary">Error</span>';
+        });
+    {% endfor %}
+
+    // Handle item and location selection in add item modal
+    const itemSelect = document.getElementById('itemSelect');
+    const locationSelect = document.getElementById('locationSelect');
+    const stockInfo = document.getElementById('stockInfo');
+    const availableStock = document.getElementById('availableStock');
+
+    function updateStockInfo() {
+        const itemId = itemSelect.value;
+        const locationId = locationSelect.value;
+
+        if (itemId && locationId) {
+            fetch(`/api/stock_balance/${itemId}/${locationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    availableStock.textContent = data.balance;
+                    stockInfo.style.display = 'block';
+                    if (data.balance === 0) {
+                        stockInfo.className = 'alert alert-warning';
+                        availableStock.parentElement.innerHTML = 'Available stock: <strong class="text-warning">' + data.balance + '</strong> (Out of stock)';
+                    } else {
+                        stockInfo.className = 'alert alert-info';
+                        availableStock.parentElement.innerHTML = 'Available stock: <strong class="text-success">' + data.balance + '</strong>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    stockInfo.style.display = 'none';
+                });
+        } else {
+            stockInfo.style.display = 'none';
+        }
+    }
+
+    if (itemSelect && locationSelect) {
+        itemSelect.addEventListener('change', updateStockInfo);
+        locationSelect.addEventListener('change', updateStockInfo);
+    }
+});
+</script>
+{% endblock %}

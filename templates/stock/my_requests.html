@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}My Requests -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                My Requests
+            </h2>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <a href="{{ url_for('stock_issue.create_request') }}" class="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                <i class="fas fa-plus mr-2"></i>New Request
+            </a>
+        </div>
+    </div>
+
+    <!-- Requests List -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <ul class="divide-y divide-gray-700">
+            {% for request in requests.items %}
+            <li>
+                <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="block hover:bg-gray-700">
+                    <div class="px-4 py-4 sm:px-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <p class="text-sm font-medium text-indigo-400 truncate">
+                                    {{ request.request_no }}
+                                </p>
+                                <span class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if request.status.value == 'Draft' %}bg-gray-700 text-gray-300
+                                    {% elif request.status.value == 'Pending' %}bg-yellow-900 text-yellow-200
+                                    {% elif request.status.value == 'Approved' %}bg-green-900 text-green-200
+                                    {% elif request.status.value == 'Rejected' %}bg-red-900 text-red-200
+                                    {% elif request.status.value == 'Issued' %}bg-blue-900 text-blue-200
+                                    {% endif %}">
+                                    {{ request.status.value }}
+                                </span>
+                            </div>
+                            <div class="ml-2 flex-shrink-0 flex">
+                                <p class="text-sm text-gray-400">
+                                    {{ request.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-2 sm:flex sm:justify-between">
+                            <div class="sm:flex">
+                                <p class="flex items-center text-sm text-gray-300">
+                                    <i class="fas fa-map-marker-alt mr-1.5 text-gray-400"></i>
+                                    {{ request.location.code }} - {{ request.location.office }}
+                                </p>
+                                <p class="mt-2 flex items-center text-sm text-gray-300 sm:mt-0 sm:ml-6">
+                                    <i class="fas fa-list mr-1.5 text-gray-400"></i>
+                                    {{ request.issue_lines|length }} item(s)
+                                </p>
+                            </div>
+                            <div class="mt-2 flex items-center text-sm text-gray-400 sm:mt-0">
+                                <p>{{ request.purpose[:50] }}{% if request.purpose|length > 50 %}...{% endif %}</p>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </li>
+            {% else %}
+            <li>
+                <div class="px-4 py-8 text-center">
+                    <i class="fas fa-inbox text-gray-400 text-4xl mb-4"></i>
+                    <p class="text-gray-400 text-lg">No requests found</p>
+                    <p class="text-gray-500 text-sm mt-2">Create your first stock request to get started</p>
+                    <a href="{{ url_for('stock_issue.create_request') }}" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                        <i class="fas fa-plus mr-2"></i>Create Request
+                    </a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <!-- Pagination -->
+        {% if requests.pages > 1 %}
+        <div class="bg-gray-700 px-4 py-3 flex items-center justify-between border-t border-gray-600 sm:px-6">
+            <div class="flex-1 flex justify-between sm:hidden">
+                {% if requests.has_prev %}
+                <a href="{{ url_for('stock_issue.my_requests', page=requests.prev_num) }}" class="relative inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-md text-gray-300 bg-gray-800 hover:bg-gray-700">
+                    Previous
+                </a>
+                {% endif %}
+                {% if requests.has_next %}
+                <a href="{{ url_for('stock_issue.my_requests', page=requests.next_num) }}" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-md text-gray-300 bg-gray-800 hover:bg-gray-700">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-400">
+                        Showing <span class="font-medium">{{ (requests.page - 1) * requests.per_page + 1 }}</span>
+                        to <span class="font-medium">{{ (requests.page - 1) * requests.per_page + requests.items|length }}</span>
+                        of <span class="font-medium">{{ requests.total }}</span> results
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                        {% if requests.has_prev %}
+                        <a href="{{ url_for('stock_issue.my_requests', page=requests.prev_num) }}" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400 hover:bg-gray-700">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                        {% endif %}
+                        
+                        {% for page_num in requests.iter_pages() %}
+                            {% if page_num %}
+                                {% if page_num != requests.page %}
+                                <a href="{{ url_for('stock_issue.my_requests', page=page_num) }}" class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400 hover:bg-gray-700">
+                                    {{ page_num }}
+                                </a>
+                                {% else %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-indigo-600 text-sm font-medium text-white">
+                                    {{ page_num }}
+                                </span>
+                                {% endif %}
+                            {% else %}
+                            <span class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400">
+                                ...
+                            </span>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if requests.has_next %}
+                        <a href="{{ url_for('stock_issue.my_requests', page=requests.next_num) }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400 hover:bg-gray-700">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                    </nav>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

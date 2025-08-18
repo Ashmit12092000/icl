@@ -1,141 +1,137 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %} ICL Account Management System{% endblock %}</title>
-
-    <!-- Bootstrap CSS with Light Theme -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- DataTables CSS -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
-
-    {% block extra_head %}{% endblock %}
+    <title>{% block title %} Stock Management{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body>
-    <!-- Navigation -->
+<body class="bg-gray-900 text-gray-100">
     {% if current_user.is_authenticated %}
-    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm border-bottom">
-        <div class="container">
-            <a class="navbar-brand fw-bold text-primary" href="{{ url_for('dashboard') }}">
-                <i class="fas fa-university me-2"></i> ICL Account Management
-            </a>
-
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">
-                            <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+    <!-- Navigation -->
+    <nav class="bg-gray-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold text-white">Stock Management</h1>
+                    </div>
+                    <div class="hidden md:ml-10 md:flex md:space-x-8">
+                        <a href="{{ url_for('main.dashboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
                         </a>
-                    </li>
 
-                    {% if current_user.role in ['admin', 'data_entry'] %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('customer_master') }}">
-                            <i class="fas fa-users me-1"></i>Customers
-                        </a>
-                    </li>
-                    {% endif %}
+                        {% if current_user.role.value in ['superadmin', 'manager'] %}
+                        <div class="relative group">
+                            <button class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                                <i class="fas fa-cog mr-2"></i>Masters
+                                <i class="fas fa-chevron-down ml-1"></i>
+                            </button>
+                            <div class="absolute left-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                                <a href="{{ url_for('masters.departments') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Departments</a>
+                                <a href="{{ url_for('masters.locations') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Locations</a>
+                                <a href="{{ url_for('masters.employees') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Employees</a>
+                                <a href="{{ url_for('masters.items') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Items</a>
+                            </div>
+                        </div>
 
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('reports') }}">
-                            <i class="fas fa-chart-bar me-1"></i>Reports
+                        <a href="{{ url_for('reports.dashboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-chart-bar mr-2"></i>Reports
                         </a>
-                    </li>
+                        {% endif %}
 
-                    {% if current_user.role == 'admin' %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('overdue_loans') }}">
-                            <i class="fas fa-exclamation-triangle me-1"></i>Overdue Loans
+                        {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
+                        <a href="{{ url_for('masters.employees') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-users mr-2"></i>Employees
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('admin_panel') }}">
-                            <i class="fas fa-cog me-1"></i>Admin Panel
-                        </a>
-                    </li>
-                    {% endif %}
-                </ul>
+                        {% endif %}
 
-                <ul class="navbar-nav">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user me-1"></i>{{ current_user.username }}
+                        <div class="relative group">
+                            <button class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                <i class="fas fa-boxes mr-2"></i>Stock
+                            </button>
+                            <div class="absolute left-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                                {% if current_user.role.value in ['superadmin', 'manager'] %}
+                                <a href="{{ url_for('stock_entry.entry_form') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Stock Entry</a>
+                                {% endif %}
+                                <a href="{{ url_for('stock_entry.balances') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                                <i class="fas fa-boxes text-gray-400 group-hover:text-gray-300 mr-3"></i>
+                                Stock Balances
+                            </a>
+                            <a href="{{ url_for('low_stock.alerts') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white group flex items-center px-2 py-2 text-sm font-medium rounded-md">
+                                <i class="fas fa-exclamation-triangle text-yellow-400 group-hover:text-yellow-300 mr-3"></i>
+                                Low Stock Alerts
+                            </a>
+                            <a href="{{ url_for('location_inventory.location_inventory') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">Location Inventory</a>
+                                <a href="{{ url_for('stock_issue.create_request') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Create Request</a>
+                                <a href="{{ url_for('stock_issue.my_requests') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">My Requests</a>
+                                <a href="{{ url_for('stock_issue.request_tracker') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Track Request</a>
+                            </div>
+                        </div>
+
+                        {% if current_user.role.value == 'hod' %}
+                        <a href="{{ url_for('approvals.pending') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-check-circle mr-2"></i>Approvals
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Role: {{ current_user.role.replace('_', ' ').title() }}</h6></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                                <i class="fas fa-sign-out-alt me-1"></i>Logout
-                            </a></li>
-                        </ul>
-                    </li>
-                </ul>
+                        {% endif %}
+
+                        {% if current_user.role.value == 'superadmin' %}
+                        <a href="{{ url_for('user_management.users') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <i class="fas fa-user-cog mr-2"></i>User Management
+                        </a>
+                        <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="block px-4 py-2 text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Warehouse Assignments</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <div class="text-gray-300 text-sm mr-4">
+                        {{ current_user.full_name }} ({{ current_user.role.value.title() }})
+                    </div>
+                    <a href="{{ url_for('auth.logout') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                    </a>
+                </div>
             </div>
         </div>
     </nav>
     {% endif %}
 
     <!-- Flash Messages -->
-    <div class="container mt-3">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                        {% if category == 'success' %}
-                            <i class="fas fa-check-circle me-2"></i>
-                        {% elif category == 'error' %}
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                        {% elif category == 'info' %}
-                            <i class="fas fa-info-circle me-2"></i>
-                        {% endif %}
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
+                <div class="flash-message mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-900 text-red-200{% elif category == 'success' %}bg-green-900 text-green-200{% else %}bg-blue-900 text-blue-200{% endif %}">
+                    {{ message }}
+                </div>
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
-    </div>
+            </div>
+        {% endif %}
+    {% endwith %}
 
     <!-- Main Content -->
-    <main class="{% if current_user.is_authenticated %}container mt-4{% endif %} page-content">
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Footer -->
-    <footer class="bg-light border-top py-4 mt-5">
-        <div class="container text-center">
-            <p class="text-muted mb-0">&copy; 2025 ICL Account Management System. All rights reserved.</p>
-        </div>
-    </footer>
+    <script>
+        // Initialize Feather icons
+        feather.replace();
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        // Auto-hide flash messages after 5 seconds (only target actual flash message containers)
+        setTimeout(function() {
+            const flashMessages = document.querySelectorAll('.flash-message, [class*="bg-red-900"][class*="mb-4"], [class*="bg-green-900"][class*="mb-4"], [class*="bg-blue-900"][class*="mb-4"]');
+            flashMessages.forEach(function(message) {
+                message.style.opacity = '0';
+                setTimeout(function() {
+                    message.remove();
+                }, 300);
+            });
+        }, 5000);
+    </script>
 
-    <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-
-    <!-- DataTables JS -->
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-
-    {% block extra_scripts %}{% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>

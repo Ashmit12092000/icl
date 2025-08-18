@@ -1,285 +1,348 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Account Management System{% endblock %}
+{% block title %}Dashboard - Stock Management{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row">
-        <div class="col-12">
-            <h1><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h1>
-            <p class="text-muted">Welcome back, {{ current_user.username }}!</p>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Dashboard
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Welcome back, {{ current_user.full_name }}!
+            </p>
         </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h5 class="card-title">Total Customers</h5>
-                            <h2 class="mb-0">{{ total_customers }}</h2>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="fas fa-users fa-2x"></i>
-                        </div>
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {% if current_user.role.value in ['superadmin', 'manager'] %}
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-users text-indigo-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Users</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.total_users or 0 }}</dd>
+                        </dl>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-md-4">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h5 class="card-title">Total Outstanding</h5>
-                            <h2 class="mb-0">{{ total_balance | safe_currency }}</h2>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="fas fa-rupee-sign fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-4">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h5 class="card-Active Loans">Active Loans </h5>
-                            <h2 class="mb-0">{{ active_loans }}</h2>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="fas fa-handshake fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Recent Transactions -->
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-history me-2"></i>Recent Transactions</h5>
-                </div>
-                <div class="card-body">
-                    {% if recent_transactions %}
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Customer</th>
-                                    <th>Amount Paid</th>
-                                    <th>Amount Repaid</th>
-                                    <th>Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for transaction in recent_transactions %}
-                                <tr>
-                                    <td>{{ transaction.date.strftime('%d-%m-%Y') if transaction.date }}</td>
-                                    <td>
-                                        <a href="{{ url_for('customer_profile', customer_id=transaction.customer_id) }}" class="text-decoration-none">
-                                            {{ transaction.customer.name if transaction.customer }}
-                                        </a>
-                                    </td>
-                                    <td>{{ transaction.amount_paid | safe_currency if transaction.amount_paid else '-' }}</td>
-                                    <td>{{ transaction.amount_repaid | safe_currency if transaction.amount_repaid else '-' }}</td>
-                                    <td>{{ transaction.balance | safe_currency if transaction.balance else '-' }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-building text-green-400 text-2xl"></i>
                     </div>
-                    {% else %}
-                    <p class="text-muted">No recent transactions found.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-chart-pie me-2"></i>Quick Actions</h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        {% if current_user.role in ['admin', 'data_entry'] %}
-                        <a href="{{ url_for('customer_master') }}" class="btn btn-outline-primary">
-                            <i class="fas fa-plus me-2"></i>Add Customer
-                        </a>
-                        {% endif %}
-                        
-                        <a href="{{ url_for('reports') }}" class="btn btn-outline-secondary">
-                            <i class="fas fa-chart-bar me-2"></i>View Reports
-                        </a>
-                        
-                        {% if current_user.role == 'admin' %}
-                        <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning">
-                            <i class="fas fa-cog me-2"></i>Admin Panel
-                        </a>
-                        {% endif %}
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Departments</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.total_departments or 0 }}</dd>
+                        </dl>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Customer List -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-users me-2"></i>Active Customers</h5>
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-box text-yellow-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.total_items or 0 }}</dd>
+                        </dl>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped" id="dashboardCustomersTable">
-                            <thead>
-                                <tr>
-                                    <th>ICL No</th>
-                                    <th>Name</th>
-                                    <th>Annual Rate</th>
-                                    <th>Current Balance</th>
-                                    <th>TDS</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if customers %}
-                                    {% for customer in customers %}
-                                    <tr>
-                                        <td>{{ customer.icl_no }}</td>
-                                        <td><a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
-                                               class="text-decoration-none">
-                                                {{ customer.name }}
-                                            </a></td>
-                                        <td>{{ customer.annual_rate | safe_percentage }}</td>
-                                        <td class="Dcurrency">
-                                            {% set balance = customer.get_current_balance() %}
-                                            {% set loan_status = customer.get_loan_status() %}
-                                            
-                                            {% if loan_status == 'overdue' %}
-                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
-                                                <small class="badge bg-danger ms-1">Overdue</small>
-                                            {% elif loan_status == 'past_due' %}
-                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
-                                                <small class="badge bg-warning text-dark ms-1">Past Due</small>
-                                            {% elif not customer.loan_closed and balance <= 10.00 and balance >= -10.00 %}
-                                                <span class="transaction-neutral">{{ balance|safe_currency }}</span>
-                                                <small class="badge bg-success ms-1">Ready for Closure</small>
-                                            {% elif balance > 0 %}
-                                                <span class="transaction-positive">{{ balance|safe_currency }}</span>
-                                            {% elif balance < 0 %}
-                                                <span class="transaction-negative">{{ balance|safe_currency }}</span>
-                                            {% else %}
-                                                <span class="transaction-neutral">{{ balance|safe_currency }}</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if customer.tds_applicable %}
-                                                <span class="badge bg-success">Yes</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">No</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('customer_profile', customer_id=customer.id) }}" 
-                                               class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                            {% if current_user.role in ['admin', 'data_entry'] %}
-                                            <a href="{{ url_for('transactions', customer_id=customer.id) }}" 
-                                               class="btn btn-sm btn-outline-success">
-                                                <i class="fas fa-plus"></i>
-                                            </a>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-map-marker-alt text-purple-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Locations</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.total_locations or 0 }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if current_user.role.value == 'hod' %}
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-users text-indigo-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Department Users</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.department_users or 0 }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock text-orange-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Pending Approvals</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.pending_approvals or 0 }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock text-orange-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">
+                                {% if current_user.role.value in ['superadmin', 'manager'] %}
+                                Pending Requests
                                 {% else %}
-                                    <!-- Empty state row with proper column count -->
-                                    <tr>
-                                        <td colspan="6" class="text-center py-4">
-                                            <i class="fas fa-users fa-2x text-muted mb-3"></i>
-                                            <h6 class="text-muted">No customers found</h6>
-                                            <p class="text-muted mb-0">Start by adding your first customer to the system.</p>
-                                        </td>
-                                    </tr>
+                                My Pending Requests
                                 {% endif %}
-                            </tbody>
-                        </table>
+                            </dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.pending_requests or 0 }}</dd>
+                        </dl>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-check-circle text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">
+                                {% if current_user.role.value in ['superadmin', 'manager'] %}
+                                Approved Requests
+                                {% else %}
+                                My Approved Requests
+                                {% endif %}
+                            </dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.approved_requests or 0 }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Requests -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Recent Requests</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-400">Latest stock issue requests</p>
+        </div>
+        <ul class="divide-y divide-gray-700">
+            {% for request in recent_requests %}
+            <li>
+                <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="block hover:bg-gray-700">
+                    <div class="px-4 py-4 sm:px-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <p class="text-sm font-medium text-indigo-400 truncate">
+                                    {{ request.request_no }}
+                                </p>
+                                <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if request.status.value == 'Draft' %}bg-gray-700 text-gray-300
+                                    {% elif request.status.value == 'Pending' %}bg-yellow-900 text-yellow-200
+                                    {% elif request.status.value == 'Approved' %}bg-green-900 text-green-200
+                                    {% elif request.status.value == 'Rejected' %}bg-red-900 text-red-200
+                                    {% elif request.status.value == 'Issued' %}bg-blue-900 text-blue-200
+                                    {% endif %}">
+                                    {{ request.status.value }}
+                                </span>
+                            </div>
+                            <div class="ml-2 flex-shrink-0 flex">
+                                <p class="text-sm text-gray-400">
+                                    {{ request.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-2 sm:flex sm:justify-between">
+                            <div class="sm:flex">
+                                <p class="flex items-center text-sm text-gray-300">
+                                    <i class="fas fa-user mr-1.5 text-gray-400"></i>
+                                    {{ request.requester.full_name }}
+                                </p>
+                                <p class="mt-2 flex items-center text-sm text-gray-300 sm:mt-0 sm:ml-6">
+                                    <i class="fas fa-building mr-1.5 text-gray-400"></i>
+                                    {{ request.department.name }}
+                                </p>
+                            </div>
+                            <div class="mt-2 flex items-center text-sm text-gray-400 sm:mt-0">
+                                <p>{{ request.purpose[:50] }}{% if request.purpose|length > 50 %}...{% endif %}</p>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+                {% if current_user.role.value in ['superadmin', 'manager'] and request.status.value == 'Approved' %}
+                <div class="flex justify-end px-4 py-2 bg-gray-800">
+                    <button onclick="showRejectModal('{{ request.id }}', '{{ request.request_no }}')" class="mr-2 px-3 py-1 bg-red-600 text-white rounded-md text-sm hover:bg-red-700">
+                        Reject
+                    </button>
+                    <a href="{{ url_for('stock_issue.issue_form', request_id=request.id) }}" class="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700">
+                        Issue Stock
+                    </a>
+                </div>
+                {% endif %}
+            </li>
+            {% else %}
+            <li>
+                <div class="px-4 py-4 sm:px-6">
+                    <p class="text-sm text-gray-400">No recent requests found.</p>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Low Stock Alerts -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg leading-6 font-medium text-white">Low Stock Alerts</h3>
+                <a href="{{ url_for('low_stock.alerts') }}" class="text-sm text-indigo-400 hover:text-indigo-300">
+                    View All <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <div class="mt-5">
+                {% if low_stock %}
+                    {% for balance, item, location in low_stock %}
+                    <div class="flex items-center justify-between py-2 border-b border-gray-700">
+                        <div>
+                            <p class="text-sm font-medium text-white">{{ item.name }}</p>
+                            <p class="text-xs text-gray-400">{{ location.office }} - {{ location.room }}</p>
+                            <p class="text-xs text-gray-500">Threshold: {{ item.low_stock_threshold }}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                {% if balance.quantity == 0 %}bg-red-900 text-red-200
+                                {% elif balance.quantity <= (item.low_stock_threshold|float * 0.5) %}bg-orange-900 text-orange-200
+                                {% else %}bg-yellow-900 text-yellow-200{% endif %}">
+                                {{ balance.quantity }} left
+                            </span>
+                            {% if balance.quantity == 0 %}
+                            <p class="text-xs text-red-400 mt-1">Out of stock</p>
+                            {% elif balance.quantity <= (item.low_stock_threshold|float * 0.5) %}
+                            <p class="text-xs text-orange-400 mt-1">Critical</p>
+                            {% else %}
+                            <p class="text-xs text-yellow-400 mt-1">Low stock</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-check-circle text-green-400 text-2xl mb-2"></i>
+                        <p class="text-sm text-gray-400">No low stock alerts</p>
+                    </div>
+                {% endif %}
+            </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Quick Actions</h3>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 p-4">
+            <a href="{{ url_for('stock_issue.create_request') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-plus mr-2"></i>Create Request
+            </a>
+
+            <a href="{{ url_for('stock_entry.balances') }}" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-boxes mr-2"></i>View Stock
+            </a>
+
+            {% if current_user.role.value == 'hod' %}
+            <a href="{{ url_for('approvals.pending') }}" class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-check-circle mr-2"></i>Pending Approvals
+            </a>
+            {% endif %}
+
+            {% if current_user.role.value in ['superadmin', 'manager'] %}
+            <a href="{{ url_for('stock_entry.entry_form') }}" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-plus-circle mr-2"></i>Stock Entry
+            </a>
+            
+            <a href="{{ url_for('reports.dashboard') }}" class="bg-yellow-600 hover:bg-yellow-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-chart-bar mr-2"></i>Reports
+            </a>
+            {% endif %}
+            
+            <a href="{{ url_for('stock_issue.request_tracker') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-center transition duration-150 ease-in-out">
+                <i class="fas fa-search mr-2"></i>Track Request
+            </a>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block extra_scripts %}
+{% block extra_js %}
+<!-- Rejection Modal -->
+<div id="rejectionModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-lg p-6 w-96 mx-4">
+        <h3 class="text-lg font-medium text-white mb-4">Reject Stock Request</h3>
+        <form id="rejectionForm" method="POST" action="">
+            <div class="mb-4">
+                <label class="block text-gray-300 text-sm font-bold mb-2">Reason for Rejection*</label>
+                <textarea name="remarks" required rows="4" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white" placeholder="Please provide a reason for rejecting this request..."></textarea>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button type="button" onclick="hideRejectModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Reject Request</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-$(document).ready(function() {
-    // Initialize dashboard customer table with proper cleanup
-    const dashboardTable = document.getElementById('dashboardCustomersTable');
-    if (dashboardTable && $.fn.DataTable) {
-        const tbody = dashboardTable.querySelector('tbody');
-        const hasEmptyState = tbody && tbody.innerHTML.includes('No customers found');
-        
-        // Don't initialize DataTable if empty state is showing
-        if (hasEmptyState) {
-            console.log('Skipping dashboard DataTable initialization - empty state detected');
-            return;
-        }
-        
-        try {
-            // Ensure proper cleanup before initialization
-            if ($.fn.DataTable.isDataTable('#dashboardCustomersTable')) {
-                $('#dashboardCustomersTable').DataTable().clear().destroy(true);
-            }
-            
-            // Clean up any cell indexes and DataTable remnants
-            const $table = $('#dashboardCustomersTable');
-            $table.find('td, th').each(function() {
-                delete this._DT_CellIndex;
-                $(this).removeAttr('tabindex style');
-            });
-            
-            // Remove any existing DataTable wrapper
-            const $wrapper = $table.closest('.dataTables_wrapper');
-            if ($wrapper.length) {
-                const $originalTable = $table.clone();
-                $wrapper.replaceWith($originalTable);
-            }
-            
-            // Simple configuration to avoid errors
-            $('#dashboardCustomersTable').DataTable({
-                destroy: true,
-                pageLength: 10,
-                responsive: true,
-                language: {
-                    search: "Search customers:",
-                    emptyTable: "No customers available"
-                },
-                columnDefs: [
-                    { targets: [5], orderable: false } // Actions column
-                ]
-            });
-            
-            console.log('Dashboard DataTable initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize dashboard DataTable:', error);
-        }
-    }
-});
+function showRejectModal(requestId, requestNo) {
+    document.getElementById('rejectionForm').action = `/requests/${requestId}/reject`;
+    document.getElementById('rejectionModal').classList.remove('hidden');
+    document.getElementById('rejectionModal').classList.add('flex');
+}
+
+function hideRejectModal() {
+    document.getElementById('rejectionModal').classList.add('hidden');
+    document.getElementById('rejectionModal').classList.remove('flex');
+}
 </script>
 {% endblock %}

@@ -1,0 +1,375 @@
+
+{% extends "base.html" %}
+
+{% block title %}Reports Dashboard - Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Reports Dashboard
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Analytics and insights for stock management
+            </p>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <div class="relative inline-block text-left">
+                <button type="button" onclick="toggleExportMenu()" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-download mr-2"></i>
+                    Export Data
+                    <i class="fas fa-chevron-down ml-2"></i>
+                </button>
+                <div id="exportMenu" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-gray-700 ring-1 ring-black ring-opacity-5">
+                    <div class="py-1">
+                        <a href="{{ url_for('reports.export_data', type='requests', format='csv') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">
+                            <i class="fas fa-file-csv mr-2"></i>Export Requests (CSV)
+                        </a>
+                        <a href="{{ url_for('reports.export_data', type='stock', format='csv') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">
+                            <i class="fas fa-file-csv mr-2"></i>Export Stock Balances (CSV)
+                        </a>
+                        <a href="{{ url_for('reports.export_data', type='departments', format='csv') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">
+                            <i class="fas fa-file-csv mr-2"></i>Export Department Stats (CSV)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clipboard-list text-blue-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Requests</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.total_requests }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-check-circle text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Issued Requests</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.issued_requests }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock text-yellow-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Pending Requests</dt>
+                            <dd class="text-lg font-medium text-white">{{ stats.pending_requests }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-red-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Low Stock Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ low_stock_count }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Monthly Requests Chart -->
+        <div class="bg-gray-800 shadow rounded-lg p-6">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">Monthly Request Trends</h3>
+            <div class="h-64">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Status Distribution Chart -->
+        <div class="bg-gray-800 shadow rounded-lg p-6">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">Request Status Distribution</h3>
+            <div class="h-64">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Department Efficiency Chart -->
+        <div class="bg-gray-800 shadow rounded-lg p-6">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">Department Efficiency</h3>
+            <div class="h-64">
+                <canvas id="departmentChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Items Chart -->
+        <div class="bg-gray-800 shadow rounded-lg p-6">
+            <h3 class="text-lg leading-6 font-medium text-white mb-4">Most Requested Items</h3>
+            <div class="space-y-3">
+                {% for item in top_items[:5] %}
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-300">{{ item.name }}</span>
+                    <div class="flex items-center">
+                        <div class="w-24 bg-gray-700 rounded-full h-2 mr-2">
+                            <div class="bg-indigo-500 h-2 rounded-full" style="width: {{ (item.total_quantity / top_items[0].total_quantity * 100) if top_items else 0 }}%"></div>
+                        </div>
+                        <span class="text-sm text-white">{{ item.total_quantity }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Department Statistics Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
+            <div>
+                <h3 class="text-lg leading-6 font-medium text-white">Department Statistics</h3>
+                <p class="mt-1 max-w-2xl text-sm text-gray-400">Performance metrics by department</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Requests</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Issued</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Efficiency</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    {% for dept in department_stats %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ dept.name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ dept.total_requests }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ dept.issued_requests }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                {% if dept.efficiency >= 80 %}bg-green-900 text-green-200
+                                {% elif dept.efficiency >= 60 %}bg-yellow-900 text-yellow-200
+                                {% else %}bg-red-900 text-red-200{% endif %}">
+                                {{ dept.efficiency }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Recent Activity (Last 7 Days)</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-400">Latest stock requests and actions</p>
+        </div>
+        <ul class="divide-y divide-gray-700">
+            {% for activity in recent_activity %}
+            <li class="px-4 py-4 sm:px-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <p class="text-sm font-medium text-indigo-400 truncate">
+                            {{ activity.request_no }}
+                        </p>
+                        <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if activity.status.value == 'Draft' %}bg-gray-700 text-gray-300
+                            {% elif activity.status.value == 'Pending' %}bg-yellow-900 text-yellow-200
+                            {% elif activity.status.value == 'Approved' %}bg-green-900 text-green-200
+                            {% elif activity.status.value == 'Rejected' %}bg-red-900 text-red-200
+                            {% elif activity.status.value == 'Issued' %}bg-blue-900 text-blue-200
+                            {% endif %}">
+                            {{ activity.status.value }}
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-400">
+                        {{ activity.created_at.strftime('%Y-%m-%d %H:%M') }}
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <p class="text-sm text-gray-300">{{ activity.requester.full_name }} - {{ activity.department.name }}</p>
+                </div>
+            </li>
+            {% else %}
+            <li class="px-4 py-4 sm:px-6">
+                <p class="text-sm text-gray-400">No recent activity found.</p>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart colors for dark theme
+Chart.defaults.color = '#D1D5DB';
+Chart.defaults.borderColor = '#374151';
+
+// Toggle export menu
+function toggleExportMenu() {
+    const menu = document.getElementById('exportMenu');
+    menu.classList.toggle('hidden');
+}
+
+// Close export menu when clicking outside
+document.addEventListener('click', function(event) {
+    const menu = document.getElementById('exportMenu');
+    const button = event.target.closest('button');
+    if (!button || button.textContent.indexOf('Export Data') === -1) {
+        menu.classList.add('hidden');
+    }
+});
+
+// Monthly Requests Chart
+const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+const monthlyData = {{ monthly_data | tojson }};
+
+new Chart(monthlyCtx, {
+    type: 'line',
+    data: {
+        labels: monthlyData.map(d => d.month),
+        datasets: [{
+            label: 'Requests',
+            data: monthlyData.map(d => d.requests),
+            borderColor: '#6366F1',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            tension: 0.4,
+            fill: true
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: '#374151'
+                }
+            },
+            x: {
+                grid: {
+                    color: '#374151'
+                }
+            }
+        }
+    }
+});
+
+// Status Distribution Chart
+const statusCtx = document.getElementById('statusChart').getContext('2d');
+const statusData = {{ status_distribution | tojson }};
+
+new Chart(statusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: statusData.map(d => d.status),
+        datasets: [{
+            data: statusData.map(d => d.count),
+            backgroundColor: [
+                '#6B7280',  // Draft - Gray
+                '#F59E0B',  // Pending - Yellow
+                '#10B981',  // Approved - Green
+                '#EF4444',  // Rejected - Red
+                '#3B82F6'   // Issued - Blue
+            ],
+            borderColor: '#1F2937',
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    usePointStyle: true
+                }
+            }
+        }
+    }
+});
+
+// Department Efficiency Chart
+const departmentCtx = document.getElementById('departmentChart').getContext('2d');
+const departmentData = {{ department_stats | tojson }};
+
+new Chart(departmentCtx, {
+    type: 'bar',
+    data: {
+        labels: departmentData.map(d => d.name),
+        datasets: [{
+            label: 'Efficiency %',
+            data: departmentData.map(d => d.efficiency),
+            backgroundColor: '#10B981',
+            borderColor: '#065F46',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100,
+                grid: {
+                    color: '#374151'
+                }
+            },
+            x: {
+                grid: {
+                    color: '#374151'
+                }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Balances -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Stock Balances
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Current inventory levels by location
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <form method="GET" class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300">Location</label>
+                    <select name="location_id" class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">All Locations</option>
+                        {% for location in locations %}
+                        <option value="{{ location.id }}" {% if selected_location == location.id|string %}selected{% endif %}>
+                            {{ location.code }} - {{ location.office }}, {{ location.room }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300">Item</label>
+                    <select name="item_id" class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">All Items</option>
+                        {% for item in items %}
+                        <option value="{{ item.id }}" {% if selected_item == item.id|string %}selected{% endif %}>
+                            {{ item.code }} - {{ item.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex items-end">
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                        <i class="fas fa-filter mr-2"></i>Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Balances Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <table class="min-w-full divide-y divide-gray-700">
+            <thead class="bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Code</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Quantity</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
+                    {% if current_user.role in ['superadmin', 'manager'] or (current_user.role == 'hod' and current_user.managed_department) %}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody class="bg-gray-800 divide-y divide-gray-700">
+                {% for balance in balances %}
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ balance.item.code }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ balance.item.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {{ balance.location.code }} - {{ balance.location.office }}, {{ balance.location.room }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if balance.quantity == 0 %}bg-red-900 text-red-200
+                            {% elif balance.quantity > 10 %}bg-green-900 text-green-200
+                            {% elif balance.quantity > 5 %}bg-yellow-900 text-yellow-200
+                            {% else %}bg-red-900 text-red-200{% endif %}">
+                            {% if balance.quantity == 0 %}
+                                <i class="fas fa-exclamation-triangle mr-1"></i>Out of Stock
+                            {% else %}
+                                {{ balance.quantity }}
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ balance.last_updated.strftime('%Y-%m-%d %H:%M') }}</td>
+                    {% if current_user.role in ['superadmin', 'manager'] or (current_user.role == 'hod' and current_user.managed_department) %}
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        {% if balance.quantity == 0 %}
+                        <a href="{{ url_for('stock_entry.entry_form') }}?item_id={{ balance.item.id }}&location_id={{ balance.location.id }}" 
+                           class="inline-flex items-center px-3 py-1 border border-transparent text-xs leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <i class="fas fa-plus mr-1"></i>Add Stock
+                        </a>
+                        {% elif balance.quantity <= 5 %}
+                        <a href="{{ url_for('stock_entry.entry_form') }}?item_id={{ balance.item.id }}&location_id={{ balance.location.id }}" 
+                           class="inline-flex items-center px-3 py-1 border border-transparent text-xs leading-4 font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                            <i class="fas fa-plus mr-1"></i>Restock
+                        </a>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{% if current_user.role in ['superadmin', 'manager'] or (current_user.role == 'hod' and current_user.managed_department) %}6{% else %}5{% endif %}" class="px-6 py-4 text-center text-gray-400">
+                        {% if selected_location or selected_item %}
+                            No stock balances found matching the filters.
+                        {% else %}
+                            No stock balances found. Start by creating stock entries.
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Legend -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-3 sm:px-6">
+            <h3 class="text-sm font-medium text-gray-300">Stock Level Indicators</h3>
+            <div class="mt-2 flex space-x-6">
+                <div class="flex items-center">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200 mr-2">
+                        High
+                    </span>
+                    <span class="text-sm text-gray-400">> 10 units</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200 mr-2">
+                        Medium
+                    </span>
+                    <span class="text-sm text-gray-400">6-10 units</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-200 mr-2">
+                        Low
+                    </span>
+                    <span class="text-sm text-gray-400">1-5 units</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-200 mr-2">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>Out of Stock
+                    </span>
+                    <span class="text-sm text-gray-400">0 units</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

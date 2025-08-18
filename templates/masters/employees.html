@@ -1,0 +1,313 @@
+
+{% extends "base.html" %}
+
+{% block title %}Employees -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Employees
+            </h2>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <button onclick="openCreateModal()" class="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                <i class="fas fa-plus mr-2"></i>Add Employee
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filter Bar -->
+    <div class="bg-gray-800 p-4 rounded-lg">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Search</label>
+                <input type="text" id="searchInput" placeholder="Search employees..." 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Department</label>
+                <select id="departmentFilter" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.name }}">{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
+                <select id="sortBy" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="emp_id">Employee ID</option>
+                    <option value="name">Name</option>
+                    <option value="department">Department</option>
+                    <option value="created">Created Date</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Order</label>
+                <select id="sortOrder" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employees Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <table class="min-w-full divide-y divide-gray-700" id="employeesTable">
+            <thead class="bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Employee ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">User Account</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-gray-800 divide-y divide-gray-700">
+                {% for employee in employees %}
+                <tr class="employee-row" data-emp-id="{{ employee.emp_id }}" data-name="{{ employee.name }}" 
+                    data-department="{{ employee.department.name }}" data-created="{{ employee.created_at.strftime('%Y-%m-%d') }}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ employee.emp_id }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ employee.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ employee.department.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {% if employee.user %}
+                            {{ employee.user.username }}
+                        {% else %}
+                            <span class="text-gray-500">Not linked</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ employee.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <div class="flex space-x-2">
+                            <button onclick="openEditModal({{ employee.id }}, '{{ employee.emp_id }}', '{{ employee.name }}', {{ employee.department_id }}, {{ employee.user_id if employee.user_id else 'null' }})"
+                                    class="text-indigo-400 hover:text-indigo-300" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="confirmDelete({{ employee.id }}, '{{ employee.name }}')"
+                                    class="text-red-400 hover:text-red-300" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="px-6 py-4 text-center text-gray-400">No employees found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="createModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white mb-4">Add New Employee</h3>
+            <form method="POST" action="{{ url_for('masters.create_employee') }}">
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Employee ID</label>
+                    <input type="text" name="emp_id" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Name</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
+                    <select name="department_id" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">Select Department</option>
+                        {% for dept in departments %}
+                            {% if current_user.role.value != 'hod' or (current_user.managed_department and dept.id == current_user.managed_department.id) %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">User Account (Optional)</label>
+                    <select name="user_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">Select User</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.full_name }} ({{ user.username }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white mb-4">Edit Employee</h3>
+            <form method="POST" id="editForm">
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Employee ID</label>
+                    <input type="text" name="emp_id" id="editEmpId" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Name</label>
+                    <input type="text" name="name" id="editName" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
+                    <select name="department_id" id="editDepartment" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">Select Department</option>
+                        {% for dept in departments %}
+                            {% if current_user.role.value != 'hod' or (current_user.managed_department and dept.id == current_user.managed_department.id) %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">User Account (Optional)</label>
+                    <select name="user_id" id="editUser" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">Select User</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.full_name }} ({{ user.username }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-medium text-white mt-2 mb-4">Delete Employee</h3>
+            <p class="text-sm text-gray-300 mb-4">
+                Are you sure you want to delete <span id="deleteEmployeeName" class="font-medium"></span>? This action cannot be undone.
+            </p>
+            <div class="flex justify-center space-x-2">
+                <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                <form method="POST" id="deleteForm" class="inline">
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openCreateModal() {
+    document.getElementById('createModal').classList.remove('hidden');
+}
+
+function closeCreateModal() {
+    document.getElementById('createModal').classList.add('hidden');
+}
+
+function openEditModal(id, empId, name, departmentId, userId) {
+    document.getElementById('editEmpId').value = empId;
+    document.getElementById('editName').value = name;
+    document.getElementById('editDepartment').value = departmentId;
+    document.getElementById('editUser').value = userId || '';
+    document.getElementById('editForm').action = '{{ url_for('masters.update_employee', employee_id=0) }}'.replace('0', id);
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+function confirmDelete(id, name) {
+    document.getElementById('deleteEmployeeName').textContent = name;
+    document.getElementById('deleteForm').action = '{{ url_for('masters.delete_employee', employee_id=0) }}'.replace('0', id);
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+
+// Search and filter functionality
+document.getElementById('searchInput').addEventListener('input', filterEmployees);
+document.getElementById('departmentFilter').addEventListener('change', filterEmployees);
+document.getElementById('sortBy').addEventListener('change', sortEmployees);
+document.getElementById('sortOrder').addEventListener('change', sortEmployees);
+
+function filterEmployees() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const departmentFilter = document.getElementById('departmentFilter').value;
+    const rows = document.querySelectorAll('.employee-row');
+
+    rows.forEach(row => {
+        const empId = row.dataset.empId.toLowerCase();
+        const name = row.dataset.name.toLowerCase();
+        const department = row.dataset.department;
+
+        const matchesSearch = empId.includes(searchTerm) || name.includes(searchTerm);
+        const matchesDepartment = !departmentFilter || department === departmentFilter;
+
+        if (matchesSearch && matchesDepartment) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function sortEmployees() {
+    const sortBy = document.getElementById('sortBy').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    const tbody = document.querySelector('#employeesTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('.employee-row'));
+
+    rows.sort((a, b) => {
+        let aValue, bValue;
+
+        switch (sortBy) {
+            case 'emp_id':
+                aValue = a.dataset.empId;
+                bValue = b.dataset.empId;
+                break;
+            case 'name':
+                aValue = a.dataset.name;
+                bValue = b.dataset.name;
+                break;
+            case 'department':
+                aValue = a.dataset.department;
+                bValue = b.dataset.department;
+                break;
+            case 'created':
+                aValue = new Date(a.dataset.created);
+                bValue = new Date(b.dataset.created);
+                break;
+        }
+
+        if (sortOrder === 'desc') {
+            return aValue > bValue ? -1 : 1;
+        } else {
+            return aValue < bValue ? -1 : 1;
+        }
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+}
+</script>
+{% endblock %}

@@ -1,646 +1,401 @@
-/**
- * Main JavaScript file for Loan Management System
- * Handles NaN prevention, form validation, and UI interactions
- */
+// IT Stock Management - Enhanced JavaScript functionality
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Initialize all components
+    initializeModals();
+    initializeNotifications();
+    initializeFormValidation();
+    initializeTableEnhancements();
+    initializeConfirmDialogs();
+    
+    console.log('IT Stock Management App initialized');
+});
 
-// Global application object
-const LoanApp = {
-    // Configuration
-    config: {
-        dateFormat: 'DD-MM-YYYY',
-        currencySymbol: '₹',
-        decimalPlaces: 2
-    },
-
-    // Utility functions for handling numbers safely
-    utils: {
-        /**
-         * Safely convert value to number, preventing NaN
-         * @param {*} value - Value to convert
-         * @param {number} defaultValue - Default value if conversion fails
-         * @returns {number} - Safe number value
-         */
-        safeNumber(value, defaultValue = 0) {
-            if (value === null || value === undefined || value === '') {
-                return defaultValue;
-            }
-
-            const num = parseFloat(value);
-            return isNaN(num) ? defaultValue : num;
-        },
-
-        /**
-         * Format currency value safely
-         * @param {*} value - Value to format
-         * @returns {string} - Formatted currency string
-         */
-        formatCurrency(value) {
-            const num = this.safeNumber(value);
-            return `${LoanApp.config.currencySymbol}${num.toFixed(LoanApp.config.decimalPlaces).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-        },
-
-        /**
-         * Format percentage value safely
-         * @param {*} value - Value to format
-         * @returns {string} - Formatted percentage string
-         */
-        formatPercentage(value) {
-            const num = this.safeNumber(value);
-            return `${num.toFixed(2)}%`;
-        },
-
-        /**
-         * Validate numeric input
-         * @param {HTMLElement} input - Input element
-         * @returns {boolean} - True if valid
-         */
-        validateNumericInput(input) {
-            const value = input.value.trim();
-            if (value === '') return true; // Allow empty values
-
-            const num = parseFloat(value);
-            if (isNaN(num)) {
-                this.showInputError(input, 'Please enter a valid number');
-                return false;
-            }
-
-            if (num < 0) {
-                this.showInputError(input, 'Please enter a positive number');
-                return false;
-            }
-
-            this.clearInputError(input);
-            return true;
-        },
-
-        /**
-         * Show input validation error
-         * @param {HTMLElement} input - Input element
-         * @param {string} message - Error message
-         */
-        showInputError(input, message) {
-            input.classList.add('is-invalid');
-
-            // Remove existing error message
-            const existingError = input.parentNode.querySelector('.invalid-feedback');
-            if (existingError) {
-                existingError.remove();
-            }
-
-            // Add new error message
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'invalid-feedback';
-            errorDiv.textContent = message;
-            input.parentNode.appendChild(errorDiv);
-        },
-
-        /**
-         * Clear input validation error
-         * @param {HTMLElement} input - Input element
-         */
-        clearInputError(input) {
-            input.classList.remove('is-invalid');
-            const errorDiv = input.parentNode.querySelector('.invalid-feedback');
-            if (errorDiv) {
-                errorDiv.remove();
-            }
-        },
-
-        /**
-         * Calculate days between two dates
-         * @param {string} fromDate - Start date (YYYY-MM-DD)
-         * @param {string} toDate - End date (YYYY-MM-DD)
-         * @returns {number} - Number of days
-         */
-        calculateDays(fromDate, toDate) {
-            if (!fromDate || !toDate) return 0;
-
-            const from = new Date(fromDate);
-            const to = new Date(toDate);
-
-            if (isNaN(from.getTime()) || isNaN(to.getTime())) return 0;
-
-            const diffTime = Math.abs(to - from);
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+// Modal Management
+function initializeModals() {
+    // Close modals when clicking outside
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('modal-backdrop')) {
+            closeAllModals();
         }
-    },
+    });
+    
+    // Close modals with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeAllModals();
+        }
+    });
+}
 
-    // Form handling functions
-    forms: {
-        /**
-         * Initialize form validation
-         */
-        init() {
-            // Add validation to all numeric inputs
-            document.querySelectorAll('input[type="number"]').forEach(input => {
-                input.addEventListener('blur', (e) => {
-                    LoanApp.utils.validateNumericInput(e.target);
-                });
+function closeAllModals() {
+    const modals = document.querySelectorAll('[id$="Modal"]');
+    modals.forEach(modal => {
+        modal.classList.add('hidden');
+    });
+}
 
-                input.addEventListener('input', (e) => {
-                    // Clear error on input
-                    LoanApp.utils.clearInputError(e.target);
-
-                    // Update related calculations if needed
-                    this.updateCalculations(e.target);
-                });
-            });
-
-            // Add validation to date inputs
-            document.querySelectorAll('input[type="date"]').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    this.validateDateInput(e.target);
-                });
-            });
-
-            // Prevent form double submission
-            document.querySelectorAll('form').forEach(form => {
-                form.addEventListener('submit', (e) => {
-                    this.handleFormSubmission(e);
-                });
-            });
-        },
-
-        /**
-         * Validate date input
-         * @param {HTMLElement} input - Date input element
-         */
-        validateDateInput(input) {
-            const value = input.value;
-            if (!value) return true;
-
-            const date = new Date(value);
-            if (isNaN(date.getTime())) {
-                LoanApp.utils.showInputError(input, 'Please enter a valid date');
-                return false;
-            }
-
-            // Check if date is not too far in the future
-            const today = new Date();
-            const oneYearFromNow = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
-
-            if (date > oneYearFromNow) {
-                if (!confirm('The selected date is more than a year in the future. Are you sure this is correct?')) {
-                    input.focus();
-                    return false;
+// Enhanced Notification System
+function initializeNotifications() {
+    // Auto-hide flash messages after 5 seconds with fade effect (only target actual flash messages)
+    setTimeout(function() {
+        const flashMessages = document.querySelectorAll('.flash-message');
+        flashMessages.forEach(function(message) {
+            message.style.transition = 'opacity 0.5s ease-out';
+            message.style.opacity = '0';
+            setTimeout(function() {
+                if (message.parentNode) {
+                    message.remove();
                 }
-            }
+            }, 500);
+        });
+    }, 5000);
+}
 
-            LoanApp.utils.clearInputError(input);
-            return true;
-        },
+function showNotification(message, type = 'info') {
+    const colors = {
+        success: 'bg-green-900 text-green-200 border-green-800',
+        error: 'bg-red-900 text-red-200 border-red-800',
+        warning: 'bg-yellow-900 text-yellow-200 border-yellow-800',
+        info: 'bg-blue-900 text-blue-200 border-blue-800'
+    };
+    
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 max-w-sm p-4 rounded-md border ${colors[type]} shadow-lg z-50 flash-message`;
+    notification.innerHTML = `
+        <div class="flex items-center">
+            <div class="flex-shrink-0">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm">${message}</p>
+            </div>
+            <div class="ml-auto pl-3">
+                <button onclick="this.parentElement.parentElement.remove()" class="text-current hover:opacity-75">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 5000);
+}
 
-        /**
-         * Update calculations based on input changes
-         * @param {HTMLElement} input - Changed input element
-         */
-        updateCalculations(input) {
-            const form = input.closest('form');
-            if (!form) return;
-
-            // Handle transaction form calculations
-            if (form.id === 'transactionForm') {
-                this.updateTransactionCalculations(form);
-            }
-
-            // Handle period calculations
-            if (input.name === 'period_from' || input.name === 'period_to') {
-                this.updatePeriodCalculations(form);
-            }
-        },
-
-        /**
-         * Update transaction balance calculations
-         * @param {HTMLElement} form - Transaction form
-         */
-        updateTransactionCalculations(form) {
-            const amountPaidInput = form.querySelector('input[name="amount_paid"]');
-            const amountRepaidInput = form.querySelector('input[name="amount_repaid"]');
-            const balanceDisplay = form.querySelector('#current_balance_display');
-
-            if (!amountPaidInput || !amountRepaidInput || !balanceDisplay) return;
-
-            // Get current balance from the display (extract number from currency format)
-            const currentBalanceText = balanceDisplay.value || '₹0.00';
-            const currentBalance = LoanApp.utils.safeNumber(currentBalanceText.replace(/[₹,]/g, ''));
-
-            const amountPaid = LoanApp.utils.safeNumber(amountPaidInput.value);
-            const amountRepaid = LoanApp.utils.safeNumber(amountRepaidInput.value);
-
-            const newBalance = currentBalance + amountPaid - amountRepaid;
-            balanceDisplay.value = LoanApp.utils.formatCurrency(newBalance);
-
-            // Add visual indicator for balance change
-            if (newBalance > currentBalance) {
-                balanceDisplay.classList.add('text-success');
-                balanceDisplay.classList.remove('text-danger', 'text-muted');
-            } else if (newBalance < currentBalance) {
-                balanceDisplay.classList.add('text-danger');
-                balanceDisplay.classList.remove('text-success', 'text-muted');
-            } else {
-                balanceDisplay.classList.add('text-muted');
-                balanceDisplay.classList.remove('text-success', 'text-danger');
-            }
-        },
-
-        /**
-         * Update period calculations (days)
-         * @param {HTMLElement} form - Form containing period inputs
-         */
-        updatePeriodCalculations(form) {
-            const fromInput = form.querySelector('input[name="period_from"]');
-            const toInput = form.querySelector('input[name="period_to"]');
-
-            if (!fromInput || !toInput) return;
-
-            const fromDate = fromInput.value;
-            const toDate = toInput.value;
-
-            if (fromDate && toDate) {
-                const days = LoanApp.utils.calculateDays(fromDate, toDate);
-
-                // Show calculated days somewhere (you might want to add a display element)
-                console.log(`Period: ${days} days`);
-
-                // Validate date range
-                if (new Date(fromDate) > new Date(toDate)) {
-                    LoanApp.utils.showInputError(toInput, 'End date must be after start date');
-                } else {
-                    LoanApp.utils.clearInputError(toInput);
-                    LoanApp.utils.clearInputError(fromInput);
-                }
-            }
-        },
-
-        /**
-         * Handle form submission to prevent double submission
-         * @param {Event} e - Submit event
-         */
-        handleFormSubmission(e) {
-            const form = e.target;
-            const submitButton = form.querySelector('button[type="submit"]');
-
-            // Check if form is already being submitted
-            if (form.classList.contains('form-loading')) {
-                e.preventDefault();
-                return false;
-            }
-
-            // Validate all numeric inputs
-            const numericInputs = form.querySelectorAll('input[type="number"]');
-            let hasErrors = false;
-
-            numericInputs.forEach(input => {
-                if (!LoanApp.utils.validateNumericInput(input)) {
-                    hasErrors = true;
-                }
-            });
-
-            if (hasErrors) {
-                e.preventDefault();
-                return false;
-            }
-
-            // Mark form as loading
-            form.classList.add('form-loading');
-
+// Form Validation Enhancement
+function initializeFormValidation() {
+    const forms = document.querySelectorAll('form');
+    
+    forms.forEach(form => {
+        const submitButton = form.querySelector('button[type="submit"]');
+        
+        form.addEventListener('submit', function(e) {
             if (submitButton) {
+                submitButton.classList.add('loading');
                 submitButton.disabled = true;
-                const originalText = submitButton.innerHTML;
-                submitButton.innerHTML = '<span class="loading-spinner"></span> Processing...';
-
-                // Reset button after 5 seconds (fallback)
+                
+                // Re-enable after 3 seconds to prevent permanent disable on validation errors
                 setTimeout(() => {
-                    form.classList.remove('form-loading');
+                    submitButton.classList.remove('loading');
                     submitButton.disabled = false;
-                    submitButton.innerHTML = originalText;
-                }, 5000);
+                }, 3000);
             }
-
-            return true;
-        }
-    },
-
-    // DataTables enhancement
-    tables: {
-        /**
-         * Initialize enhanced DataTables
-         */
-        init() {
-            // Only initialize non-customer tables to avoid conflicts
-            $('.table:not(#customersTable):not(#customerSummaryTable):not(#dashboardCustomersTable)').each(function() {
-                if ($(this).data('no-datatable')) return;
-
-                const $table = $(this);
-                const tableId = $table.attr('id') || 'unnamed-table';
-
-                // Complete cleanup before initialization
-                LoanApp.destroyDataTable('#' + tableId);
-
-                const options = {
-                    destroy: true, // Allow reinitialization
-                    responsive: true,
-                    pageLength: 10,
-                    order: [[0, 'desc']], // Default sort by first column descending
-                    language: {
-                        search: "Search:",
-                        lengthMenu: "Show _MENU_ entries",
-                        info: "Showing _START_ to _END_ of _TOTAL_ entries",
-                        infoEmpty: "No entries available",
-                        infoFiltered: "(filtered from _MAX_ total entries)",
-                        zeroRecords: "No matching records found",
-                        emptyTable: "No data available in table"
-                    },
-                    columnDefs: [
-                        {
-                            targets: 'no-sort',
-                            orderable: false
-                        },
-                        {
-                            targets: 'currency',
-                            type: 'num-fmt',
-                            render: function(data, type, row) {
-                                if (type === 'display' || type === 'type') {
-                                    const num = LoanApp.utils.safeNumber(data);
-                                    return LoanApp.utils.formatCurrency(num);
-                                }
-                                return LoanApp.utils.safeNumber(data);
-                            }
-                        },
-                        {
-                            targets: 'percentage',
-                            type: 'num-fmt',
-                            render: function(data, type, row) {
-                                if (type === 'display' || type === 'type') {
-                                    const num = LoanApp.utils.safeNumber(data);
-                                    return LoanApp.utils.formatPercentage(num);
-                                }
-                                return LoanApp.utils.safeNumber(data);
-                            }
-                        }
-                    ]
-                };
-
-                // Initialize DataTable
-                try {
-                    $table.DataTable(options);
-                    console.log('DataTable initialized for:', tableId);
-                } catch (error) {
-                   // console.warn('DataTable initialization failed for', tableId, ':', error);
-                }
-            });
-
-            // Initialize customer summary table for reports page
-            this.initCustomerSummaryTable();
-        },
-
-        // Initialize customer summary table on reports page
-        initCustomerSummaryTable() {
-            const summaryTable = document.getElementById('customerSummaryTable');
-            if (!summaryTable) return;
-
-            LoanApp.destroyDataTable('#customerSummaryTable');
-
-            try {
-                $('#customerSummaryTable').DataTable({
-                    destroy: true,
-                    responsive: true,
-                    pageLength: 15,
-                    order: [[0, 'asc']],
-                    columnDefs: [
-                        { targets: [7], orderable: false } // Actions column
-                    ],
-                    language: {
-                        search: "Search customers:",
-                        lengthMenu: "Show _MENU_ customers",
-                        info: "Showing _START_ to _END_ of _TOTAL_ customers"
-                    }
-                });
-                console.log('Customer summary DataTable initialized');
-            } catch (error) {
-                console.error('Failed to initialize customer summary DataTable:', error);
-            }
-        }
-    },
-
-    // Initialize the application
-    init() {
-        // Wait for DOM to be ready
-        $(document).ready(() => {
-            console.log('Loan Management System initialized');
-
-            // Initialize components
-            this.forms.init();
-            //this.tables.init();  // Removing this line as tables are initialized in individual pages
-
-            // Initialize customer table if present
-            this.initCustomerTable();
-
-            // Handle customer deletion success and modal setup
-            this.handleCustomerPageInit();
-
-            // Set up global error handling
-            window.addEventListener('error', (e) => {
-                console.error('JavaScript Error:', e.error);
-                // You might want to show a user-friendly error message
-            });
-
-            // Handle unhandled promise rejections
-            window.addEventListener('unhandledrejection', (e) => {
-                console.error('Unhandled Promise Rejection:', e.reason);
-                e.preventDefault();
-            });
-
-            // Auto-hide alerts after 5 seconds
-            $('.alert').each(function() {
-                const $alert = $(this);
-                if (!$alert.hasClass('alert-permanent')) {
-                    setTimeout(() => {
-                        $alert.fadeOut();
-                    }, 5000);
-                }
-            });
-
-            // Initialize tooltips if Bootstrap is available
-            if (typeof bootstrap !== 'undefined') {
-                const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                tooltipTriggerList.map(function (tooltipTriggerEl) {
-                    return new bootstrap.Tooltip(tooltipTriggerEl);
-                });
-            }
-
-            // Add smooth animations to page elements
-            this.addPageAnimations();
         });
-    },
-
-    // Add smooth animations to page elements
-    addPageAnimations() {
-        // Animate cards on page load
-        $('.card').each(function(index) {
-            $(this).css({
-                'opacity': '0',
-                'transform': 'translateY(20px)'
-            }).delay(index * 100).animate({
-                'opacity': '1'
-            }, 500).css({
-                'transform': 'translateY(0)'
+        
+        // Real-time validation for required fields
+        const requiredFields = form.querySelectorAll('[required]');
+        requiredFields.forEach(field => {
+            field.addEventListener('blur', function() {
+                validateField(field);
+            });
+            
+            field.addEventListener('input', function() {
+                if (field.classList.contains('form-error')) {
+                    validateField(field);
+                }
             });
         });
+    });
+}
 
-        // Animate tables on page load
-        $('.table').each(function(index) {
-            $(this).css({
-                'opacity': '0',
-                'transform': 'translateY(20px)'
-            }).delay(200 + index * 100).animate({
-                'opacity': '1'
-            }, 500).css({
-                'transform': 'translateY(0)'
-            });
-        });
-
-        // Add hover animations to buttons
-        $('.btn').hover(
-            function() {
-                $(this).addClass('shadow-sm').css('transform', 'translateY(-1px)');
-            },
-            function() {
-                $(this).removeClass('shadow-sm').css('transform', 'translateY(0)');
-            }
-        );
-    },
-
-    // Simplified customer table initialization 
-    initCustomerTable() {
-        const customerTable = document.getElementById('customersTable');
-        if (!customerTable) return;
-
-        // Check if table has valid structure
-        const tbody = customerTable.querySelector('tbody');
-        if (!tbody) return;
-
-        const hasEmptyState = tbody.innerHTML.includes('No customers found');
-
-        // Complete cleanup first
-        this.destroyDataTable('#customersTable');
-
-        // Don't initialize DataTable if we have empty state
-        if (hasEmptyState) {
-            console.log('Skipping DataTable initialization - empty state detected');
-            return;
-        }
-
-        // Wait for DOM to settle after deletion
-        setTimeout(() => {
-            try {
-                // Basic configuration to avoid cell index issues
-                $('#customersTable').DataTable({
-                    destroy: true,
-                    pageLength: 10,
-                    responsive: true,
-                    language: {
-                        search: "Search customers:",
-                        emptyTable: "No customers available"
-                    },
-                    columnDefs: [
-                        { targets: [10], orderable: false } // Actions column only
-                    ]
-                });
-
-                console.log('Customer DataTable initialized successfully');
-            } catch (error) {
-               // console.error('Failed to initialize customer DataTable:', error);
-                // If DataTable fails, at least ensure basic functionality
-                $('#customersTable').removeClass('dataTable');
-            }
-        }, 150);
-    },
-
-    // Enhanced DataTable cleanup utility
-    destroyDataTable(selector) {
-        try {
-            if ($.fn.DataTable.isDataTable(selector)) {
-                const table = $(selector).DataTable();
-                table.clear().draw();
-                table.destroy(true); // Remove from DOM completely
-                console.log('DataTable destroyed:', selector);
-            }
-
-            // More thorough cleanup
-            const $table = $(selector);
-
-            // Remove wrapper elements
-            $table.closest('.dataTables_wrapper').remove();
-            $(selector + '_wrapper').remove();
-
-            // Reset table to original state (preserve essential attributes)
-            $table.removeClass('dataTable no-footer dtr-inline collapsed')
-                  .removeAttr('role aria-describedby width style')
-                  .removeData();
-
-            // Clean up any cell indexes that might be causing issues
-            $table.find('td, th').each(function() {
-                delete this._DT_CellIndex;
-                $(this).removeAttr('tabindex class style');
-            });
-
-            // Remove any DataTables event listeners
-            $table.off('.dt');
-
-        } catch (error) {
-           // console.warn('Error during DataTable cleanup:', error);
-            // Force cleanup even if there are errors
-            try {
-                $(selector).replaceWith($(selector).clone());
-            } catch (e) {
-               // console.warn('Force cleanup failed:', e);
-            }
-        }
-    },
-
-    // Handle customer page initialization
-    handleCustomerPageInit() {
-        if (window.location.pathname.includes('customer_master')) {
-            // Handle add customer modal
-            const addCustomerBtn = document.getElementById('addCustomerBtn');
-            const addCustomerBtnEmpty = document.getElementById('addCustomerBtnEmpty');
-            const addCustomerModal = document.getElementById('addCustomerModal');
-
-            if (addCustomerModal) {
-                const modal = new bootstrap.Modal(addCustomerModal);
-
-                if (addCustomerBtn) {
-                    addCustomerBtn.addEventListener('click', () => {
-                        modal.show();
-                    });
-                }
-
-                if (addCustomerBtnEmpty) {
-                    addCustomerBtnEmpty.addEventListener('click', () => {
-                        modal.show();
-                    });
-                }
-            }
-
-            // Handle customer deletion success - reinitialize table
-            if (window.location.search.includes('deleted=1')) {
-                // Remove the parameter from URL
-                const url = new URL(window.location);
-                url.searchParams.delete('deleted');
-                window.history.replaceState({}, '', url);
-
-                // Reinitialize table after deletion
-                setTimeout(() => {
-                    this.initCustomerTable();
-                }, 200);
-            }
-        }
+function validateField(field) {
+    const value = field.value.trim();
+    const isValid = field.checkValidity() && value !== '';
+    
+    field.classList.remove('form-error', 'form-success');
+    
+    if (!isValid) {
+        field.classList.add('form-error');
+        showFieldError(field, getValidationMessage(field));
+    } else {
+        field.classList.add('form-success');
+        hideFieldError(field);
     }
+    
+    return isValid;
+}
+
+function getValidationMessage(field) {
+    if (field.validity.valueMissing) {
+        return `${field.labels[0]?.textContent || 'This field'} is required`;
+    }
+    if (field.validity.typeMismatch) {
+        return `Please enter a valid ${field.type}`;
+    }
+    if (field.validity.tooShort) {
+        return `Minimum length is ${field.minLength} characters`;
+    }
+    return 'Please check this field';
+}
+
+function showFieldError(field, message) {
+    let errorElement = field.parentNode.querySelector('.field-error');
+    if (!errorElement) {
+        errorElement = document.createElement('div');
+        errorElement.className = 'field-error text-red-400 text-sm mt-1';
+        field.parentNode.appendChild(errorElement);
+    }
+    errorElement.textContent = message;
+}
+
+function hideFieldError(field) {
+    const errorElement = field.parentNode.querySelector('.field-error');
+    if (errorElement) {
+        errorElement.remove();
+    }
+}
+
+// Table Enhancements
+function initializeTableEnhancements() {
+    const tables = document.querySelectorAll('table');
+    
+    tables.forEach(table => {
+        // Add hover effects
+        table.classList.add('table-hover');
+        
+        // Make tables responsive
+        if (!table.parentNode.classList.contains('overflow-x-auto')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'overflow-x-auto';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        }
+        
+        // Add sorting capability to headers (if not already implemented)
+        const headers = table.querySelectorAll('th');
+        headers.forEach((header, index) => {
+            if (!header.querySelector('.sort-icon')) {
+                header.style.cursor = 'pointer';
+                header.addEventListener('click', () => sortTable(table, index));
+            }
+        });
+    });
+}
+
+function sortTable(table, columnIndex) {
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    const isAscending = table.dataset.sortDirection !== 'asc';
+    table.dataset.sortDirection = isAscending ? 'asc' : 'desc';
+    
+    rows.sort((a, b) => {
+        const aValue = a.cells[columnIndex]?.textContent.trim() || '';
+        const bValue = b.cells[columnIndex]?.textContent.trim() || '';
+        
+        // Try to parse as numbers first
+        const aNum = parseFloat(aValue);
+        const bNum = parseFloat(bValue);
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            return isAscending ? aNum - bNum : bNum - aNum;
+        }
+        
+        // String comparison
+        return isAscending ? 
+            aValue.localeCompare(bValue) : 
+            bValue.localeCompare(aValue);
+    });
+    
+    // Update table
+    rows.forEach(row => tbody.appendChild(row));
+    
+    // Update sort indicators
+    table.querySelectorAll('th .sort-icon').forEach(icon => icon.remove());
+    const header = table.querySelectorAll('th')[columnIndex];
+    const sortIcon = document.createElement('i');
+    sortIcon.className = `fas fa-sort-${isAscending ? 'up' : 'down'} sort-icon ml-2`;
+    header.appendChild(sortIcon);
+}
+
+// Confirmation Dialogs
+function initializeConfirmDialogs() {
+    // Add confirmation to destructive actions
+    const destructiveActions = document.querySelectorAll('[data-confirm]');
+    
+    destructiveActions.forEach(element => {
+        element.addEventListener('click', function(e) {
+            const message = this.dataset.confirm || 'Are you sure?';
+            if (!confirm(message)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+    });
+}
+
+// Utility Functions
+
+// Search functionality for tables
+function searchTable(input, tableId) {
+    const table = document.getElementById(tableId);
+    const rows = table.querySelectorAll('tbody tr');
+    const searchTerm = input.value.toLowerCase();
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+// Copy to clipboard functionality
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Copied to clipboard!', 'success');
+    }).catch(() => {
+        showNotification('Failed to copy to clipboard', 'error');
+    });
+}
+
+// Format numbers with proper locale
+function formatNumber(number, decimals = 2) {
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    }).format(number);
+}
+
+// Format dates
+function formatDate(dateString, options = {}) {
+    const defaultOptions = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    
+    return new Intl.DateTimeFormat('en-US', { ...defaultOptions, ...options })
+        .format(new Date(dateString));
+}
+
+// Debounce function for search inputs
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Auto-resize textareas
+function autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+}
+
+// Initialize auto-resize for all textareas
+document.addEventListener('DOMContentLoaded', function() {
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(textarea => {
+        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+        autoResizeTextarea(textarea); // Initial resize
+    });
+});
+
+// Print functionality
+function printPage() {
+    window.print();
+}
+
+function printElement(elementId) {
+    const element = document.getElementById(elementId);
+    const originalContent = document.body.innerHTML;
+    
+    document.body.innerHTML = element.innerHTML;
+    window.print();
+    document.body.innerHTML = originalContent;
+    
+    // Reinitialize after print
+    location.reload();
+}
+
+// Dark mode toggle (if needed in future)
+function toggleDarkMode() {
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+}
+
+// Export functionality for tables
+function exportTableToCSV(tableId, filename = 'export.csv') {
+    const table = document.getElementById(tableId);
+    const rows = Array.from(table.querySelectorAll('tr'));
+    
+    const csvContent = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.map(cell => {
+            let text = cell.textContent.trim();
+            // Escape quotes and wrap in quotes if contains comma
+            if (text.includes(',') || text.includes('"')) {
+                text = '"' + text.replace(/"/g, '""') + '"';
+            }
+            return text;
+        }).join(',');
+    }).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    
+    window.URL.revokeObjectURL(url);
+}
+
+// Global error handler
+window.addEventListener('error', function(e) {
+    console.error('Global error:', e.error);
+    showNotification('An unexpected error occurred. Please try again.', 'error');
+});
+
+// Service worker registration (for future PWA features)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        // Can register service worker here if needed
+    });
+}
+
+// Expose useful functions globally
+window.StockApp = {
+    showNotification,
+    copyToClipboard,
+    formatNumber,
+    formatDate,
+    searchTable,
+    exportTableToCSV,
+    printElement,
+    validateField
 };
-
-// Initialize the application
-LoanApp.init();
-
-// Export for global access
-window.LoanApp = LoanApp;

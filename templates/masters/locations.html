@@ -1,0 +1,277 @@
+
+{% extends "base.html" %}
+
+{% block title %}Locations -  Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Locations
+            </h2>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4">
+            <button onclick="openCreateModal()" class="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                <i class="fas fa-plus mr-2"></i>Add Location
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filter Bar -->
+    <div class="bg-gray-800 p-4 rounded-lg">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Search</label>
+                <input type="text" id="searchInput" placeholder="Search locations..." 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Office</label>
+                <select id="officeFilter" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="">All Offices</option>
+                    {% for location in locations %}
+                        {% if location.office not in office_list %}
+                            {% set office_list = office_list + [location.office] if office_list else [location.office] %}
+                        {% endif %}
+                    {% endfor %}
+                    {% for office in locations|map(attribute='office')|unique %}
+                    <option value="{{ office }}">{{ office }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
+                <select id="sortBy" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="code">Code</option>
+                    <option value="office">Office</option>
+                    <option value="room">Room</option>
+                    <option value="created">Created Date</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Order</label>
+                <select id="sortOrder" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Locations Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <table class="min-w-full divide-y divide-gray-700" id="locationsTable">
+            <thead class="bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Code</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Office</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Room</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-gray-800 divide-y divide-gray-700">
+                {% for location in locations %}
+                <tr class="location-row" data-code="{{ location.code }}" data-office="{{ location.office }}" 
+                    data-room="{{ location.room }}" data-created="{{ location.created_at.strftime('%Y-%m-%d') }}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ location.code }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ location.office }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ location.room }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ location.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <div class="flex space-x-2">
+                            <button onclick="openEditModal({{ location.id }}, '{{ location.code }}', '{{ location.office }}', '{{ location.room }}')"
+                                    class="text-indigo-400 hover:text-indigo-300" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="confirmDelete({{ location.id }}, '{{ location.code }}')"
+                                    class="text-red-400 hover:text-red-300" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="px-6 py-4 text-center text-gray-400">No locations found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="createModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white mb-4">Add New Location</h3>
+            <form method="POST" action="{{ url_for('masters.create_location') }}">
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Code</label>
+                    <input type="text" name="code" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Office</label>
+                    <input type="text" name="office" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Room</label>
+                    <input type="text" name="room" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white mb-4">Edit Location</h3>
+            <form method="POST" id="editForm">
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Code</label>
+                    <input type="text" name="code" id="editCode" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Office</label>
+                    <input type="text" name="office" id="editOffice" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Room</label>
+                    <input type="text" name="room" id="editRoom" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-medium text-white mt-2 mb-4">Delete Location</h3>
+            <p class="text-sm text-gray-300 mb-4">
+                Are you sure you want to delete location <span id="deleteLocationCode" class="font-medium"></span>? This action cannot be undone.
+            </p>
+            <div class="flex justify-center space-x-2">
+                <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                <form method="POST" id="deleteForm" class="inline">
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openCreateModal() {
+    document.getElementById('createModal').classList.remove('hidden');
+}
+
+function closeCreateModal() {
+    document.getElementById('createModal').classList.add('hidden');
+}
+
+function openEditModal(id, code, office, room) {
+    document.getElementById('editCode').value = code;
+    document.getElementById('editOffice').value = office;
+    document.getElementById('editRoom').value = room;
+    document.getElementById('editForm').action = '{{ url_for('masters.update_location', location_id=0) }}'.replace('0', id);
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+function confirmDelete(id, code) {
+    document.getElementById('deleteLocationCode').textContent = code;
+    document.getElementById('deleteForm').action = '{{ url_for('masters.delete_location', location_id=0) }}'.replace('0', id);
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+
+// Search and filter functionality
+document.getElementById('searchInput').addEventListener('input', filterLocations);
+document.getElementById('officeFilter').addEventListener('change', filterLocations);
+document.getElementById('sortBy').addEventListener('change', sortLocations);
+document.getElementById('sortOrder').addEventListener('change', sortLocations);
+
+function filterLocations() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const officeFilter = document.getElementById('officeFilter').value;
+    const rows = document.querySelectorAll('.location-row');
+
+    rows.forEach(row => {
+        const code = row.dataset.code.toLowerCase();
+        const office = row.dataset.office;
+        const room = row.dataset.room.toLowerCase();
+
+        const matchesSearch = code.includes(searchTerm) || office.toLowerCase().includes(searchTerm) || room.includes(searchTerm);
+        const matchesOffice = !officeFilter || office === officeFilter;
+
+        if (matchesSearch && matchesOffice) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function sortLocations() {
+    const sortBy = document.getElementById('sortBy').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    const tbody = document.querySelector('#locationsTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('.location-row'));
+
+    rows.sort((a, b) => {
+        let aValue, bValue;
+
+        switch (sortBy) {
+            case 'code':
+                aValue = a.dataset.code;
+                bValue = b.dataset.code;
+                break;
+            case 'office':
+                aValue = a.dataset.office;
+                bValue = b.dataset.office;
+                break;
+            case 'room':
+                aValue = a.dataset.room;
+                bValue = b.dataset.room;
+                break;
+            case 'created':
+                aValue = new Date(a.dataset.created);
+                bValue = new Date(b.dataset.created);
+                break;
+        }
+
+        if (sortOrder === 'desc') {
+            return aValue > bValue ? -1 : 1;
+        } else {
+            return aValue < bValue ? -1 : 1;
+        }
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+}
+</script>
+{% endblock %}

@@ -1,0 +1,87 @@
+
+{% extends "base.html" %}
+
+{% block title %}Warehouse Assignments{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Warehouse Assignments</h1>
+    </div>
+
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-medium text-gray-900">Manage User Warehouse Access</h2>
+            <p class="text-sm text-gray-600">Assign multiple warehouses to users for access control</p>
+        </div>
+
+        <div class="p-6">
+            {% for user in users %}
+            <div class="mb-6 p-4 border border-gray-200 rounded-lg">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">{{ user.full_name }}</h3>
+                        <p class="text-sm text-gray-600">{{ user.username }} - {{ user.role.value.title() }}</p>
+                        {% if user.department %}
+                        <p class="text-sm text-gray-500">Department: {{ user.department.name }}</p>
+                        {% endif %}
+                    </div>
+                    <button onclick="toggleAssignments({{ user.id }})" 
+                            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                        Manage Warehouses
+                    </button>
+                </div>
+
+                <!-- Current Assignments Display -->
+                <div class="mb-3">
+                    <strong class="text-sm text-gray-700">Current Warehouse Access:</strong>
+                    {% if user.assigned_warehouses %}
+                    <div class="flex flex-wrap gap-2 mt-1">
+                        {% for warehouse in user.assigned_warehouses %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ warehouse.office }} - {{ warehouse.room }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <span class="text-sm text-gray-500 italic">No warehouses assigned</span>
+                    {% endif %}
+                </div>
+
+                <!-- Assignment Form (Hidden by default) -->
+                <div id="assignments-{{ user.id }}" class="hidden">
+                    <form method="POST" action="{{ url_for('warehouse_management.assign_warehouses', user_id=user.id) }}">
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                            {% for warehouse in warehouses %}
+                            <label class="flex items-center">
+                                <input type="checkbox" name="warehouse_ids" value="{{ warehouse.id }}"
+                                       {% if warehouse.id in assignments.get(user.id, []) %}checked{% endif %}
+                                       class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                <span class="ml-2 text-sm text-gray-700">{{ warehouse.office }} - {{ warehouse.room }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                Update Assignments
+                            </button>
+                            <button type="button" onclick="toggleAssignments({{ user.id }})" 
+                                    class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAssignments(userId) {
+    const element = document.getElementById('assignments-' + userId);
+    element.classList.toggle('hidden');
+}
+</script>
+{% endblock %}

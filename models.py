@@ -1,279 +1,322 @@
-from app import db
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
 from flask_login import UserMixin
-from datetime import datetime, date # Import date as it's used in db.Column(db.Date)
-from decimal import Decimal, InvalidOperation
-import logging
+from sqlalchemy import func, CheckConstraint
+from database import db
 
-# Configure logging for models
-logging.basicConfig(level=logging.DEBUG)
+class UserRole(Enum):
+    SUPERADMIN = 'superadmin'
+    MANAGER = 'manager'
+    HOD = 'hod'
+    EMPLOYEE = 'employee'
 
-class User(db.Model, UserMixin):
+class RequestStatus(Enum):
+    DRAFT = 'Draft'
+    PENDING = 'Pending'
+    APPROVED = 'Approved'
+    REJECTED = 'Rejected'
+    ISSUED = 'Issued'
+
+# Association table for User-Warehouse many-to-many relationship
+user_warehouse_assignments = db.Table('user_warehouse_assignments',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('location_id', db.Integer, db.ForeignKey('locations.id'), primary_key=True),
+    db.Column('assigned_at', db.DateTime, default=datetime.utcnow),
+    db.Column('assigned_by', db.Integer, db.ForeignKey('users.id'))
+)
+
+class User(UserMixin, db.Model):
+    __tablename__ = 'users'
+
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    full_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256))
-    role = db.Column(db.String(20), default='normal_user')  # normal_user, data_entry, admin
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.EMPLOYEE)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+
+    # Relationships
+    department = db.relationship('Department', foreign_keys=[department_id], back_populates='users')
+    managed_department = db.relationship('Department', foreign_keys='Department.hod_id', back_populates='hod', uselist=False)
+    employee = db.relationship('Employee', back_populates='user', uselist=False)
+    assigned_warehouses = db.relationship(
+        'Location', 
+        secondary=user_warehouse_assignments, 
+        primaryjoin=id == user_warehouse_assignments.c.user_id,
+        back_populates='assigned_users'
+    )
+
+    def has_role(self, role):
+        if isinstance(role, str):
+            return self.role.value == role
+        return self.role == role
+
+    def can_approve_for_department(self, department_id):
+        return (self.role == UserRole.HOD and 
+                self.managed_department and 
+                self.managed_department.id == department_id)
+
+    def get_accessible_warehouses(self):
+        """Get all warehouses user can access"""
+        if self.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+            return Location.query.all()
+        return self.assigned_warehouses
+
+    def can_access_warehouse(self, location_id):
+        """Check if user can access specific warehouse"""
+        if self.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+            return True
+        return any(w.id == location_id for w in self.assigned_warehouses)
 
     def __repr__(self):
         return f'<User {self.username}>'
 
-class Customer(db.Model):
+class Department(db.Model):
+    __tablename__ = 'departments'
+
     id = db.Column(db.Integer, primary_key=True)
-    icl_no = db.Column(db.String(50), unique=True, nullable=False)
+    code = db.Column(db.String(20), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    address = db.Column(db.Text)
-    contact_details = db.Column(db.String(200))
-    annual_rate = db.Column(db.Numeric(5, 2), nullable=False)  # e.g., 15.50
-    icl_start_date = db.Column(db.Date, nullable=False)
-    icl_end_date = db.Column(db.Date)
-    icl_extension = db.Column(db.String(100))
-    tds_applicable = db.Column(db.Boolean, default=False)
-    tds_percentage = db.Column(db.Numeric(5, 2), default=Decimal('0.00'))
-    interest_type = db.Column(db.String(20), default='simple')  # simple, compound
-    compound_frequency = db.Column(db.String(20))  # monthly, quarterly, yearly
-    first_compounding_date = db.Column(db.Date)
+    hod_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    is_active = db.Column(db.Boolean, default=True)
-    loan_closed = db.Column(db.Boolean, default=False)
-    loan_closed_date = db.Column(db.Date)
-    loan_overdue = db.Column(db.Boolean, default=False)
-    loan_overdue_date = db.Column(db.Date)
-    loan_extended = db.Column(db.Boolean, default=False)
-    original_icl_end_date = db.Column(db.Date)
 
     # Relationships
-    transactions = db.relationship('Transaction', backref='customer', lazy=True, cascade='all, delete-orphan')
-
-    # Removed the redundant 'current_balance' @property to avoid confusion,
-    # as get_current_balance() is performing the same role.
-    # @property
-    # def current_balance(self):
-    #     """Calculate current balance based on transactions - Fixed for NaN issues"""
-    #     # ... (removed this block)
-
-
-    def get_current_balance(self):
-        """Calculates the current balance for the customer, including accrued net interest."""
-        total_principal_paid = Decimal('0')
-        total_principal_repaid = Decimal('0')
-        total_net_interest_accrued = Decimal('0')
-
-        logging.debug(f"Starting get_current_balance for customer {self.id}. Number of transactions: {len(self.transactions)}")
-
-        for t in self.transactions:
-            logging.debug(f"Processing transaction {t.id} for customer {self.id}")
-
-            # Skip loan closure transactions from balance calculation as they represent final state
-            if t.transaction_type == 'loan_closure':
-                logging.debug(f"  Skipping loan closure transaction {t.id}")
-                continue
-
-            safe_paid = t.get_safe_amount_paid()
-            logging.debug(f"  get_safe_amount_paid() returned: {safe_paid} (type: {type(safe_paid)})")
-            total_principal_paid += safe_paid
-
-            safe_repaid = t.get_safe_amount_repaid()
-            logging.debug(f"  get_safe_amount_repaid() returned: {safe_repaid} (type: {type(safe_repaid)})")
-            total_principal_repaid += safe_repaid
-
-            # Only add interest/TDS if they were calculated for this transaction
-            # Ensure int_amount and tds_amount are not None before attempting subtraction
-            if t.int_amount is not None or t.tds_amount is not None:
-                safe_int_amount = t.get_safe_int_amount()
-                safe_tds_amount = t.get_safe_tds_amount()
-                net_interest_for_txn = safe_int_amount - safe_tds_amount
-                logging.debug(f"  Net interest for txn {t.id}: {net_interest_for_txn} (type: {type(net_interest_for_txn)})")
-                total_net_interest_accrued += net_interest_for_txn
-
-        calculated_balance = (total_principal_paid - total_principal_repaid + total_net_interest_accrued).quantize(Decimal('0.01'))
-
-        logging.debug(f"get_current_balance for customer {self.id}: total_principal_paid={total_principal_paid}, total_principal_repaid={total_principal_repaid}, total_net_interest_accrued={total_net_interest_accrued}, final_calculated_balance={calculated_balance}")
-        logging.debug(f"FINAL BALANCE RETURNED: {calculated_balance}")
-        return calculated_balance
-
-
-
-    def _is_quarter_end(self, date_to_check):
-        """Check if a given date falls at the end of a financial quarter, based on the customer's ICL start date."""
-        if not date_to_check or not self.icl_start_date:
-            return False
-
-        # Import here to avoid circular imports
-        from routes import _get_quarter_end_date
-
-        # Calculate expected quarter end for this date
-        expected_quarter_end = _get_quarter_end_date(date_to_check, self.icl_start_date)
-
-        return date_to_check == expected_quarter_end
-
-    def get_safe_annual_rate(self):
-        """Get annual rate as a safe float for display purposes (if needed as float)."""
-        if self.annual_rate is None:
-            return 0.0
-        try:
-            return float(self.annual_rate)
-        except (ValueError, TypeError, InvalidOperation):
-            return 0.0
-
-    def get_safe_tds_percentage(self):
-        """Returns tds_percentage safely as a float for display purposes (if needed as float)."""
-        if self.tds_percentage is None:
-            return 0.0
-        try:
-            return float(self.tds_percentage)
-        except (ValueError, TypeError, InvalidOperation):
-            return 0.0
-
-    def get_effective_end_date(self):
-        """Get the effective end date (latest of ICL end date or last transaction date)."""
-        last_transaction_date = self.get_last_transaction_date()
-        if self.icl_end_date and last_transaction_date:
-            return max(self.icl_end_date, last_transaction_date)
-        elif self.icl_end_date:
-            return self.icl_end_date
-        elif last_transaction_date:
-            return last_transaction_date
-        else:
-            return None
-
-    def get_last_transaction_date(self):
-        """Get the date of the last transaction for this customer."""
-        if self.transactions:
-            return max(t.date for t in self.transactions)
-        return None
-
-    def get_loan_status(self):
-        """Get the current loan status"""
-        if self.loan_closed:
-            return 'closed'
-        elif self.loan_overdue:
-            return 'overdue'
-        elif self.icl_end_date and date.today() > self.icl_end_date and self.get_current_balance() > Decimal('0'):
-            return 'past_due'
-        else:
-            return 'active'
-
-    def is_past_icl_end_date(self):
-        """Check if current date is past ICL end date"""
-        return self.icl_end_date and date.today() > self.icl_end_date
+    hod = db.relationship('User', foreign_keys=[hod_id], back_populates='managed_department')
+    users = db.relationship('User', foreign_keys='User.department_id', back_populates='department')
+    employees = db.relationship('Employee', back_populates='department')
 
     def __repr__(self):
-        return f'<Customer {self.name}>'
+        return f'<Department {self.code}>'
 
-class Transaction(db.Model):
+class Location(db.Model):
+    __tablename__ = 'locations'
+
     id = db.Column(db.Integer, primary_key=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    amount_paid = db.Column(db.Numeric(15, 2))
-    amount_repaid = db.Column(db.Numeric(15, 2))
-    balance = db.Column(db.Numeric(15, 2))
-    period_from = db.Column(db.Date)
-    period_to = db.Column(db.Date)
-    no_of_days = db.Column(db.Integer)
-    int_rate = db.Column(db.Numeric(5, 2))
-    int_amount = db.Column(db.Numeric(15, 2))
-    tds_amount = db.Column(db.Numeric(15, 2))
-    net_amount = db.Column(db.Numeric(15, 2))
-    transaction_type = db.Column(db.String(20), default='passive')  # 'deposit', 'repayment', 'passive'
+    office = db.Column(db.String(100), nullable=False)
+    room = db.Column(db.String(50), nullable=False)
+    code = db.Column(db.String(20), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    # Relationships
+    stock_balances = db.relationship('StockBalance', back_populates='location')
+    assigned_users = db.relationship(
+        'User', 
+        secondary=user_warehouse_assignments, 
+        primaryjoin=id == user_warehouse_assignments.c.location_id,
+        secondaryjoin=user_warehouse_assignments.c.user_id == User.id,
+        back_populates='assigned_warehouses'
+    )
 
     def __repr__(self):
-        return f'<Transaction {self.date} - {self.customer.name if self.customer else "Unknown"}>'
+        return f'<Location {self.code}>'
 
-    def _to_decimal(self, value, attribute_name):
-        """Helper to convert a value to Decimal, with robust error logging."""
-        if value is None:
-            logging.debug(f"  _to_decimal: {attribute_name} is None, returning Decimal('0')")
-            return Decimal('0')
-        try:
-            # Convert to string first to handle potential float representation robustly
-            decimal_value = Decimal(str(value))
-            logging.debug(f"  _to_decimal: {attribute_name} converted {value} (type {type(value)}) to {decimal_value} (type {type(decimal_value)})")
-            return decimal_value
-        except (ValueError, TypeError, InvalidOperation) as e:
-            logging.error(f"  _to_decimal: Error converting {attribute_name} value {value} (type {type(value)}) to Decimal: {e}", exc_info=True)
-            return Decimal('0')
+class Employee(db.Model):
+    __tablename__ = 'employees'
 
-    # --- START OF FIX: Ensure all get_safe_ methods return Decimal ---
-    def get_safe_amount_paid(self):
-        return self._to_decimal(self.amount_paid, 'amount_paid')
-
-    def get_safe_amount_repaid(self):
-        return self._to_decimal(self.amount_repaid, 'amount_repaid')
-
-    def get_safe_balance(self):
-        return self._to_decimal(self.balance, 'balance')
-
-    def get_safe_no_of_days(self):
-        # This one is an integer, so no Decimal conversion needed
-        return self.no_of_days if self.no_of_days is not None else 0
-
-    def get_safe_int_rate(self):
-        return self._to_decimal(self.int_rate, 'int_rate')
-
-    def get_safe_int_amount(self):
-        return self._to_decimal(self.int_amount, 'int_amount')
-
-    def get_safe_tds_amount(self):
-        return self._to_decimal(self.tds_amount, 'tds_amount')
-
-    def get_safe_net_amount(self):
-        return self._to_decimal(self.net_amount, 'net_amount')
-    # --- END OF FIX ---
-
-    def get_transaction_type_display(self):
-        """Get formatted transaction type for display"""
-        type_mapping = {
-            'deposit': 'Deposit',
-            'repayment': 'Repayment', 
-            'passive': 'Passive Period',
-            'loan_closure': 'Loan Closed'
-        }
-        return type_mapping.get(self.transaction_type, 'Unknown')
-
-
-class InterestRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    rate = db.Column(db.Numeric(5, 2), nullable=False)
-    effective_date = db.Column(db.Date, nullable=False)
+    emp_id = db.Column(db.String(20), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    department = db.relationship('Department', back_populates='employees')
+    user = db.relationship('User', back_populates='employee')
+
+    def __repr__(self):
+        return f'<Employee {self.emp_id}>'
+
+class Item(db.Model):
+    __tablename__ = 'items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    make = db.Column(db.String(50))
+    variant = db.Column(db.String(50))
+    description = db.Column(db.Text)
+    low_stock_threshold = db.Column(db.Numeric(10, 2), nullable=False, default=5)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    stock_balances = db.relationship('StockBalance', back_populates='item')
+    stock_entries = db.relationship('StockEntry', back_populates='item')
+    issue_lines = db.relationship('StockIssueLine', back_populates='item')
+
+    def is_low_stock_at_location(self, location_id):
+        """Check if item is low stock at specific location"""
+        balance = StockBalance.query.filter_by(
+            item_id=self.id,
+            location_id=location_id
+        ).first()
+        if not balance:
+            return True  # No stock at all
+        return balance.quantity <= self.low_stock_threshold
+
+    def get_low_stock_locations(self):
+        """Get all locations where this item is low stock"""
+        balances = StockBalance.query.filter_by(item_id=self.id).all()
+        low_stock_locations = []
+        for balance in balances:
+            if balance.quantity <= self.low_stock_threshold:
+                low_stock_locations.append(balance.location)
+        return low_stock_locations
+
+    @staticmethod
+    def get_low_stock_items():
+        """Get all items that are low stock at any location"""
+        low_stock_query = db.session.query(Item).join(StockBalance).filter(
+            StockBalance.quantity <= Item.low_stock_threshold
+        ).distinct()
+        return low_stock_query.all()
+
+    def __repr__(self):
+        return f'<Item {self.code}>'
+
+class StockBalance(db.Model):
+    __tablename__ = 'stock_balances'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
+    quantity = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    item = db.relationship('Item', back_populates='stock_balances')
+    location = db.relationship('Location', back_populates='stock_balances')
+
+    # Constraints
+    __table_args__ = (
+        db.UniqueConstraint('item_id', 'location_id'),
+        CheckConstraint('quantity >= 0', name='positive_quantity')
+    )
+
+    def __repr__(self):
+        return f'<StockBalance Item:{self.item_id} Location:{self.location_id} Qty:{self.quantity}>'
+
+class StockEntry(db.Model):
+    __tablename__ = 'stock_entries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
+    quantity = db.Column(db.Numeric(10, 2), nullable=False)
     description = db.Column(db.String(200))
+    remarks = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    is_active = db.Column(db.Boolean, default=True)
 
-    def get_safe_rate(self):
-        """Get rate as safe float"""
-        try:
-            if self.rate is not None:
-                return float(self.rate)
-            return 0.0
-        except (ValueError, TypeError):
-            return 0.0
+    # Relationships
+    item = db.relationship('Item', back_populates='stock_entries')
+    location = db.relationship('Location')
+    creator = db.relationship('User')
 
     def __repr__(self):
-        return f'<InterestRate {self.rate}% from {self.effective_date}>'
+        return f'<StockEntry {self.id}>'
 
-class TDSRate(db.Model):
+class StockIssueRequest(db.Model):
+    __tablename__ = 'stock_issue_requests'
+
     id = db.Column(db.Integer, primary_key=True)
-    rate = db.Column(db.Numeric(5, 2), nullable=False, default=10.0)  # Default 10% TDS
-    effective_date = db.Column(db.Date, nullable=False)
-    description = db.Column(db.String(200))
+    request_no = db.Column(db.String(20), unique=True, nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=False)
+    hod_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
+    status = db.Column(db.Enum(RequestStatus), nullable=False, default=RequestStatus.DRAFT)
+    purpose = db.Column(db.String(200), nullable=False)
+    remarks = db.Column(db.Text)
+    approved_at = db.Column(db.DateTime)
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    issued_at = db.Column(db.DateTime)
+    issued_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    is_active = db.Column(db.Boolean, default=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    def get_safe_rate(self):
-        """Get rate as safe float"""
-        try:
-            if self.rate is not None:
-                return float(self.rate)
-            return 10.0  # Default TDS rate
-        except (ValueError, TypeError):
-            return 10.0
+    # Relationships
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    department = db.relationship('Department')
+    hod = db.relationship('User', foreign_keys=[hod_id])
+    location = db.relationship('Location')
+    approver = db.relationship('User', foreign_keys=[approved_by])
+    issuer = db.relationship('User', foreign_keys=[issued_by])
+    issue_lines = db.relationship('StockIssueLine', back_populates='request', cascade='all, delete-orphan')
+
+    def generate_request_no(self):
+        """Generate unique request number"""
+        today = datetime.utcnow()
+        prefix = f"REQ{today.strftime('%Y%m%d')}"
+
+        # Find the last request number for today
+        last_request = db.session.query(StockIssueRequest).filter(
+            StockIssueRequest.request_no.like(f"{prefix}%")
+        ).order_by(StockIssueRequest.request_no.desc()).first()
+
+        if last_request:
+            last_seq = int(last_request.request_no[-3:])
+            new_seq = last_seq + 1
+        else:
+            new_seq = 1
+
+        return f"{prefix}{new_seq:03d}"
+
+    def can_be_approved_by(self, user):
+        """Check if user can approve this request"""
+        return (user.role == UserRole.HOD and 
+                user.managed_department and 
+                user.managed_department.id == self.department_id)
 
     def __repr__(self):
-        return f'<TDSRate {self.rate}% from {self.effective_date}>'
+        return f'<StockIssueRequest {self.request_no}>'
+
+class StockIssueLine(db.Model):
+    __tablename__ = 'stock_issue_lines'
+
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.Integer, db.ForeignKey('stock_issue_requests.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    quantity_requested = db.Column(db.Numeric(10, 2), nullable=False)
+    quantity_issued = db.Column(db.Numeric(10, 2), nullable=True)
+    remarks = db.Column(db.String(200))
+
+    # Relationships
+    request = db.relationship('StockIssueRequest', back_populates='issue_lines')
+    item = db.relationship('Item', back_populates='issue_lines')
+
+    def __repr__(self):
+        return f'<StockIssueLine {self.id}>'
+
+class Audit(db.Model):
+    __tablename__ = 'audits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    entity_type = db.Column(db.String(50), nullable=False)
+    entity_id = db.Column(db.Integer, nullable=False)
+    action = db.Column(db.String(50), nullable=False)
+    performed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    details = db.Column(db.Text)
+
+    # Relationships
+    user = db.relationship('User')
+
+    @staticmethod
+    def log(entity_type, entity_id, action, user_id, details=None):
+        """Helper method to log audit entries"""
+        audit = Audit(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            performed_by=user_id,
+            details=details
+        )
+        db.session.add(audit)
+
+    def __repr__(self):
+        return f'<Audit {self.entity_type}:{self.entity_id} {self.action}>'

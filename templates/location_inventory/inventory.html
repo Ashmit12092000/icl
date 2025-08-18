@@ -1,0 +1,198 @@
+
+{% extends "base.html" %}
+
+{% block title %}Location Inventory - Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Location Inventory
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                View inventory details across all locations
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <form method="GET" class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300">Location</label>
+                    <input type="text" name="location" value="{{ location_filter }}"
+                           placeholder="Filter by location..."
+                           class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-300">Item</label>
+                    <input type="text" name="item" value="{{ item_filter }}"
+                           placeholder="Filter by item name..."
+                           class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div class="flex items-end">
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                        <i class="fas fa-filter mr-2"></i>Filter
+                    </button>
+                    <a href="{{ url_for('location_inventory.location_inventory') }}" 
+                       class="ml-3 inline-flex justify-center py-2 px-4 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none">
+                        <i class="fas fa-times mr-2"></i>Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-warehouse text-indigo-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Locations</dt>
+                            <dd class="text-lg font-medium text-white">{{ locations_inventory|length }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-boxes text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Item Types</dt>
+                            <dd class="text-lg font-medium text-white">
+                                {% set total_items = locations_inventory.values()|sum(attribute='total_items') %}
+                                {{ total_items }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Low Stock Items</dt>
+                            <dd class="text-lg font-medium text-white">
+                                {% set total_low_stock = locations_inventory.values()|sum(attribute='low_stock_items') %}
+                                {{ total_low_stock }}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Table -->
+    {% if locations_inventory %}
+    <div class="space-y-6">
+        {% for location_name, location_data in locations_inventory.items() %}
+        <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+            <div class="px-4 py-5 sm:px-6 border-b border-gray-700">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg leading-6 font-medium text-white">
+                            {{ location_data.office }} - {{ location_data.room }}
+                        </h3>
+                        <p class="mt-1 text-sm text-gray-400">
+                            Code: {{ location_data.location_code }} | 
+                            Items: {{ location_data.total_items }} | 
+                            Low Stock: {{ location_data.low_stock_items }}
+                        </p>
+                    </div>
+                    {% if location_data.low_stock_items > 0 %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        {{ location_data.low_stock_items }} Low Stock
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-700">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Quantity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Threshold</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                        {% for item in location_data.item_list %}
+                        <tr {% if item.is_low_stock %}class="bg-yellow-900 bg-opacity-20"{% endif %}>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                                {{ item.item_code }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                                {{ item.item_name }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
+                                <span class="font-semibold {% if item.is_low_stock %}text-yellow-400{% else %}text-green-400{% endif %}">
+                                    {{ item.quantity }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if item.quantity == 0 %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-200">
+                                    <i class="fas fa-times-circle mr-1"></i>
+                                    Out of Stock
+                                </span>
+                                {% elif item.is_low_stock %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                                    Low Stock
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">
+                                    <i class="fas fa-check-circle mr-1"></i>
+                                    In Stock
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                {{ item.low_stock_threshold }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-12 text-center">
+            <i class="fas fa-boxes text-gray-600 text-4xl mb-4"></i>
+            <h3 class="text-lg font-medium text-white mb-2">No inventory data found</h3>
+            <p class="text-gray-400">Try adjusting your filters or check if stock entries exist for the selected locations.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
