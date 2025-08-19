@@ -103,7 +103,18 @@ class StockIssueItemForm(FlaskForm):
 
     def __init__(self, user=None, *args, **kwargs):
         super(StockIssueItemForm, self).__init__(*args, **kwargs)
-        self.item_id.choices = [(i.id, f"{i.code} - {i.name}") for i in Item.query.filter_by(is_active=True).all()]
+        
+        # Filter items based on user's department
+        if user and user.is_authenticated and user.department_id:
+            # Filter items by user's department or items with no department (available to all)
+            items = Item.query.filter(
+                db.or_(Item.department_id == user.department_id, Item.department_id.is_(None))
+            ).all()
+        else:
+            # Show all items for admin users or users without department
+            items = Item.query.all()
+        
+        self.item_id.choices = [(i.id, f"{i.code} - {i.name}") for i in items]
 
         # Filter locations based on user's assigned warehouses
         if user and user.is_authenticated:
