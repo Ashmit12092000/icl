@@ -1,3 +1,28 @@
+
+from datetime import datetime
+from config import Config
+
+def get_ist_now():
+    """Get current datetime in IST"""
+    return datetime.now(Config.IST_TIMEZONE)
+
+def convert_to_ist(dt):
+    """Convert UTC datetime to IST"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Assume UTC if no timezone info
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(Config.IST_TIMEZONE)
+
+def format_ist_datetime(dt):
+    """Format datetime in IST for display"""
+    if dt is None:
+        return ''
+    ist_dt = convert_to_ist(dt)
+    return ist_dt.strftime('%Y-%m-%d %H:%M IST')
+
+
 from functools import wraps
 from flask import abort
 from flask_login import current_user
@@ -30,10 +55,8 @@ def format_currency(amount):
     return f"${amount:,.2f}"
 
 def format_datetime(dt):
-    """Format datetime for display"""
-    if dt:
-        return dt.strftime('%Y-%m-%d %H:%M')
-    return ''
+    """Format datetime for display in IST"""
+    return format_ist_datetime(dt)
 
 def get_status_badge_class(status):
     """Get Bootstrap badge class for status"""
