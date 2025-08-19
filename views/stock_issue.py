@@ -76,15 +76,15 @@ def submit_request():
             item_id=item_id,
             location_id=int(location_id)
         ).first()
-        
+
         available_qty = stock_balance.quantity if stock_balance else 0
         item = Item.query.get(item_id)
-        
+
         if available_qty <= 0:
             stock_validation_errors.append(f"{item.name} ({item.code}) is out of stock at the selected location.")
         elif available_qty < quantity:
             stock_validation_errors.append(f"{item.name} ({item.code}) has insufficient stock. Available: {available_qty}, Requested: {quantity}")
-    
+
     if stock_validation_errors:
         for error in stock_validation_errors:
             flash(error, 'error')
@@ -332,14 +332,14 @@ def request_tracker():
 @login_required
 def search_request():
     request_id = request.form.get('request_id', '').strip()
-    
+
     if not request_id:
         flash('Please enter a request ID.', 'error')
         return redirect(url_for('stock_issue.request_tracker'))
-    
+
     # Try to find by request number first, then by ID
     request_obj = None
-    
+
     # Search by request number (REQ20240811001 format)
     if request_id.startswith('REQ'):
         request_obj = StockIssueRequest.query.filter_by(request_no=request_id).first()
@@ -349,11 +349,11 @@ def search_request():
             request_obj = StockIssueRequest.query.get(int(request_id))
         except ValueError:
             pass
-    
+
     if not request_obj:
         flash(f'Request "{request_id}" not found.', 'error')
         return redirect(url_for('stock_issue.request_tracker'))
-    
+
     # Check access permissions
     if (current_user.role == UserRole.EMPLOYEE and
         request_obj.requester_id != current_user.id):
@@ -365,40 +365,40 @@ def search_request():
         request_obj.requester_id != current_user.id):
         flash('You can only view requests from your department.', 'error')
         return redirect(url_for('stock_issue.request_tracker'))
-    
+
     return redirect(url_for('stock_issue.view_request', request_id=request_obj.id))
 
 @stock_issue_bp.route('/<int:request_id>/edit')
 @login_required
 def edit_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
-    
+
     # Check permissions
     if request_obj.requester_id != current_user.id:
         flash('You can only edit your own requests.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
-    
+
     if request_obj.status != RequestStatus.DRAFT:
         flash('Only draft requests can be edited.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
-    
+
     items = Item.query.all()
     locations = current_user.get_accessible_warehouses()
-    return render_template('stock/edit_request.html', 
-                         request=request_obj, 
-                         items=items, 
+    return render_template('stock/edit_request.html',
+                         request=request_obj,
+                         items=items,
                          locations=locations)
 
 @stock_issue_bp.route('/<int:request_id>/edit', methods=['POST'])
 @login_required
 def update_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
-    
+
     # Check permissions
     if request_obj.requester_id != current_user.id:
         flash('You can only edit your own requests.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
-    
+
     if request_obj.status != RequestStatus.DRAFT:
         flash('Only draft requests can be edited.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
@@ -529,19 +529,19 @@ def reject_approved_request(request_id):
 @login_required
 def delete_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
-    
+
     # Check permissions
     if request_obj.requester_id != current_user.id:
         flash('You can only delete your own requests.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
-    
+
     if request_obj.status != RequestStatus.DRAFT:
         flash('Only draft requests can be deleted.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
 
     try:
         request_no = request_obj.request_no
-        
+
         # Log audit before deleting
         Audit.log(
             entity_type='StockIssueRequest',
@@ -550,7 +550,7 @@ def delete_request(request_id):
             user_id=current_user.id,
             details=f'Deleted request {request_no}'
         )
-        
+
         db.session.delete(request_obj)
         db.session.commit()
         flash(f'Request {request_no} deleted successfully.', 'success')
@@ -571,3 +571,29 @@ def my_requests():
         page=page, per_page=20, error_out=False
     )
     return render_template('stock/my_requests.html', requests=requests)
+
+@stock_issue_bp.route('/<int:request_id>/print')
+@login_required
+def print_approved_request(request_id):
+    request_obj = StockIssueRequest.query.get_or_404(request_id)
+
+    # Check if the request is approved or issued
+    if request_obj.status not in [RequestStatus.APPROVED, RequestStatus.ISSUED]:
+        flash('Only approved or issued requests can be printed.', 'error')
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
+
+    # Check access permissions (e.g., only requester or manager can print)
+    if (current_user.role == UserRole.EMPLOYEE and
+        request_obj.requester_id != current_user.id):
+        flash('You are not authorized to print this request.', 'error')
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
+
+    if (current_user.role == UserRole.HOD and
+        request_obj.department_id != current_user.managed_department.id and
+        request_obj.requester_id != current_user.id):
+        flash('You are not authorized to print this request.', 'error')
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
+
+    # Render a separate template for printing
+    from datetime import datetime
+    return render_template('stock/request_print.html', request=request_obj, current_time=datetime.utcnow())
