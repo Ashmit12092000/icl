@@ -1,8 +1,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import *
+from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, RequestStatus, Audit
+from auth import role_required
 from database import db
-from sqlalchemy import func
+from sqlalchemy import func, desc, asc
+from datetime import datetime, timedelta
+from utils import get_ist_now, format_ist_datetime
 
 main_bp = Blueprint('main', __name__)
 
@@ -95,15 +98,15 @@ def dashboard():
 
     # Prepare template variables based on role
     template_vars = {
-        'stats': stats, 
-        'recent_requests': recent_requests, 
+        'stats': stats,
+        'recent_requests': recent_requests,
         'low_stock': low_stock
     }
-    
+
     # Only pass approved_requests for admin/manager roles
     if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
         template_vars['approved_requests'] = approved_requests
-    
+
     return render_template('dashboard.html', **template_vars)
 
 @main_bp.route('/stock_requests/new', methods=['GET', 'POST'])
@@ -122,7 +125,7 @@ def new_stock_request():
             return redirect(url_for('main.new_stock_request')) # Or render an error message
 
         # Determine the initial status
-        if current_user.role == UserRole.MANAGER: # Changed from NETWORK_ADMIN to MANAGER
+        if current_user.role == UserRole.MANAGER:
             status = RequestStatus.APPROVED # Auto-approve for Manager
         elif current_user.role == UserRole.HOD:
             status = RequestStatus.PENDING # HOD requests are pending for approval
@@ -161,7 +164,7 @@ def approve_stock_request(req_id):
     # Check if the request is pending
     if request_item.status == RequestStatus.PENDING:
         request_item.status = RequestStatus.APPROVED
-        request_item.approved_at = func.now() # Record approval time
+        request_item.approved_at = get_ist_now() # Record approval time
         db.session.commit()
         flash('Stock request approved successfully.', 'success')
     else:
@@ -182,7 +185,7 @@ def reject_stock_request(req_id):
     # Check if the request is pending
     if request_item.status == RequestStatus.PENDING:
         request_item.status = RequestStatus.REJECTED
-        request_item.rejected_at = func.now() # Record rejection time
+        request_item.rejected_at = get_ist_now() # Record rejection time
         db.session.commit()
         flash('Stock request rejected successfully.', 'success')
     else:
@@ -207,7 +210,7 @@ def issue_stock_request(req_id):
         if stock_balance and stock_balance.quantity >= request_item.quantity:
             stock_balance.quantity -= request_item.quantity
             request_item.status = RequestStatus.ISSUED
-            request_item.issued_at = func.now()
+            request_item.issued_at = get_ist_now()
             db.session.commit()
             flash('Stock issued successfully.', 'success')
         else:
@@ -263,12 +266,12 @@ def get_stock_balance(item_id, location_id):
     # Check if user has access to this location
     if not current_user.can_access_warehouse(location_id):
         return jsonify({'error': 'Access denied'}), 403
-    
+
     stock_balance = StockBalance.query.filter_by(
         item_id=item_id,
         location_id=location_id
     ).first()
-    
+
     balance = stock_balance.quantity if stock_balance else 0
     return jsonify({'balance': float(balance)})
 
