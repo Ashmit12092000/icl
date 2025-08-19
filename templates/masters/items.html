@@ -25,6 +25,7 @@
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Code</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Make</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Variant</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
@@ -38,6 +39,13 @@
                 <tr>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ item.code }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {% if item.department %}
+                            {{ item.department.code }} - {{ item.department.name }}
+                        {% else %}
+                            <span class="text-gray-500">All Departments</span>
+                        {% endif %}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.make or '-' }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.variant or '-' }}</td>
                     <td class="px-6 py-4 text-sm text-gray-300">
@@ -50,7 +58,7 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.low_stock_threshold }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.created_at.strftime('%Y-%m-%d') }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}')" 
+                        <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', {{ item.department_id or 'null' }}, '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}', {{ item.low_stock_threshold }})" 
                                 class="text-indigo-400 hover:text-indigo-300 mr-4">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -79,6 +87,15 @@
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Name*</label>
                     <input type="text" name="name" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
+                    <select name="department_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}">{{ dept.code }} - {{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Make</label>
@@ -120,6 +137,15 @@
                     <input type="text" name="name" id="editName" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                 </div>
                 <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
+                    <select name="department_id" id="editDepartment" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}">{{ dept.code }} - {{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Make</label>
                     <input type="text" name="make" id="editMake" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                 </div>
@@ -153,9 +179,10 @@ function closeCreateModal() {
     document.getElementById('createModal').classList.add('hidden');
 }
 
-function openEditModal(id, code, name, make, variant, description, low_stock_threshold) {
+function openEditModal(id, code, name, departmentId, make, variant, description, low_stock_threshold) {
     document.getElementById('editCode').value = code;
     document.getElementById('editName').value = name;
+    document.getElementById('editDepartment').value = departmentId || '';
     document.getElementById('editMake').value = make;
     document.getElementById('editVariant').value = variant;
     document.getElementById('editDescription').value = description;
