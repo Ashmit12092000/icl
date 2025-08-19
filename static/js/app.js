@@ -7,9 +7,47 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeFormValidation();
     initializeTableEnhancements();
     initializeConfirmDialogs();
+    initializeMobileMenu();
     
     console.log('IT Stock Management App initialized');
 });
+
+// Mobile Menu Functionality
+function initializeMobileMenu() {
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const mobileDropdownToggles = document.querySelectorAll('.mobile-dropdown-toggle');
+    
+    // Toggle mobile menu
+    if (mobileMenuButton && mobileMenu) {
+        mobileMenuButton.addEventListener('click', function() {
+            mobileMenu.classList.toggle('hidden');
+            const icon = mobileMenuButton.querySelector('i');
+            if (mobileMenu.classList.contains('hidden')) {
+                icon.className = 'fas fa-bars';
+            } else {
+                icon.className = 'fas fa-times';
+            }
+        });
+        
+        // Close mobile menu when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!mobileMenuButton.contains(e.target) && !mobileMenu.contains(e.target)) {
+                mobileMenu.classList.add('hidden');
+                mobileMenuButton.querySelector('i').className = 'fas fa-bars';
+            }
+        });
+    }
+    
+    // Handle mobile dropdown toggles
+    mobileDropdownToggles.forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            const dropdown = this.closest('.mobile-dropdown');
+            dropdown.classList.toggle('active');
+        });
+    });
+}
 
 // Modal Management
 function initializeModals() {

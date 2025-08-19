@@ -15,10 +15,12 @@ def create_request():
         flash('You must be assigned to a department to create requests.', 'error')
         return redirect(url_for('main.dashboard'))
 
+    from forms import StockIssueRequestForm
+    form = StockIssueRequestForm(user=current_user)
     items = Item.query.all()
     # Filter locations based on user's warehouse access
     locations = current_user.get_accessible_warehouses()
-    return render_template('stock/request_form.html', items=items, locations=locations)
+    return render_template('stock/request_form.html', form=form, items=items, locations=locations)
 
 @stock_issue_bp.route('/create', methods=['POST'])
 @login_required
@@ -77,7 +79,7 @@ def submit_request():
             location_id=int(location_id)
         ).first()
 
-        available_qty = stock_balance.quantity if stock_balance else 0
+        available_qty = stock_balance.quantity if stock_balance else Decimal('0')
         item = Item.query.get(item_id)
 
         if available_qty <= 0:
@@ -469,6 +471,27 @@ def update_request(request_id):
 
     if not valid_items:
         flash('No valid items found in the request.', 'error')
+        return redirect(url_for('stock_issue.edit_request', request_id=request_id))
+
+    # Validate stock availability for each item
+    stock_validation_errors = []
+    for item_id, quantity, _ in valid_items:
+        stock_balance = StockBalance.query.filter_by(
+            item_id=item_id,
+            location_id=int(location_id)
+        ).first()
+
+        available_qty = stock_balance.quantity if stock_balance else Decimal('0')
+        item = Item.query.get(item_id)
+
+        if available_qty <= 0:
+            stock_validation_errors.append(f"{item.name} ({item.code}) is out of stock at the selected location.")
+        elif available_qty < quantity:
+            stock_validation_errors.append(f"{item.name} ({item.code}) has insufficient stock. Available: {available_qty}, Requested: {quantity}")
+
+    if stock_validation_errors:
+        for error in stock_validation_errors:
+            flash(error, 'error')
         return redirect(url_for('stock_issue.edit_request', request_id=request_id))
 
     try:

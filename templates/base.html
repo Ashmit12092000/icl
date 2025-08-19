@@ -12,9 +12,9 @@
     <style>
         body { font-family: 'Inter', sans-serif; }
         .glass-effect {
-            background: rgba(31, 41, 55, 0.8);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(75, 85, 99, 0.3);
+            background: rgba(31, 41, 55, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(75, 85, 99, 0.2);
         }
         .card-hover {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -25,25 +25,6 @@
         }
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .sidebar-item {
-            position: relative;
-            overflow: hidden;
-        }
-        .sidebar-item::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: #6366f1;
-            transform: scaleY(0);
-            transition: transform 0.3s ease;
-        }
-        .sidebar-item:hover::before,
-        .sidebar-item.active::before {
-            transform: scaleY(1);
         }
         .fade-in {
             animation: fadeIn 0.6s ease-out;
@@ -66,128 +47,397 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        
+        /* Clean Navigation Styles */
+        .nav-container {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .nav-link {
+            @apply text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:bg-white/10 flex items-center relative;
+        }
+        
+        .nav-link:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+        
+        .nav-link-active {
+            @apply text-white bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg;
+        }
+        
+        .dropdown {
+            position: relative;
+        }
+        
+        .dropdown:hover .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+        
+        .dropdown-menu {
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 1000;
+            min-width: 280px;
+            border-radius: 16px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .dropdown-item {
+            display: block;
+            width: 100%;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.875rem;
+            color: #d1d5db;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 2px;
+            transition: all 0.2s ease;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+        
+        .dropdown-item:hover {
+            background: linear-gradient(to right, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+            color: white;
+            transform: translateX(4px);
+        }
+        
+        .dropdown-item:hover {
+            transform: translateX(4px);
+        }
+        
+        .dropdown-item i {
+            width: 20px;
+            margin-right: 12px;
+        }
+        
+        /* Mobile Navigation */
+        .mobile-menu {
+            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+            border-radius: 16px;
+            margin: 8px;
+            padding: 16px;
+        }
+        
+        .mobile-nav-link {
+            @apply text-gray-300 hover:bg-white/10 hover:text-white block px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 flex items-center;
+        }
+        
+        .mobile-dropdown-toggle {
+            @apply w-full text-left flex items-center justify-between;
+        }
+        
+        .mobile-dropdown-content {
+            @apply hidden mt-2 space-y-1 pl-6;
+        }
+        
+        .mobile-dropdown-item {
+            @apply text-gray-400 hover:bg-white/10 hover:text-white block px-3 py-2 rounded-lg text-sm transition-all duration-200 flex items-center;
+        }
+        
+        .mobile-dropdown.active .mobile-dropdown-content {
+            @apply block;
+        }
+        
+        .mobile-dropdown.active .mobile-dropdown-toggle i:last-child {
+            transform: rotate(180deg);
+        }
+        
+        .mobile-dropdown-toggle i {
+            transition: transform 0.3s ease;
+        }
+        
+        /* Brand styling */
+        .brand-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100 min-h-screen">
     {% if current_user.is_authenticated %}
-    <!-- Enhanced Navigation -->
-    <nav class="glass-effect shadow-xl sticky top-0 z-50">
+    <!-- Cleaner Navigation -->
+    <nav class="nav-container">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
+            <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
-                    <div class="flex-shrink-0 flex items-center">
-                        <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
-                            <i class="fas fa-boxes text-white text-sm"></i>
-                        </div>
-                        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                            Stock Management
-                        </h1>
-                    </div>
-                    <div class="hidden md:ml-10 md:flex md:space-x-2">
-                        <a href="{{ url_for('main.dashboard') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
-                            <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
-                        </a>
-
-                        {% if current_user.role.value in ['superadmin', 'manager'] %}
-                        <div class="relative group">
-                            <button class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-all duration-200 hover:bg-gray-700/50">
-                                <i class="fas fa-cog mr-2"></i>Masters
-                                <i class="fas fa-chevron-down ml-1 transform group-hover:rotate-180 transition-transform"></i>
-                            </button>
-                            <div class="absolute left-0 mt-2 w-56 glass-effect rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 overflow-hidden">
-                                <div class="py-2">
-                                    <a href="{{ url_for('masters.departments') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-building mr-3 text-blue-400"></i>Departments
-                                    </a>
-                                    <a href="{{ url_for('masters.locations') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-map-marker-alt mr-3 text-green-400"></i>Locations
-                                    </a>
-                                    <a href="{{ url_for('masters.employees') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-users mr-3 text-purple-400"></i>Employees
-                                    </a>
-                                    <a href="{{ url_for('masters.items') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-tags mr-3 text-yellow-400"></i>Items
-                                    </a>
-                                </div>
+                    <!-- Brand -->
+                    <div class="flex-shrink-0">
+                        <a href="{{ url_for('main.dashboard') }}" class="flex items-center group">
+                            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center mr-3 group-hover:scale-110 transition-transform duration-300">
+                                <i class="fas fa-boxes text-white text-lg"></i>
                             </div>
-                        </div>
-
-                        <a href="{{ url_for('reports.dashboard') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
-                            <i class="fas fa-chart-bar mr-2"></i>Reports
+                            <span class="text-xl font-bold brand-text hidden sm:block">StockFlow</span>
                         </a>
-                        {% endif %}
+                    </div>
+                    
+                    <!-- Desktop Navigation -->
+                    <div class="hidden lg:block">
+                        <div class="ml-12 flex items-center space-x-2">
+                            <a href="{{ url_for('main.dashboard') }}" class="nav-link {{ 'nav-link-active' if request.endpoint == 'main.dashboard' else '' }}">
+                                <i class="fas fa-chart-line mr-2"></i>Dashboard
+                            </a>
 
-                        {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
-                        <a href="{{ url_for('masters.employees') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
-                            <i class="fas fa-users mr-2"></i>Employees
-                        </a>
-                        {% endif %}
-
-                        <div class="relative group">
-                            <button class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-all duration-200 hover:bg-gray-700/50">
-                                <i class="fas fa-boxes mr-2"></i>Stock
-                                <i class="fas fa-chevron-down ml-1 transform group-hover:rotate-180 transition-transform"></i>
-                            </button>
-                            <div class="absolute left-0 mt-2 w-56 glass-effect rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 overflow-hidden">
-                                <div class="py-2">
-                                    {% if current_user.role.value in ['superadmin', 'manager','hod'] %}
-                                    <a href="{{ url_for('stock_entry.entry_form') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-plus-circle mr-3 text-green-400"></i>Stock Entry
+                            <!-- Stock Management -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-boxes mr-2"></i>Stock
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    {% if current_user.role.value in ['superadmin', 'manager'] %}
+                                    <a href="{{ url_for('stock_entry.entries') }}" class="dropdown-item">
+                                        <i class="fas fa-plus-circle text-emerald-400"></i>New Entry
                                     </a>
                                     {% endif %}
-                                    <a href="{{ url_for('stock_entry.balances') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-boxes mr-3 text-blue-400"></i>Stock Balances
+                                    <a href="{{ url_for('stock_entry.balances') }}" class="dropdown-item">
+                                        <i class="fas fa-chart-bar text-blue-400"></i>Balances
                                     </a>
-                                    <a href="{{ url_for('low_stock.alerts') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-exclamation-triangle mr-3 text-yellow-400"></i>Low Stock Alerts
+                                    <a href="{{ url_for('stock_issue.create_request') }}" class="dropdown-item">
+                                        <i class="fas fa-paper-plane text-indigo-400"></i>New Request
                                     </a>
-                                    <a href="{{ url_for('location_inventory.location_inventory') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-warehouse mr-3 text-purple-400"></i>Location Inventory
+                                    <a href="{{ url_for('stock_issue.my_requests') }}" class="dropdown-item">
+                                        <i class="fas fa-list text-purple-400"></i>My Requests
                                     </a>
-                                    <div class="border-t border-gray-600 my-2"></div>
-                                    <a href="{{ url_for('stock_issue.create_request') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-paper-plane mr-3 text-indigo-400"></i>Create Request
-                                    </a>
-                                    <a href="{{ url_for('stock_issue.my_requests') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-list mr-3 text-cyan-400"></i>My Requests
-                                    </a>
-                                    <a href="{{ url_for('stock_issue.request_tracker') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                                        <i class="fas fa-search mr-3 text-orange-400"></i>Track Request
+                                    <a href="{{ url_for('stock_issue.request_tracker') }}" class="dropdown-item">
+                                        <i class="fas fa-search text-orange-400"></i>Track Request
                                     </a>
                                 </div>
                             </div>
+
+                            {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
+                            <!-- Management -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-cogs mr-2"></i>Manage
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    <a href="{{ url_for('masters.items') }}" class="dropdown-item">
+                                        <i class="fas fa-cube text-yellow-400"></i>Items
+                                    </a>
+                                    <a href="{{ url_for('masters.locations') }}" class="dropdown-item">
+                                        <i class="fas fa-map-marker-alt text-green-400"></i>Locations
+                                    </a>
+                                    <a href="{{ url_for('masters.departments') }}" class="dropdown-item">
+                                        <i class="fas fa-building text-blue-400"></i>Departments
+                                    </a>
+                                    <a href="{{ url_for('masters.employees') }}" class="dropdown-item">
+                                        <i class="fas fa-users text-purple-400"></i>Employees
+                                    </a>
+                                    
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Reports & Analytics -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-chart-pie mr-2"></i>Reports
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    <a href="{{ url_for('reports.dashboard') }}" class="dropdown-item">
+                                        <i class="fas fa-chart-line text-indigo-400"></i>Analytics Dashboard
+                                    </a>
+                                    <a href="{{ url_for('location_inventory.location_inventory') }}" class="dropdown-item">
+                                        <i class="fas fa-map-marked-alt text-pink-400"></i>Location Inventory
+                                    </a>
+                                    {% if current_user.role.value in ['superadmin', 'manager'] %}
+                                    <a href="{{ url_for('low_stock.alerts') }}" class="dropdown-item">
+                                        <i class="fas fa-exclamation-triangle text-red-400"></i>Low Stock Alerts
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if current_user.role.value in ['superadmin', 'manager'] %}
+                            <!-- Warehouse -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-warehouse mr-2"></i>Warehouse
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="dropdown-item">
+                                        <i class="fas fa-users-gear text-teal-400"></i>Access Management
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if current_user.role.value in ['superadmin'] %}
+                            <!-- Administration -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-shield-alt mr-2"></i>Admin
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    <a href="{{ url_for('user_management.users') }}" class="dropdown-item">
+                                        <i class="fas fa-users-cog text-cyan-400"></i>User Management
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
-
-                        {% if current_user.role.value == 'hod' %}
-                        <a href="{{ url_for('approvals.pending') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50 relative">
-                            <i class="fas fa-check-circle mr-2"></i>Approvals
-                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">!</span>
-                        </a>
-                        {% endif %}
-
-                        {% if current_user.role.value == 'superadmin' %}
-                        <a href="{{ url_for('user_management.users') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
-                            <i class="fas fa-user-cog mr-2"></i>User Management
-                        </a>
-                        <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
-                            <i class="fas fa-warehouse mr-2"></i>Warehouse
-                        </a>
-                        {% endif %}
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <div class="hidden md:flex items-center space-x-3">
-                        <div class="text-right">
-                            <div class="text-sm font-medium text-white">{{ current_user.full_name }}</div>
-                            <div class="text-xs text-gray-400">{{ current_user.role.value.title() }}</div>
-                        </div>
-                        <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                            <span class="text-white font-semibold text-sm">{{ current_user.full_name[:2].upper() }}</span>
-                        </div>
+
+                <!-- Mobile menu button -->
+                <div class="lg:hidden">
+                    <button id="mobile-menu-button" class="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-all duration-200">
+                        <i class="fas fa-bars text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- User Menu -->
+                <div class="hidden lg:flex items-center space-x-4">
+                    <div class="text-right">
+                        <div class="text-sm font-medium text-white">{{ current_user.full_name }}</div>
+                        <div class="text-xs text-gray-400">{{ current_user.role.value.title() }}</div>
                     </div>
-                    <a href="{{ url_for('auth.logout') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-red-600/20">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <i class="fas fa-user text-white text-sm"></i>
+                    </div>
+                    <a href="{{ url_for('auth.logout') }}" class="nav-link text-sm">
                         <i class="fas fa-sign-out-alt mr-2"></i>Logout
                     </a>
+                </div>
+            </div>
+
+            <!-- Mobile menu -->
+            <div id="mobile-menu" class="hidden lg:hidden">
+                <div class="mobile-menu">
+                    <a href="{{ url_for('main.dashboard') }}" class="mobile-nav-link">
+                        <i class="fas fa-chart-line mr-3"></i>Dashboard
+                    </a>
+
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-boxes mr-3"></i>Stock Management
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            {% if current_user.role.value in ['superadmin', 'manager'] %}
+                            <a href="{{ url_for('stock_entry.entries') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-plus-circle mr-3"></i>Stock Entries
+                            </a>
+                            {% endif %}
+                            <a href="{{ url_for('stock_entry.balances') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-chart-bar mr-3"></i>Stock Balances
+                            </a>
+                            <a href="{{ url_for('stock_issue.create_request') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-paper-plane mr-3"></i>New Request
+                            </a>
+                            <a href="{{ url_for('stock_issue.my_requests') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-list mr-3"></i>My Requests
+                            </a>
+                        </div>
+                    </div>
+
+                    {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-cogs mr-3"></i>Management
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            <a href="{{ url_for('masters.items') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-cube mr-3"></i>Items
+                            </a>
+                            <a href="{{ url_for('masters.locations') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-map-marker-alt mr-3"></i>Locations
+                            </a>
+                            <a href="{{ url_for('approvals.pending') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-clock mr-3"></i>Approvals
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-chart-pie mr-3"></i>Reports
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            <a href="{{ url_for('reports.dashboard') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-chart-line mr-3"></i>Analytics Dashboard
+                            </a>
+                            <a href="{{ url_for('location_inventory.location_inventory') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-map-marked-alt mr-3"></i>Location Inventory
+                            </a>
+                            {% if current_user.role.value in ['superadmin', 'manager'] %}
+                            <a href="{{ url_for('low_stock.alerts') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-exclamation-triangle mr-3"></i>Low Stock Alerts
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if current_user.role.value in ['superadmin', 'manager'] %}
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-warehouse mr-3"></i>Warehouse
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-users-gear mr-3"></i>Access Management
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if current_user.role.value in ['superadmin'] %}
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-shield-alt mr-3"></i>Administration
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            <a href="{{ url_for('user_management.users') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-users-cog mr-3"></i>User Management
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="border-t border-gray-600 pt-4 mt-4">
+                        <div class="px-4 py-2 text-sm text-gray-300">
+                            {{ current_user.full_name }} ({{ current_user.role.value.title() }})
+                        </div>
+                        <a href="{{ url_for('auth.logout') }}" class="mobile-nav-link">
+                            <i class="fas fa-sign-out-alt mr-3"></i>Logout
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -251,8 +501,35 @@
     </div>
 
     <script>
-        // Enhanced JavaScript for better UX
         document.addEventListener('DOMContentLoaded', function() {
+            // Mobile menu toggle
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const mobileDropdownToggles = document.querySelectorAll('.mobile-dropdown-toggle');
+
+            if (mobileMenuButton && mobileMenu) {
+                mobileMenuButton.addEventListener('click', function() {
+                    mobileMenu.classList.toggle('hidden');
+                    const icon = this.querySelector('i');
+                    icon.classList.toggle('fa-bars');
+                    icon.classList.toggle('fa-times');
+                });
+            }
+
+            mobileDropdownToggles.forEach(toggle => {
+                toggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const dropdown = this.closest('.mobile-dropdown');
+                    if (dropdown) {
+                        dropdown.classList.toggle('active');
+                        const content = dropdown.querySelector('.mobile-dropdown-content');
+                        if (content) {
+                            content.classList.toggle('hidden');
+                        }
+                    }
+                });
+            });
+
             // Auto-hide notifications
             setTimeout(function() {
                 const notifications = document.querySelectorAll('#notifications > div');
@@ -274,8 +551,6 @@
                     if (submitBtn && !submitBtn.disabled) {
                         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
                         submitBtn.disabled = true;
-                        
-                        // Show loading overlay for longer operations
                         setTimeout(() => {
                             document.getElementById('loadingOverlay').classList.remove('hidden');
                         }, 500);
@@ -347,7 +622,7 @@
                 </div>
             `;
             container.appendChild(notification);
-            
+
             setTimeout(() => {
                 notification.style.transform = 'translateX(100%)';
                 notification.style.opacity = '0';

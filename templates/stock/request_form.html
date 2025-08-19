@@ -25,7 +25,6 @@
     <!-- Request Form -->
     <div class="glass-effect rounded-2xl p-6">
         <form method="POST" id="requestForm">
-            {{ form.hidden_tag() }}
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
             <!-- Basic Information -->
@@ -37,27 +36,29 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-2">Department</label>
-                        {{ form.department_id(class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent") }}
-                        {% if form.department_id.errors %}
-                            <p class="mt-1 text-sm text-red-400">{{ form.department_id.errors[0] }}</p>
-                        {% endif %}
+                        <input type="text" value="{{ current_user.department.name if current_user.department else 'No Department' }}" readonly class="w-full px-3 py-2 bg-gray-600 border border-gray-600 rounded-lg text-gray-300 cursor-not-allowed">
+                        <input type="hidden" name="department_id" value="{{ current_user.department_id }}">
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-2">Location</label>
-                        {{ form.location_id(class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent") }}
-                        {% if form.location_id.errors %}
-                            <p class="mt-1 text-sm text-red-400">{{ form.location_id.errors[0] }}</p>
-                        {% endif %}
+                        <select name="location_id" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="">Select Location</option>
+                            {% for location in locations %}
+                            <option value="{{ location.id }}">{{ location.office }} - {{ location.room_store }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
 
                 <div class="mt-6">
                     <label class="block text-sm font-medium text-gray-300 mb-2">Purpose</label>
-                    {{ form.purpose(class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent", rows="3", placeholder="Describe the purpose of this stock request...") }}
-                    {% if form.purpose.errors %}
-                        <p class="mt-1 text-sm text-red-400">{{ form.purpose.errors[0] }}</p>
-                    {% endif %}
+                    <textarea name="purpose" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" rows="3" placeholder="Describe the purpose of this stock request..."></textarea>
+                </div>
+
+                <div class="mt-6">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Remarks (Optional)</label>
+                    <textarea name="remarks" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" rows="2" placeholder="Additional remarks..."></textarea>
                 </div>
             </div>
 
@@ -112,20 +113,20 @@ function addItemRow() {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Item</label>
-                <select name="items-${itemCounter}-item_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <select name="item_id[]" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
                     <option value="">Select Item</option>
-                    {% for item in available_items %}
+                    {% for item in items %}
                     <option value="{{ item.id }}">{{ item.code }} - {{ item.name }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Quantity</label>
-                <input type="number" name="items-${itemCounter}-quantity" min="1" step="0.01" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                <input type="number" name="quantity[]" min="1" step="0.01" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Remarks</label>
-                <input type="text" name="items-${itemCounter}-remarks" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional">
+                <input type="text" name="item_remarks[]" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional">
             </div>
         </div>
     `;

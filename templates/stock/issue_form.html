@@ -48,56 +48,145 @@
         <div class="border-t border-gray-700">
             <form method="POST" action="{{ url_for('stock_issue.process_issue', request_id=request.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <table class="min-w-full divide-y divide-gray-700">
-                    <thead class="bg-gray-700">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Requested</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Available</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Issue Quantity</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-gray-800 divide-y divide-gray-700">
-                        {% for line in request.issue_lines %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-white">
-                                <div>
-                                    <div class="font-medium">{{ line.item.code }}</div>
-                                    <div class="text-gray-400">{{ line.item.name }}</div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ line.quantity_requested }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                {% set available = stock_balances[line.item_id] %}
-                                <span class="{% if available >= line.quantity_requested %}text-green-400{% else %}text-red-400{% endif %}">
-                                    {{ available }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                <input type="hidden" name="line_id[]" value="{{ line.id }}">
-                                <input type="number" 
-                                       name="quantity_issued[]" 
-                                       step="0.01" 
-                                       min="0" 
-                                       max="{{ [line.quantity_requested, stock_balances[line.item_id]]|min }}"
-                                       value="{{ line.quantity_requested if stock_balances[line.item_id] >= line.quantity_requested else stock_balances[line.item_id] }}"
-                                       class="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                                       required>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
 
-                <div class="px-6 py-4 bg-gray-700">
-                    <div class="flex justify-end space-x-3">
-                        <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="inline-flex justify-center py-2 px-4 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-800 hover:bg-gray-700 focus:outline-none">
-                            Cancel
-                        </a>
-                        <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none">
-                            <i class="fas fa-shipping-fast mr-2"></i>Issue Stock
-                        </button>
+                <div class="space-y-6">
+                    {% for line in request.issue_lines %}
+                    <div class="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                        <!-- Item Header -->
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex-1">
+                                <h4 class="text-xl font-semibold text-white mb-2">{{ line.item.name }}</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                                    <div>
+                                        <span class="text-gray-400">Item Code:</span>
+                                        <span class="ml-2 text-white font-medium">{{ line.item.code }}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-400">Department:</span>
+                                        <span class="ml-2 text-white font-medium">
+                                            {% if line.item.department %}
+                                                {{ line.item.department.name }}
+                                            {% else %}
+                                                General
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-400">Requested Qty:</span>
+                                        <span class="ml-2 text-blue-400 font-semibold text-lg">{{ line.quantity_requested }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Item Description -->
+                        {% if line.item.description %}
+                        <div class="mb-4">
+                            <span class="text-sm text-gray-400">Description:</span>
+                            <p class="mt-1 text-sm text-white bg-gray-800 rounded-md p-3">{{ line.item.description }}</p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Item Remarks -->
+                        {% if line.remarks %}
+                        <div class="mb-4">
+                            <span class="text-sm text-gray-400">Remarks:</span>
+                            <p class="mt-1 text-sm text-white bg-gray-800 rounded-md p-3">{{ line.remarks }}</p>
+                        </div>
+                        {% endif %}
+
+                        <!-- Stock Information and Issue Quantity -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <span class="text-sm text-gray-400">Available Stock:</span>
+                                <div class="mt-1">
+                                    <span class="text-lg font-semibold {% if stock_balances[line.item_id] < line.quantity_requested %}text-red-400{% else %}text-green-400{% endif %}">
+                                        {{ stock_balances[line.item_id] }}
+                                    </span>
+                                    {% if stock_balances[line.item_id] < line.quantity_requested %}
+                                    <span class="ml-2 text-xs text-red-400">(Insufficient)</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div>
+                                <span class="text-sm text-gray-400">Max Issuable:</span>
+                                <div class="mt-1">
+                                    <span class="text-lg font-semibold text-yellow-400">
+                                        {{ [line.quantity_requested, stock_balances[line.item_id]]|min }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div>
+                                
+                                
+                                    <label for="quantity_{{ line.id }}" class="block text-sm font-medium text-gray-300 mb-1">Quantity to Issue</label>
+                                    
+                                    <input type="hidden" name="line_id[]" value="{{ line.id }}">
+                                    <input type="number" 
+                                           name="quantity_issued[]" 
+                                           id="quantity_{{ line.id }}"
+                                           value="{{ [line.quantity_requested, stock_balances[line.item_id]]|min }}"
+                                           min="0" 
+                                           max="{{ [line.quantity_requested, stock_balances[line.item_id]]|min }}"
+                                           step="0.01"
+                                           class="block w-full border-gray-600 rounded-md shadow-sm bg-gray-800 text-white focus:ring-purple-500 focus:border-purple-500 text-lg font-semibold">
+                                
+                            </div>
+                        </div>
+
+                        <!-- Additional Item Details -->
+                        {% if line.item.make or line.item.variant %}
+                        <div class="mt-4 pt-4 border-t border-gray-600">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                {% if line.item.make %}
+                                <div>
+                                    <span class="text-gray-400">Make:</span>
+                                    <span class="ml-2 text-white">{{ line.item.make }}</span>
+                                </div>
+                                {% endif %}
+                                {% if line.item.variant %}
+                                <div>
+                                    <span class="text-gray-400">Variant:</span>
+                                    <span class="ml-2 text-white">{{ line.item.variant }}</span>
+                                </div>
+                                
+                                {% endif %}
+                                <div>
+                                    <button type="submit" class="custom-btn w-100 mb-2" data-bs-toggle="modal">
+                                        <i class="fas fa-shipping-fast me-2"></i>
+                                      Issue Stock
+                                    </button>
+
+                                    <style>
+                                    .custom-btn {
+                                      background-color: #6f42c1; /* Bootstrap purple shade */
+                                      color: white;
+                                      border: none;
+                                      border-radius: 12px; /* round corners */
+                                      padding: 10px 16px;
+                                      font-size: 16px;
+                                      font-weight: 500;
+                                      transition: all 0.3s ease;
+                                    }
+
+                                    .custom-btn:hover {
+                                      background-color: #5a32a3; /* darker purple on hover */
+                                      color: #fff;
+                                      transform: translateY(-2px);
+                                      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+                                    }
+
+                                    .custom-btn:active {
+                                      transform: translateY(0);
+                                      box-shadow: none;
+                                    }
+                                    </style>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
+                    {% endfor %}
                 </div>
             </form>
         </div>

@@ -29,9 +29,10 @@ def create_user():
     role = request.form.get('role')
     department_id = request.form.get('department_id')
     employee_id = request.form.get('employee_id')
+    full_name_input = request.form.get('full_name', '').strip()
 
-    # Derive full_name from linked employee or use username
-    full_name = username  # Default fallback
+    # Derive full_name from form input, linked employee, or use username
+    full_name = full_name_input or username  # Use form input first, then fallback to username
     if employee_id:
         employee = Employee.query.get(int(employee_id))
         if employee:
