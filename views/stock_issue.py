@@ -290,15 +290,41 @@ def process_issue(request_id):
                 location_id=request_obj.location_id
             ).first()
 
-            if not stock_balance or stock_balance.quantity < issued_decimal:
-                flash(f'Insufficient stock for {line.item.name}.', 'error')
+            available_qty = stock_balance.quantity if stock_balance else Decimal('0')
+            
+            # Prevent issuing if no stock or insufficient stock
+            if available_qty <= 0:
+                flash(f'{line.item.name} ({line.item.code}) is out of stock at the selected location.', 'error')
+                return redirect(url_for('stock_issue.issue_form', request_id=request_id))
+            
+            if available_qty < issued_decimal:
+                flash(f'Insufficient stock for {line.item.name} ({line.item.code}). Available: {available_qty}, Requested: {issued_decimal}', 'error')
                 return redirect(url_for('stock_issue.issue_form', request_id=request_id))
 
-            # Update line with issued quantity
-            line.quantity_issued = issued_decimal
+            # Only proceed if we have sufficient stock
+            if issued_decimal > 0:
+                # Update line with issued quantity
+                line.quantity_issued = issued_decimal
 
-            # Deduct from stock balance
-            stock_balance.quantity -= issued_decimal
+                # Deduct from stock balance
+                stock_balance.quantity -= issued_decimal
+
+        # Final validation: ensure no negative stock balances before committing
+        negative_stock_items = []
+        for line in request_obj.issue_lines:
+            if line.quantity_issued and line.quantity_issued > 0:
+                stock_balance = StockBalance.query.filter_by(
+                    item_id=line.item_id,
+                    location_id=request_obj.location_id
+                ).first()
+                
+                if stock_balance and stock_balance.quantity < 0:
+                    negative_stock_items.append(line.item.name)
+        
+        if negative_stock_items:
+            db.session.rollback()
+            flash(f'Cannot complete issue: would result in negative stock for {", ".join(negative_stock_items)}', 'error')
+            return redirect(url_for('stock_issue.issue_form', request_id=request_id))
 
         # Update request status
         request_obj.status = RequestStatus.ISSUED
