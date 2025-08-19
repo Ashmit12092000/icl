@@ -6,6 +6,7 @@ from auth import role_required
 from database import db
 from decimal import Decimal
 from datetime import datetime
+from utils import get_ist_now
 stock_issue_bp = Blueprint('stock_issue', __name__)
 
 @stock_issue_bp.route('/create')

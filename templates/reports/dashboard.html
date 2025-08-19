@@ -40,7 +40,7 @@
     </div>
 
     <!-- Stats Grid -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
             <div class="p-5">
                 <div class="flex items-center">
@@ -104,6 +104,38 @@
                 </div>
             </div>
         </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-percentage text-purple-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Fulfillment Rate</dt>
+                            <dd class="text-lg font-medium text-white">{{ fulfillment_rate }}%</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-boxes text-cyan-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Stock Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ total_stock_items }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Charts Grid -->
@@ -135,19 +167,29 @@
         <!-- Top Items Chart -->
         <div class="bg-gray-800 shadow rounded-lg p-6">
             <h3 class="text-lg leading-6 font-medium text-white mb-4">Most Requested Items</h3>
+            {% if top_items %}
             <div class="space-y-3">
                 {% for item in top_items[:5] %}
                 <div class="flex items-center justify-between">
-                    <span class="text-sm text-gray-300">{{ item.name }}</span>
-                    <div class="flex items-center">
+                    <div class="flex-1">
+                        <span class="text-sm text-gray-300 block">{{ item.name }}</span>
+                        <span class="text-xs text-gray-500">{{ item.code }} • {{ item.request_count }} requests</span>
+                    </div>
+                    <div class="flex items-center ml-4">
                         <div class="w-24 bg-gray-700 rounded-full h-2 mr-2">
-                            <div class="bg-indigo-500 h-2 rounded-full" style="width: {{ (item.total_quantity / top_items[0].total_quantity * 100) if top_items else 0 }}%"></div>
+                            <div class="bg-indigo-500 h-2 rounded-full" style="width: {{ item.percentage }}%"></div>
                         </div>
-                        <span class="text-sm text-white">{{ item.total_quantity }}</span>
+                        <span class="text-sm text-white min-w-12 text-right">{{ item.total_quantity|int }}</span>
                     </div>
                 </div>
                 {% endfor %}
             </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-chart-bar text-gray-600 text-4xl mb-3"></i>
+                <p class="text-gray-400">No request data available yet</p>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -174,14 +216,33 @@
                     <tr>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ dept.name }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ dept.total_requests }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ dept.issued_requests }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                {% if dept.efficiency >= 80 %}bg-green-900 text-green-200
-                                {% elif dept.efficiency >= 60 %}bg-yellow-900 text-yellow-200
-                                {% else %}bg-red-900 text-red-200{% endif %}">
-                                {{ dept.efficiency }}%
-                            </span>
+                            <div class="flex items-center space-x-2">
+                                <span>{{ dept.issued_requests }}</span>
+                                {% if dept.pending_requests > 0 %}
+                                <span class="text-xs text-yellow-400">({{ dept.pending_requests }} pending)</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            <div class="flex items-center">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2
+                                    {% if dept.efficiency >= 80 %}bg-green-900 text-green-200
+                                    {% elif dept.efficiency >= 60 %}bg-yellow-900 text-yellow-200
+                                    {% else %}bg-red-900 text-red-200{% endif %}">
+                                    {{ dept.efficiency }}%
+                                </span>
+                                <div class="w-16 bg-gray-700 rounded-full h-2">
+                                    <div class="h-2 rounded-full {% if dept.efficiency >= 80 %}bg-green-500{% elif dept.efficiency >= 60 %}bg-yellow-500{% else %}bg-red-500{% endif %}" 
+                                         style="width: {{ dept.efficiency }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-center text-gray-400">
+                            No department data available
                         </td>
                     </tr>
                     {% endfor %}

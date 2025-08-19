@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
-from sqlalchemy import func, CheckConstraint
+from sqlalchemy import CheckConstraint
 from database import db
-from config import Config
+from utils import get_ist_now
 
 class UserRole(Enum):
     SUPERADMIN = 'superadmin'
@@ -23,7 +24,7 @@ class RequestStatus(Enum):
 user_warehouse_assignments = db.Table('user_warehouse_assignments',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('location_id', db.Integer, db.ForeignKey('locations.id'), primary_key=True),
-    db.Column('assigned_at', db.DateTime, default=datetime.now(timezone.utc)),
+    db.Column('assigned_at', db.DateTime, default=lambda: get_ist_now()),
     db.Column('assigned_by', db.Integer, db.ForeignKey('users.id'))
 )
 
@@ -37,7 +38,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.EMPLOYEE)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
     is_active = db.Column(db.Boolean, default=True)
 
     # Relationships
@@ -83,7 +84,7 @@ class Department(db.Model):
     code = db.Column(db.String(20), unique=True, nullable=False)
     name = db.Column(db.String(100), nullable=False)
     hod_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
 
     # Relationships
     hod = db.relationship('User', foreign_keys=[hod_id], back_populates='managed_department')
@@ -100,7 +101,7 @@ class Location(db.Model):
     office = db.Column(db.String(100), nullable=False)
     room = db.Column(db.String(50), nullable=False)
     code = db.Column(db.String(20), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
 
     # Relationships
     stock_balances = db.relationship('StockBalance', back_populates='location')
@@ -123,7 +124,7 @@ class Employee(db.Model):
     name = db.Column(db.String(100), nullable=False)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
 
     # Relationships
     department = db.relationship('Department', back_populates='employees')
@@ -143,7 +144,7 @@ class Item(db.Model):
     description = db.Column(db.Text)
     department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
     low_stock_threshold = db.Column(db.Numeric(10, 2), nullable=False, default=10)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
 
     # Relationships
     department = db.relationship('Department')
@@ -188,7 +189,7 @@ class StockBalance(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=0)
-    last_updated = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    last_updated = db.Column(db.DateTime, default=lambda: get_ist_now(), onupdate=lambda: get_ist_now())
 
     # Relationships
     item = db.relationship('Item', back_populates='stock_balances')
@@ -209,11 +210,11 @@ class StockEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
-    quantity = db.Column(db.Numeric(10, 2), nullable=False)
-    description = db.Column(db.String(200))
+    quantity_procured = db.Column(db.Numeric(10, 2), nullable=False)
+    description = db.Column(db.Text)
     remarks = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now())
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
 
     # Relationships
     item = db.relationship('Item', back_populates='stock_entries')
@@ -239,8 +240,8 @@ class StockIssueRequest(db.Model):
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     issued_at = db.Column(db.DateTime)
     issued_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now(), nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: get_ist_now(), onupdate=lambda: get_ist_now())
 
     # Relationships
     requester = db.relationship('User', foreign_keys=[requester_id])
@@ -303,7 +304,7 @@ class Audit(db.Model):
     entity_id = db.Column(db.Integer, nullable=False)
     action = db.Column(db.String(50), nullable=False)
     performed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    timestamp = db.Column(db.DateTime, default=lambda: get_ist_now(), nullable=False)
     details = db.Column(db.Text)
 
     # Relationships

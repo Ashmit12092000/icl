@@ -5,6 +5,8 @@ from forms import StockEntryForm
 from database import db
 from auth import role_required
 from decimal import Decimal
+from datetime import datetime
+from utils import get_ist_now
 
 stock_entry_bp = Blueprint('stock_entry', __name__)
 
@@ -15,7 +17,7 @@ def entry_form():
     if current_user.role.value not in ['superadmin', 'manager','hod'] and not (current_user.role.value == 'hod' and current_user.managed_department):
         flash('You do not have permission to create stock entries.', 'error')
         return redirect(url_for('main.dashboard'))
-    
+
     # Filter items based on user's department for HODs
     if current_user.role.value == 'hod' and current_user.managed_department:
         items = Item.query.filter(
@@ -23,15 +25,15 @@ def entry_form():
         ).all()
     else:
         items = Item.query.all()
-    
+
     locations = Location.query.all()
-    
+
     # Get pre-selected values from URL parameters
     selected_item_id = request.args.get('item_id')
     selected_location_id = request.args.get('location_id')
-    
-    return render_template('stock/entry.html', 
-                         items=items, 
+
+    return render_template('stock/entry.html',
+                         items=items,
                          locations=locations,
                          selected_item_id=selected_item_id,
                          selected_location_id=selected_location_id)
@@ -66,10 +68,11 @@ def create_entry():
     stock_entry = StockEntry(
         item_id=int(item_id),
         location_id=int(location_id),
-        quantity=quantity,
+        quantity_procured=quantity,
         description=description if description else None,
         remarks=remarks if remarks else None,
-        created_by=current_user.id
+        created_by=current_user.id,
+        created_at=get_ist_now()
     )
 
     try:
@@ -146,7 +149,7 @@ def balances():
     balances = query.all()
 
     locations = Location.query.all()
-    
+
     # Filter items based on user's department for dropdown
     if current_user.role.value == 'hod':
         if current_user.managed_department:

@@ -402,7 +402,7 @@ def create_initial_stock(items, locations, users):
                 stock_entry = StockEntry(
                     item_id=item.id,
                     location_id=location.id,
-                    quantity=quantity,
+                    quantity_procured=quantity,
                     description=f"Initial stock for {item.name}",
                     remarks="System seeded data",
                     created_by=admin_user.id

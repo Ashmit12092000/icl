@@ -128,7 +128,7 @@ class StockIssueItemForm(FlaskForm):
         else:
             allowed_locations = Location.query.all()
 
-        self.location_id.choices = [(l.id, f"{l.office} - {l.room_store}") for l in allowed_locations]
+        self.location_id.choices = [(l.id, f"{l.office} - {l.room}") for l in allowed_locations]
 
 class UserForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])

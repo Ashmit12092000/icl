@@ -225,8 +225,28 @@ def create_location():
 
     try:
         db.session.add(location)
+        db.session.flush()  # Get the location ID
+        
+        # Auto-assign all superadmins and managers to this new warehouse
+        superadmins_and_managers = User.query.filter(
+            User.role.in_([UserRole.SUPERADMIN, UserRole.MANAGER]),
+            User.is_active == True
+        ).all()
+        
+        for user in superadmins_and_managers:
+            user.assigned_warehouses.append(location)
+        
+        # Log audit
+        Audit.log(
+            entity_type='Location',
+            entity_id=location.id,
+            action='CREATE',
+            user_id=current_user.id,
+            details=f'Created location {code} and auto-assigned to {len(superadmins_and_managers)} superadmin/manager users'
+        )
+        
         db.session.commit()
-        flash('Location created successfully.', 'success')
+        flash('Location created successfully and auto-assigned to superadmins/managers.', 'success')
     except Exception as e:
         db.session.rollback()
         flash('Error creating location.', 'error')

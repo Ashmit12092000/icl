@@ -1,5 +1,5 @@
 
-from datetime import datetime
+from datetime import datetime, timezone
 from config import Config
 
 def get_ist_now():
@@ -21,6 +21,10 @@ def format_ist_datetime(dt):
         return ''
     ist_dt = convert_to_ist(dt)
     return ist_dt.strftime('%Y-%m-%d %H:%M IST')
+
+def datetime_now_ist():
+    """Get current datetime in IST - alias for get_ist_now()"""
+    return get_ist_now()
 
 
 from functools import wraps

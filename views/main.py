@@ -25,7 +25,7 @@ def dashboard():
     approved_requests = []
     
     from datetime import date
-    today = date.today()
+    today = get_ist_now().date()
 
     if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
         # Admin users see all requests
