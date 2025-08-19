@@ -226,16 +226,16 @@ def create_location():
     try:
         db.session.add(location)
         db.session.flush()  # Get the location ID
-        
+
         # Auto-assign all superadmins and managers to this new warehouse
         superadmins_and_managers = User.query.filter(
             User.role.in_([UserRole.SUPERADMIN, UserRole.MANAGER]),
             User.is_active == True
         ).all()
-        
+
         for user in superadmins_and_managers:
             user.assigned_warehouses.append(location)
-        
+
         # Log audit
         Audit.log(
             entity_type='Location',
@@ -244,7 +244,7 @@ def create_location():
             user_id=current_user.id,
             details=f'Created location {code} and auto-assigned to {len(superadmins_and_managers)} superadmin/manager users'
         )
-        
+
         db.session.commit()
         flash('Location created successfully and auto-assigned to superadmins/managers.', 'success')
     except Exception as e:
@@ -554,5 +554,41 @@ def edit_item(item_id):
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'{field}: {error}', 'error')
+
+    return redirect(url_for('masters.items'))
+
+@masters_bp.route('/items/delete/<int:item_id>', methods=['POST'])
+@login_required
+@role_required('superadmin', 'manager')
+def delete_item(item_id):
+    item = Item.query.get_or_404(item_id)
+
+    try:
+        # Check if item has stock balances or entries
+        from models import StockBalance, StockEntry, StockIssueLine
+
+        has_balances = StockBalance.query.filter_by(item_id=item_id).first()
+        has_entries = StockEntry.query.filter_by(item_id=item_id).first()
+        has_issues = StockIssueLine.query.filter_by(item_id=item_id).first()
+
+        if has_balances or has_entries or has_issues:
+            flash('Cannot delete item. It has associated stock records, entries, or issue requests.', 'error')
+        else:
+            # Log audit
+            Audit.log(
+                entity_type='Item',
+                entity_id=item.id,
+                action='DELETE',
+                user_id=current_user.id,
+                details=f'Deleted item {item.code} - {item.name}'
+            )
+
+            db.session.delete(item)
+            db.session.commit()
+            flash('Item deleted successfully.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash('Error deleting item. Item may have associated records.', 'error')
 
     return redirect(url_for('masters.items'))

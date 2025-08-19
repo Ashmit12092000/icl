@@ -58,10 +58,16 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.low_stock_threshold }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.created_at.strftime('%Y-%m-%d') }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', {{ item.department_id or 'null' }}, '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}', {{ item.low_stock_threshold }})"
-                                class="text-indigo-400 hover:text-indigo-300 mr-4">
-                            <i class="fas fa-edit"></i>
-                        </button>
+                        <div class="flex space-x-2">
+                            <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', {{ item.department_id or 'null' }}, '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}', {{ item.low_stock_threshold }})"
+                                    class="text-indigo-400 hover:text-indigo-300" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="confirmDelete({{ item.id }}, '{{ item.code }}')"
+                                    class="text-red-400 hover:text-red-300" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 {% else %}
@@ -172,6 +178,28 @@
     </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-medium text-white text-center mb-4">Delete Item</h3>
+            <p class="text-gray-300 text-center mb-4">
+                Are you sure you want to delete item <strong id="deleteItemCode"></strong>? This action cannot be undone.
+            </p>
+            <form method="POST" id="deleteForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="flex justify-center space-x-4">
+                    <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 function openCreateModal() {
     document.getElementById('createModal').classList.remove('hidden');
@@ -195,6 +223,16 @@ function openEditModal(id, code, name, departmentId, make, variant, description,
 
 function closeEditModal() {
     document.getElementById('editModal').classList.add('hidden');
+}
+
+function confirmDelete(id, code) {
+    document.getElementById('deleteItemCode').textContent = code;
+    document.getElementById('deleteForm').action = '/masters/items/delete/' + id;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
 }
 </script>
 {% endblock %}

@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 location_inventory_bp = Blueprint('location_inventory', __name__)
 
+
 @location_inventory_bp.route('/location-inventory')
 @login_required
 def location_inventory():
@@ -14,21 +15,17 @@ def location_inventory():
     item_filter = request.args.get('item', '')
 
     # Base query to get location inventory data
-    query = db.session.query(
-        Location.id.label('location_id'),
-        Location.office,
-        Location.room,
-        Location.code.label('location_code'),
-        Item.id.label('item_id'),
-        Item.code.label('item_code'),
-        Item.name.label('item_name'),
-        StockBalance.quantity,
-        Item.low_stock_threshold
-    ).select_from(Location).join(
-        StockBalance, Location.id == StockBalance.location_id
-    ).join(
-        Item, StockBalance.item_id == Item.id
-    )
+    query = db.session.query(Location.id.label('location_id'),
+                             Location.office, Location.room,
+                             Location.code.label('location_code'),
+                             Item.id.label('item_id'),
+                             Item.code.label('item_code'),
+                             Item.name.label('item_name'),
+                             StockBalance.quantity, Item.low_stock_threshold,
+                             Item.department_id).select_from(Location).join(
+                                 StockBalance,
+                                 Location.id == StockBalance.location_id).join(
+                                     Item, StockBalance.item_id == Item.id)
 
     # Apply user access restrictions
     if current_user.role.value not in ['superadmin', 'manager']:
@@ -47,11 +44,8 @@ def location_inventory():
         query = query.filter(Item.name.contains(item_filter))
 
     # Order by location and item
-    inventory_data = query.order_by(
-        Location.office, 
-        Location.room, 
-        Item.name
-    ).all()
+    inventory_data = query.order_by(Location.office, Location.room,
+                                    Item.name).all()
 
     # Group data by location for better presentation
     locations_inventory = {}
@@ -73,13 +67,29 @@ def location_inventory():
         if is_low_stock:
             locations_inventory[location_key]['low_stock_items'] += 1
 
+        # Get department name if department_id exists
+        department_name = None
+        if record.department_id:
+            from models import Department
+            department = Department.query.get(record.department_id)
+            if department:
+                department_name = department.name
+
         locations_inventory[location_key]['item_list'].append({
-            'item_id': record.item_id,
-            'item_code': record.item_code,
-            'item_name': record.item_name,
-            'quantity': record.quantity,
-            'low_stock_threshold': record.low_stock_threshold,
-            'is_low_stock': is_low_stock
+            'item_id':
+            record.item_id,
+            'item_code':
+            record.item_code,
+            'item_name':
+            record.item_name,
+            'quantity':
+            record.quantity,
+            'low_stock_threshold':
+            record.low_stock_threshold,
+            'is_low_stock':
+            is_low_stock,
+            'department':
+            department_name
         })
         locations_inventory[location_key]['total_items'] += 1
 
@@ -92,8 +102,8 @@ def location_inventory():
     items = Item.query.all()
 
     return render_template('location_inventory/inventory.html',
-                         locations_inventory=locations_inventory,
-                         locations=locations,
-                         items=items,
-                         location_filter=location_filter,
-                         item_filter=item_filter)
+                           locations_inventory=locations_inventory,
+                           locations=locations,
+                           items=items,
+                           location_filter=location_filter,
+                           item_filter=item_filter)

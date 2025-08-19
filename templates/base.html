@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
@@ -47,37 +46,37 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-        
+
         /* Clean Navigation Styles */
         .nav-container {
             background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
             border-bottom: 1px solid rgba(148, 163, 184, 0.1);
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
-        
+
         .nav-link {
             @apply text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:bg-white/10 flex items-center relative;
         }
-        
+
         .nav-link:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
         }
-        
+
         .nav-link-active {
             @apply text-white bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg;
         }
-        
+
         .dropdown {
             position: relative;
         }
-        
+
         .dropdown:hover .dropdown-menu {
             opacity: 1;
             visibility: visible;
             transform: translateY(0) scale(1);
         }
-        
+
         .dropdown-menu {
             opacity: 0;
             visibility: hidden;
@@ -93,7 +92,7 @@
             display: flex;
             flex-direction: column;
         }
-        
+
         .dropdown-item {
             display: block;
             width: 100%;
@@ -109,22 +108,22 @@
             background: none;
             cursor: pointer;
         }
-        
+
         .dropdown-item:hover {
             background: linear-gradient(to right, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
             color: white;
             transform: translateX(4px);
         }
-        
+
         .dropdown-item:hover {
             transform: translateX(4px);
         }
-        
+
         .dropdown-item i {
             width: 20px;
             margin-right: 12px;
         }
-        
+
         /* Mobile Navigation */
         .mobile-menu {
             background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
@@ -132,35 +131,35 @@
             margin: 8px;
             padding: 16px;
         }
-        
+
         .mobile-nav-link {
             @apply text-gray-300 hover:bg-white/10 hover:text-white block px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 flex items-center;
         }
-        
+
         .mobile-dropdown-toggle {
             @apply w-full text-left flex items-center justify-between;
         }
-        
+
         .mobile-dropdown-content {
             @apply hidden mt-2 space-y-1 pl-6;
         }
-        
+
         .mobile-dropdown-item {
             @apply text-gray-400 hover:bg-white/10 hover:text-white block px-3 py-2 rounded-lg text-sm transition-all duration-200 flex items-center;
         }
-        
+
         .mobile-dropdown.active .mobile-dropdown-content {
             @apply block;
         }
-        
+
         .mobile-dropdown.active .mobile-dropdown-toggle i:last-child {
             transform: rotate(180deg);
         }
-        
+
         .mobile-dropdown-toggle i {
             transition: transform 0.3s ease;
         }
-        
+
         /* Brand styling */
         .brand-text {
             background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
@@ -186,7 +185,7 @@
                             <span class="text-xl font-bold brand-text hidden sm:block">StockFlow</span>
                         </a>
                     </div>
-                    
+
                     <!-- Desktop Navigation -->
                     <div class="hidden lg:block">
                         <div class="ml-12 flex items-center space-x-2">
@@ -241,11 +240,33 @@
                                     <a href="{{ url_for('masters.employees') }}" class="dropdown-item">
                                         <i class="fas fa-users text-purple-400"></i>Employees
                                     </a>
-                                    
+
                                 </div>
                             </div>
                             {% endif %}
 
+                            {% if current_user.role.value == 'hod' %}
+                            <!-- Approvals for HOD -->
+                            <div class="dropdown">
+                                <button class="nav-link">
+                                    <i class="fas fa-user-check mr-2"></i>
+                                    <span>Approvals</span>
+                                    <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                                <div class="glass-effect dropdown-menu">
+                                    <a href="{{ url_for('approvals.pending') }}" class="dropdown-item">
+                                        <i class="fas fa-clock text-yellow-400"></i>
+                                        <span>Pending Approvals</span>
+                                    </a>
+                                    <a href="{{ url_for('approvals.approval_history') }}" class="dropdown-item">
+                                        <i class="fas fa-history text-blue-400"></i>
+                                        <span>Approval History</span>
+                                    </a>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
                             <!-- Reports & Analytics -->
                             <div class="dropdown">
                                 <button class="nav-link">
@@ -266,6 +287,7 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            {% endif %}
 
                             {% if current_user.role.value in ['superadmin', 'manager'] %}
                             <!-- Warehouse -->
@@ -376,6 +398,29 @@
                     </div>
                     {% endif %}
 
+                    {% if current_user.role.value == 'hod' %}
+                    <div class="mobile-dropdown">
+                        <button class="mobile-nav-link mobile-dropdown-toggle">
+                            <div class="flex items-center">
+                                <i class="fas fa-user-check text-yellow-400 mr-3"></i>
+                                <span>Approvals</span>
+                            </div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="mobile-dropdown-content">
+                            <a href="{{ url_for('approvals.pending') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-clock text-yellow-400"></i>
+                                <span>Pending Approvals</span>
+                            </a>
+                            <a href="{{ url_for('approvals.approval_history') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-history text-blue-400"></i>
+                                <span>Approval History</span>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
                     <div class="mobile-dropdown">
                         <button class="mobile-nav-link mobile-dropdown-toggle">
                             <div class="flex items-center">
@@ -397,6 +442,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
 
                     {% if current_user.role.value in ['superadmin', 'manager'] %}
                     <div class="mobile-dropdown">

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import Item, Location, StockBalance, StockEntry, Audit
+from models import Item, Location, StockEntry, StockBalance, Audit, StockIssueLine, StockIssueRequest
 from forms import StockEntryForm
 from database import db
 from auth import role_required
@@ -187,3 +187,85 @@ def entries():
         page=page, per_page=20, error_out=False
     )
     return render_template('stock/entries.html', entries=entries)
+
+@stock_entry_bp.route('/history/<int:item_id>/<int:location_id>')
+@login_required
+def stock_history(item_id, location_id):
+    # Check if user has permission to view this location
+    if not current_user.can_access_warehouse(location_id):
+        flash('You do not have permission to access this warehouse.', 'error')
+        return redirect(url_for('stock_entry.balances'))
+
+    item = Item.query.get_or_404(item_id)
+    location = Location.query.get_or_404(location_id)
+
+    # Check department access for HOD and Employee users
+    if current_user.role.value == 'hod':
+        if current_user.managed_department:
+            if item.department_id and item.department_id != current_user.managed_department.id:
+                flash('You can only view items from your department.', 'error')
+                return redirect(url_for('stock_entry.balances'))
+        else:
+            flash('You do not have permission to view this item.', 'error')
+            return redirect(url_for('stock_entry.balances'))
+    elif current_user.role.value == 'employee':
+        if current_user.department_id:
+            if item.department_id and item.department_id != current_user.department_id:
+                flash('You can only view items from your department.', 'error')
+                return redirect(url_for('stock_entry.balances'))
+        else:
+            flash('You do not have permission to view this item.', 'error')
+            return redirect(url_for('stock_entry.balances'))
+
+    # Get stock entries (additions)
+    stock_entries = StockEntry.query.filter_by(
+        item_id=item_id,
+        location_id=location_id
+    ).order_by(StockEntry.created_at.desc()).all()
+
+    # Get stock issues (deductions) - from StockIssueLine joined with StockIssueRequest
+    stock_issues = db.session.query(StockIssueLine, StockIssueRequest).join(
+        StockIssueRequest, StockIssueLine.request_id == StockIssueRequest.id
+    ).filter(
+        StockIssueLine.item_id == item_id,
+        StockIssueRequest.location_id == location_id,
+        StockIssueRequest.status == 'Issued',
+        StockIssueLine.quantity_issued.isnot(None)
+    ).order_by(StockIssueRequest.issued_at.desc()).all()
+
+    # Get current stock balance
+    current_balance = StockBalance.query.filter_by(
+        item_id=item_id,
+        location_id=location_id
+    ).first()
+
+    return render_template('stock/history.html',
+                         item=item,
+                         stock_entries=stock_entries,
+                         stock_issues=stock_issues,
+                         current_balance=current_balance)
+
+@stock_entry_bp.route('/api/stock-balance/<int:item_id>/<int:location_id>')
+@login_required
+def get_stock_balance(item_id, location_id):
+    """API endpoint to get stock balance for an item at a location"""
+    try:
+        # Check if user has access to this location
+        if not current_user.can_access_warehouse(location_id):
+            return jsonify({'error': 'Access denied'}), 403
+
+        stock_balance = StockBalance.query.filter_by(
+            item_id=item_id,
+            location_id=location_id
+        ).first()
+
+        balance = float(stock_balance.quantity) if stock_balance else 0.0
+
+        return jsonify({
+            'balance': balance,
+            'item_id': item_id,
+            'location_id': location_id
+        })
+
+    except Exception as e:
+        return jsonify({'error': 'Failed to fetch stock balance'}), 500

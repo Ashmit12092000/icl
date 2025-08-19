@@ -95,7 +95,10 @@
                                     <p class="font-medium text-white">{{ line.item.code }}</p>
                                     <p class="text-sm text-gray-300 mt-1">{{ line.item.name }}</p>
                                     {% if line.item.description %}
-                                    <p class="text-xs text-gray-500 mt-1">{{ line.item.description }}</p>
+                                    <p class="text-xs text-gray-300 mt-1 font-bold">{{ line.item.description }}</p>
+                                    {% endif %}
+                                    {% if line.item.department %}
+                                    <p class="text-xs text-blue-400 mt-1"><i class="fas fa-building mr-1"></i>{{ line.item.department.name }}</p>
                                     {% endif %}
                                     {% if line.remarks %}
                                     <p class="text-xs text-yellow-400 mt-1"><i class="fas fa-comment mr-1"></i>{{ line.remarks }}</p>
