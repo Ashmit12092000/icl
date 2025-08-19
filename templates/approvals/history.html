@@ -29,17 +29,23 @@
                 <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="block hover:bg-gray-700">
                     <div class="px-4 py-4 sm:px-6">
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center">
+                            <div class="flex items-center space-x-2">
                                 <p class="text-sm font-medium text-indigo-400 truncate">
                                     {{ request.request_no }}
                                 </p>
-                                <span class="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                                     {% if request.status.value == 'Approved' %}bg-green-900 text-green-200
                                     {% elif request.status.value == 'Rejected' %}bg-red-900 text-red-200
                                     {% elif request.status.value == 'Issued' %}bg-blue-900 text-blue-200
                                     {% endif %}">
                                     {{ request.status.value }}
                                 </span>
+                                {% if request.status.value in ['Approved', 'Issued'] %}
+                                <a href="{{ url_for('stock_issue.print_request', request_id=request.id) }}" target="_blank" 
+                                   class="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-300 bg-gray-600 hover:bg-gray-500 rounded">
+                                    <i class="fas fa-print mr-1"></i>Print
+                                </a>
+                                {% endif %}
                             </div>
                             <div class="ml-2 flex-shrink-0 flex">
                                 <p class="text-sm text-gray-400">
@@ -129,7 +135,7 @@
                             <i class="fas fa-chevron-left"></i>
                         </a>
                         {% endif %}
-                        
+
                         {% for page_num in requests.iter_pages() %}
                             {% if page_num %}
                                 {% if page_num != requests.page %}
@@ -147,7 +153,7 @@
                             </span>
                             {% endif %}
                         {% endfor %}
-                        
+
                         {% if requests.has_next %}
                         <a href="{{ url_for('approvals.approval_history', page=requests.next_num) }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400 hover:bg-gray-700">
                             <i class="fas fa-chevron-right"></i>
