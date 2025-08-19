@@ -187,6 +187,8 @@
                         {% endif %}
                     {% elif request.status == 'pending' and current_user.role == 'hod' and request.department.hod_id == current_user.id %}
                         <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                            
+                            
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="action" value="approve">
                             <button type="submit" class="btn btn-success w-100 mb-2"
@@ -205,6 +207,7 @@
                         </div>
 
                         <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                            
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="action" value="approve">
                             <button type="submit" class="btn btn-success w-100 mb-2"
@@ -320,6 +323,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('main.add_issue_item', id=request.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 {{ item_form.hidden_tag() }}
                 <div class="modal-body">
                     <div class="mb-3">
@@ -362,6 +366,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('main.approve_issue_request', id=request.id) }}">
+                
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="action" value="reject">
                 <div class="modal-body">

@@ -51,6 +51,7 @@
                 <!-- Assignment Form (Hidden by default) -->
                 <div id="assignments-{{ user.id }}" class="hidden">
                     <form method="POST" action="{{ url_for('warehouse_management.assign_warehouses', user_id=user.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                             {% for warehouse in warehouses %}
                             <label class="flex items-center">

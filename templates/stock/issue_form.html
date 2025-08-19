@@ -47,6 +47,7 @@
         </div>
         <div class="border-t border-gray-700">
             <form method="POST" action="{{ url_for('stock_issue.process_issue', request_id=request.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <table class="min-w-full divide-y divide-gray-700">
                     <thead class="bg-gray-700">
                         <tr>

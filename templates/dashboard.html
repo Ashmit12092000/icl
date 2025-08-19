@@ -22,19 +22,158 @@
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <!-- Total Items -->
+        {% if current_user.role.value in ['superadmin', 'manager'] %}
+        <!-- Today's Requests -->
         <div class="glass-effect rounded-2xl p-6 card-hover">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Total Items</p>
-                    <p class="text-3xl font-bold text-white mt-2">{{ total_items }}</p>
-                    <p class="text-green-400 text-sm mt-2">
-                        <i class="fas fa-arrow-up mr-1"></i>
-                        Active inventory
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Today's Requests</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.todays_requests or 0 }}</p>
+                    <p class="text-blue-400 text-sm mt-2">
+                        <i class="fas fa-calendar-day mr-1"></i>
+                        New today
                     </p>
                 </div>
                 <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                    <i class="fas fa-boxes text-white text-2xl"></i>
+                    <i class="fas fa-file-alt text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Requests Ready to Issue -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Ready to Issue</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.approved_requests or 0 }}</p>
+                    <p class="text-green-400 text-sm mt-2">
+                        <i class="fas fa-check-circle mr-1"></i>
+                        Approved requests
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-shipping-fast text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Items Issued Today -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Items Issued Today</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.todays_issued or 0 }}</p>
+                    <p class="text-purple-400 text-sm mt-2">
+                        <i class="fas fa-box-open mr-1"></i>
+                        Completed today
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-box-open text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Critical Stock Alerts -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Critical Stock</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.low_stock_items or 0 }}</p>
+                    <p class="text-red-400 text-sm mt-2">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        Need restocking
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        {% elif current_user.role.value == 'hod' %}
+        <!-- Department Pending -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Pending Approvals</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.pending_approvals or 0 }}</p>
+                    <p class="text-yellow-400 text-sm mt-2">
+                        <i class="fas fa-clock mr-1"></i>
+                        Need your approval
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-user-check text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Department Team -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Team Members</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.department_users or 0 }}</p>
+                    <p class="text-blue-400 text-sm mt-2">
+                        <i class="fas fa-users mr-1"></i>
+                        Active users
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-users text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Department Requests -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Dept. Requests</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.approved_requests or 0 }}</p>
+                    <p class="text-green-400 text-sm mt-2">
+                        <i class="fas fa-check mr-1"></i>
+                        This month
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-chart-line text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- My Requests -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">My Requests</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.my_requests or 0 }}</p>
+                    <p class="text-purple-400 text-sm mt-2">
+                        <i class="fas fa-user mr-1"></i>
+                        Total submitted
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-user text-white text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- My Requests -->
+        <div class="glass-effect rounded-2xl p-6 card-hover">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">My Requests</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.my_requests or 0 }}</p>
+                    <p class="text-blue-400 text-sm mt-2">
+                        <i class="fas fa-user mr-1"></i>
+                        Total submitted
+                    </p>
+                </div>
+                <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-file-alt text-white text-2xl"></i>
                 </div>
             </div>
         </div>
@@ -43,8 +182,8 @@
         <div class="glass-effect rounded-2xl p-6 card-hover">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Pending Requests</p>
-                    <p class="text-3xl font-bold text-white mt-2">{{ pending_requests }}</p>
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Pending</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.pending_requests or 0 }}</p>
                     <p class="text-yellow-400 text-sm mt-2">
                         <i class="fas fa-clock mr-1"></i>
                         Awaiting approval
@@ -56,39 +195,46 @@
             </div>
         </div>
 
-        <!-- Low Stock Items -->
+        <!-- Approved Requests -->
         <div class="glass-effect rounded-2xl p-6 card-hover">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Low Stock</p>
-                    <p class="text-3xl font-bold text-white mt-2">{{ low_stock_items }}</p>
-                    <p class="text-red-400 text-sm mt-2">
-                        <i class="fas fa-exclamation-triangle mr-1"></i>
-                        Need attention
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Approved</p>
+                    <p class="text-3xl font-bold text-white mt-2">{{ stats.approved_requests or 0 }}</p>
+                    <p class="text-green-400 text-sm mt-2">
+                        <i class="fas fa-check mr-1"></i>
+                        Ready for issue
                     </p>
                 </div>
-                <div class="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-600 rounded-xl flex items-center justify-center">
-                    <i class="fas fa-exclamation-triangle text-white text-2xl"></i>
+                <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-check-circle text-white text-2xl"></i>
                 </div>
             </div>
         </div>
 
-        <!-- Total Locations -->
+        <!-- Request Success Rate -->
         <div class="glass-effect rounded-2xl p-6 card-hover">
             <div class="flex items-center justify-between">
                 <div>
-                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Locations</p>
-                    <p class="text-3xl font-bold text-white mt-2">{{ total_locations }}</p>
-                    <p class="text-green-400 text-sm mt-2">
-                        <i class="fas fa-map-marker-alt mr-1"></i>
-                        Active warehouses
+                    <p class="text-gray-400 text-sm font-medium uppercase tracking-wide">Success Rate</p>
+                    <p class="text-3xl font-bold text-white mt-2">
+                        {% if stats.my_requests > 0 %}
+                        {{ ((stats.approved_requests or 0) / stats.my_requests * 100) | round | int }}%
+                        {% else %}
+                        --%
+                        {% endif %}
+                    </p>
+                    <p class="text-purple-400 text-sm mt-2">
+                        <i class="fas fa-chart-pie mr-1"></i>
+                        Approval rate
                     </p>
                 </div>
-                <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
-                    <i class="fas fa-map-marker-alt text-white text-2xl"></i>
+                <div class="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-percentage text-white text-2xl"></i>
                 </div>
             </div>
         </div>
+        {% endif %}
     </div>
 
     <!-- Quick Actions -->
@@ -124,6 +270,20 @@
                 </div>
             </a>
 
+            {% if current_user.role.value in ['superadmin', 'manager'] %}
+            <a href="{{ url_for('stock_issue.my_requests') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center group-hover:bg-orange-500/30 transition-colors">
+                        <i class="fas fa-tasks text-orange-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium text-white">Issue Stock</p>
+                        <p class="text-sm text-gray-400">Process approved requests</p>
+                    </div>
+                </div>
+            </a>
+            {% endif %}
+
             <a href="{{ url_for('stock_entry.balances') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
@@ -136,6 +296,7 @@
                 </div>
             </a>
 
+            {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
             <a href="{{ url_for('low_stock.alerts') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center group-hover:bg-red-500/30 transition-colors">
@@ -147,8 +308,52 @@
                     </div>
                 </div>
             </a>
+            {% endif %}
         </div>
     </div>
+
+    {% if current_user.role.value in ['superadmin', 'manager'] %}
+    <!-- Stock Issue Requests Management for Managers/Superadmin -->
+    <div class="glass-effect rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold text-white flex items-center">
+                <i class="fas fa-clipboard-check text-green-400 mr-3"></i>
+                Approved Requests Ready for Issue
+            </h2>
+            <a href="{{ url_for('approvals.pending') }}" class="text-green-400 hover:text-green-300 text-sm font-medium">
+                View all <i class="fas fa-arrow-right ml-1"></i>
+            </a>
+        </div>
+        {% if approved_requests %}
+        <div class="space-y-3">
+            {% for request in approved_requests[:5] %}
+            <div class="glass-effect rounded-lg p-4 border-l-4 border-green-500">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-medium text-white">{{ request.request_no }}</p>
+                        <p class="text-sm text-gray-400">{{ request.requester.full_name }} - {{ request.department.name }}</p>
+                        <p class="text-xs text-gray-500">{{ request.issue_lines|length }} items | Approved: {{ request.approved_at.strftime('%Y-%m-%d') if request.approved_at }}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <a href="{{ url_for('stock_issue.issue_form', request_id=request.id) }}" class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white hover:bg-green-700">
+                            <i class="fas fa-check mr-1"></i>Issue
+                        </a>
+                        <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-600 text-white hover:bg-gray-700">
+                            <i class="fas fa-eye mr-1"></i>View
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <i class="fas fa-check-circle text-green-500 text-4xl mb-4"></i>
+            <p class="text-gray-400">No requests ready for issue</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Recent Activity and Notifications -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -157,7 +362,11 @@
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-xl font-semibold text-white flex items-center">
                     <i class="fas fa-history text-blue-400 mr-3"></i>
-                    Recent Requests
+                    {% if current_user.role.value in ['superadmin', 'manager'] %}
+                    All Recent Requests
+                    {% else %}
+                    My Recent Requests
+                    {% endif %}
                 </h2>
                 <a href="{{ url_for('stock_issue.my_requests') }}" class="text-blue-400 hover:text-blue-300 text-sm font-medium">
                     View all <i class="fas fa-arrow-right ml-1"></i>

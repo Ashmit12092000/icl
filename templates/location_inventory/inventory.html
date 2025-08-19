@@ -20,6 +20,7 @@
     <div class="bg-gray-800 shadow overflow-hidden sm:rounded-lg">
         <div class="px-4 py-5 sm:p-6">
             <form method="GET" class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div>
                     <label class="block text-sm font-medium text-gray-300">Location</label>
                     <input type="text" name="location" value="{{ location_filter }}"

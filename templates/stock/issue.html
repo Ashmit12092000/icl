@@ -1,203 +1,207 @@
 {% extends "base.html" %}
 
-{% block title %}Stock Issues - Stock Management System{% endblock %}
+{% block title %}Stock Issue Requests - Stock Management{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-minus-circle me-2"></i>Stock Issue Requests</h2>
-                <a href="{{ url_for('main.add_stock_issue') }}" class="btn btn-primary">
-                    <i class="fas fa-plus me-2"></i>New Request
-                </a>
-            </div>
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                <i class="fas fa-clipboard-list text-blue-400 mr-3"></i>
+                Stock Issue Requests
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Manage and track stock issue requests
+            </p>
+        </div>
+        <div class="mt-4 flex md:mt-0 md:ml-4 space-x-2">
+            <a href="{{ url_for('stock_issue.create_request') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                <i class="fas fa-plus mr-2"></i>New Request
+            </a>
+            {% if current_user.role.value in ['superadmin', 'manager'] %}
+            <a href="{{ url_for('stock_issue.pending_issues') }}" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm">
+                <i class="fas fa-tasks mr-2"></i>Process Issues
+            </a>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Add Form -->
-    {% if mode == 'add' %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-plus me-2"></i>Create Stock Issue Request
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <form method="POST">
-                        {{ form.hidden_tag() }}
-                        
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    {{ form.requester_id.label(class="form-label") }}
-                                    {{ form.requester_id(class="form-select" + (" is-invalid" if form.requester_id.errors else "")) }}
-                                    {% if form.requester_id.errors %}
-                                        <div class="invalid-feedback">
-                                            {% for error in form.requester_id.errors %}{{ error }}{% endfor %}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    {{ form.department_id.label(class="form-label") }}
-                                    {{ form.department_id(class="form-select" + (" is-invalid" if form.department_id.errors else "")) }}
-                                    {% if form.department_id.errors %}
-                                        <div class="invalid-feedback">
-                                            {% for error in form.department_id.errors %}{{ error }}{% endfor %}
-                                        </div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    {{ form.approval_flow.label(class="form-label") }}
-                                    {{ form.approval_flow(class="form-select", id="approvalFlow") }}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row" id="approverField" style="display: none;">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    {{ form.approver_id.label(class="form-label") }}
-                                    {{ form.approver_id(class="form-select") }}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            {{ form.purpose.label(class="form-label") }}
-                            {{ form.purpose(class="form-control" + (" is-invalid" if form.purpose.errors else ""), rows="3") }}
-                            {% if form.purpose.errors %}
-                                <div class="invalid-feedback">
-                                    {% for error in form.purpose.errors %}{{ error }}{% endfor %}
-                                </div>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-success">
-                                <i class="fas fa-save me-2"></i>Create Request
-                            </button>
-                            <a href="{{ url_for('main.stock_issues') }}" class="btn btn-secondary">
-                                <i class="fas fa-times me-2"></i>Cancel
-                            </a>
-                        </div>
-                    </form>
-                </div>
-            </div>
+    <!-- Status Filter -->
+    <div class="glass-effect rounded-xl p-4">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-medium text-gray-300 mr-3">Filter by status:</span>
+            <button onclick="filterByStatus('all')" class="status-filter active px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="all">
+                All Requests
+            </button>
+            <button onclick="filterByStatus('draft')" class="status-filter px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="draft">
+                <span class="w-2 h-2 bg-gray-400 rounded-full inline-block mr-1"></span>Draft
+            </button>
+            <button onclick="filterByStatus('pending')" class="status-filter px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="pending">
+                <span class="w-2 h-2 bg-yellow-400 rounded-full inline-block mr-1"></span>Pending
+            </button>
+            <button onclick="filterByStatus('approved')" class="status-filter px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="approved">
+                <span class="w-2 h-2 bg-green-400 rounded-full inline-block mr-1"></span>Approved
+            </button>
+            <button onclick="filterByStatus('issued')" class="status-filter px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="issued">
+                <span class="w-2 h-2 bg-blue-400 rounded-full inline-block mr-1"></span>Issued
+            </button>
+            <button onclick="filterByStatus('rejected')" class="status-filter px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-status="rejected">
+                <span class="w-2 h-2 bg-red-400 rounded-full inline-block mr-1"></span>Rejected
+            </button>
         </div>
     </div>
-    {% endif %}
 
-    <!-- Requests Table -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Issue Requests ({{ requests|length }} requests)</h5>
+    <!-- Requests Grid -->
+    {% if requests %}
+    <div class="grid gap-4" id="requestsContainer">
+        {% for request in requests %}
+        <div class="request-card glass-effect rounded-xl p-6 border-l-4 {% if request.status.value == 'draft' %}border-gray-500{% elif request.status.value == 'pending' %}border-yellow-500{% elif request.status.value == 'approved' %}border-green-500{% elif request.status.value == 'rejected' %}border-red-500{% elif request.status.value == 'issued' %}border-blue-500{% endif %} hover:bg-gray-700/30 transition-all duration-300" data-status="{{ request.status.value }}">
+            <!-- Request Header -->
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-start space-x-4">
+                    <div class="w-12 h-12 {% if request.status.value == 'draft' %}bg-gray-500/20{% elif request.status.value == 'pending' %}bg-yellow-500/20{% elif request.status.value == 'approved' %}bg-green-500/20{% elif request.status.value == 'rejected' %}bg-red-500/20{% elif request.status.value == 'issued' %}bg-blue-500/20{% endif %} rounded-xl flex items-center justify-center">
+                        <i class="fas {% if request.status.value == 'draft' %}fa-file-alt text-gray-400{% elif request.status.value == 'pending' %}fa-clock text-yellow-400{% elif request.status.value == 'approved' %}fa-check text-green-400{% elif request.status.value == 'rejected' %}fa-times text-red-400{% elif request.status.value == 'issued' %}fa-check-double text-blue-400{% endif %} text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-1">{{ request.request_no }}</h3>
+                        <div class="flex items-center space-x-4 text-sm text-gray-300">
+                            <span><i class="fas fa-user text-blue-400 mr-1"></i>{{ request.requester.full_name }}</span>
+                            <span><i class="fas fa-building text-green-400 mr-1"></i>{{ request.department.name }}</span>
+                            <span><i class="fas fa-calendar text-purple-400 mr-1"></i>{{ request.created_at.strftime('%Y-%m-%d') }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    {% if requests %}
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Request #</th>
-                                        <th>Requester</th>
-                                        <th>Department</th>
-                                        <th>Purpose</th>
-                                        <th>Status</th>
-                                        <th>Flow</th>
-                                        <th>Created</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for request in requests %}
-                                    <tr>
-                                        <td>
-                                            <a href="{{ url_for('main.stock_issue_detail', id=request.id) }}" class="text-decoration-none">
-                                                <strong>{{ request.request_number }}</strong>
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <strong>{{ request.requester.emp_id }}</strong>
-                                            <br>
-                                            <small class="text-muted">{{ request.requester.name }}</small>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-primary">{{ request.department.code }}</span>
-                                        </td>
-                                        <td>{{ request.purpose[:50] + '...' if request.purpose|length > 50 else request.purpose }}</td>
-                                        <td>
-                                            {% set status_class = {
-                                                'draft': 'bg-secondary',
-                                                'pending': 'bg-warning',
-                                                'approved': 'bg-success',
-                                                'rejected': 'bg-danger',
-                                                'issued': 'bg-info',
-                                                'conditional_approved': 'bg-primary'
-                                            } %}
-                                            <span class="badge {{ status_class.get(request.status, 'bg-secondary') }}">
-                                                {{ request.status.replace('_', ' ').title() }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge {{ 'bg-info' if request.approval_flow == 'alternate' else 'bg-secondary' }}">
-                                                {{ request.approval_flow.title() }}
-                                            </span>
-                                        </td>
-                                        <td>{{ request.created_at.strftime('%Y-%m-%d') }}</td>
-                                        <td>
-                                            <a href="{{ url_for('main.stock_issue_detail', id=request.id) }}" class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <div class="text-center py-5">
-                            <i class="fas fa-minus-circle fa-3x text-muted mb-3"></i>
-                            <h5 class="text-muted">No issue requests found</h5>
-                            <p class="text-muted">Start by creating your first stock issue request.</p>
-                            <a href="{{ url_for('main.add_stock_issue') }}" class="btn btn-primary">
-                                <i class="fas fa-plus me-2"></i>Create First Request
-                            </a>
-                        </div>
+
+                <!-- Status Badge -->
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                    {% if request.status.value == 'draft' %}bg-gray-900 text-gray-300
+                    {% elif request.status.value == 'pending' %}bg-yellow-900 text-yellow-200
+                    {% elif request.status.value == 'approved' %}bg-green-900 text-green-200
+                    {% elif request.status.value == 'rejected' %}bg-red-900 text-red-200
+                    {% elif request.status.value == 'issued' %}bg-blue-900 text-blue-200
+                    {% endif %}">
+                    {{ request.status.value.title() }}
+                </span>
+            </div>
+
+            <!-- Request Details -->
+            <div class="space-y-3 mb-4">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-300 mb-1">Purpose:</h4>
+                    <p class="text-white bg-gray-700/50 rounded-lg p-3">{{ request.purpose }}</p>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-400">Items:</span>
+                        <span class="block text-white font-medium">{{ request.issue_lines|length }} items</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">Location:</span>
+                        <span class="block text-white font-medium">{{ request.location.office }}</span>
+                    </div>
+                    {% if request.approved_at %}
+                    <div>
+                        <span class="text-gray-400">Approved:</span>
+                        <span class="block text-white font-medium">{{ request.approved_at.strftime('%Y-%m-%d') }}</span>
+                    </div>
+                    {% endif %}
+                    {% if request.issued_at %}
+                    <div>
+                        <span class="text-gray-400">Issued:</span>
+                        <span class="block text-white font-medium">{{ request.issued_at.strftime('%Y-%m-%d') }}</span>
+                    </div>
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-end space-x-2 pt-4 border-t border-gray-700">
+                <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" class="inline-flex items-center px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm">
+                    <i class="fas fa-eye mr-2"></i>View Details
+                </a>
+
+                {% if request.status.value == 'draft' and request.requester_id == current_user.id %}
+                <a href="{{ url_for('stock_issue.edit_request', request_id=request.id) }}" class="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+                    <i class="fas fa-edit mr-2"></i>Edit
+                </a>
+                {% endif %}
+
+                {% if request.status.value == 'approved' and current_user.role.value in ['superadmin', 'manager'] %}
+                <form method="POST" action="{{ url_for('stock_issue.issue_stock', request_id=request.id) }}" class="inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                            
+                            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm transition-colors"
+                                    onclick="return confirm('Are you sure you want to issue this stock?')">
+                                <i class="fas fa-check mr-1"></i>Issue Stock
+                            </button>
+                        </form>
+                {% endif %}
+            </div>
         </div>
+        {% endfor %}
     </div>
+    {% else %}
+    <div class="glass-effect rounded-2xl p-12 text-center">
+        <div class="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-clipboard-list text-blue-400 text-4xl"></i>
+        </div>
+        <h3 class="text-xl font-semibold text-white mb-2">No Stock Requests Found</h3>
+        <p class="text-gray-400 mb-6">Start by creating your first stock request</p>
+        <a href="{{ url_for('stock_issue.create_request') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <i class="fas fa-plus mr-2"></i>Create First Request
+        </a>
+    </div>
+    {% endif %}
 </div>
 
+<style>
+.status-filter {
+    background-color: rgba(75, 85, 99, 0.5);
+    color: rgb(209, 213, 219);
+}
+
+.status-filter.active {
+    background-color: rgb(59, 130, 246);
+    color: white;
+}
+
+.status-filter:hover {
+    background-color: rgba(75, 85, 99, 0.8);
+}
+
+.status-filter.active:hover {
+    background-color: rgb(37, 99, 235);
+}
+</style>
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const approvalFlow = document.getElementById('approvalFlow');
-    const approverField = document.getElementById('approverField');
-    
-    if (approvalFlow) {
-        approvalFlow.addEventListener('change', function() {
-            if (this.value === 'alternate') {
-                approverField.style.display = 'block';
-            } else {
-                approverField.style.display = 'none';
-            }
-        });
-        
-        // Trigger on page load
-        if (approvalFlow.value === 'alternate') {
-            approverField.style.display = 'block';
+function filterByStatus(status) {
+    const cards = document.querySelectorAll('.request-card');
+    const filters = document.querySelectorAll('.status-filter');
+
+    // Update active filter
+    filters.forEach(filter => {
+        filter.classList.remove('active');
+        if (filter.dataset.status === status) {
+            filter.classList.add('active');
         }
-    }
+    });
+
+    // Show/hide cards
+    cards.forEach(card => {
+        if (status === 'all' || card.dataset.status === status) {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+// Initialize filter on page load
+document.addEventListener('DOMContentLoaded', function() {
+    filterByStatus('all');
 });
 </script>
 {% endblock %}

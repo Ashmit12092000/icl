@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Pending Approvals -  Stock Management{% endblock %}
+{% block title %}Pending Approvals - Stock Management{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -8,113 +8,160 @@
     <div class="md:flex md:items-center md:justify-between">
         <div class="flex-1 min-w-0">
             <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                <i class="fas fa-clipboard-check text-yellow-400 mr-3"></i>
                 Pending Approvals
             </h2>
             <p class="mt-1 text-sm text-gray-400">
                 Requests awaiting your approval from {{ current_user.managed_department.name if current_user.managed_department else 'your department' }}
             </p>
         </div>
-        <div class="mt-4 flex md:mt-0 md:ml-4">
-            <a href="{{ url_for('approvals.approval_history') }}" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600">
+        <div class="mt-4 flex md:mt-0 md:ml-4 space-x-2">
+            <a href="{{ url_for('approvals.approval_history') }}" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 transition-colors">
                 <i class="fas fa-history mr-2"></i>Approval History
             </a>
+            <div class="glass-effect rounded-lg px-4 py-2">
+                <span class="text-sm text-gray-300">
+                    <i class="fas fa-clock text-blue-400 mr-2"></i>
+                    {{ requests|length }} pending request{{ 's' if requests|length != 1 else '' }}
+                </span>
+            </div>
         </div>
     </div>
 
     <!-- Pending Requests -->
-    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
-        {% if requests %}
-        <ul class="divide-y divide-gray-700">
-            {% for request in requests %}
-            <li class="px-4 py-4 sm:px-6">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-file-alt text-yellow-400 text-2xl"></i>
-                        </div>
-                        <div class="ml-4">
-                            <div class="flex items-center">
-                                <h3 class="text-lg font-medium text-indigo-400">{{ request.request_no }}</h3>
-                                <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200">
-                                    {{ request.status.value }}
-                                </span>
-                            </div>
-                            <div class="mt-1 text-sm text-gray-300">
-                                <p><strong>Requester:</strong> {{ request.requester.full_name }}</p>
-                                <p><strong>Purpose:</strong> {{ request.purpose }}</p>
-                                <p><strong>Location:</strong> {{ request.location.code }} - {{ request.location.office }}</p>
-                                <p><strong>Requested:</strong> {{ request.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
-                            </div>
-                        </div>
+    {% if requests %}
+    <div class="space-y-4">
+        {% for request in requests %}
+        <div class="glass-effect rounded-2xl p-6 border-l-4 border-yellow-500 hover:bg-gray-700/30 transition-all duration-300">
+            <!-- Request Header -->
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-start space-x-4">
+                    <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-file-alt text-yellow-400 text-xl"></i>
                     </div>
-                    <div class="flex space-x-2">
-                        <button onclick="openApprovalModal({{ request.id }}, '{{ request.request_no }}', 'approve')" 
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none">
-                            <i class="fas fa-check mr-2"></i>Approve
-                        </button>
-                        <button onclick="openApprovalModal({{ request.id }}, '{{ request.request_no }}', 'reject')" 
-                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none">
-                            <i class="fas fa-times mr-2"></i>Reject
-                        </button>
-                        <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" 
-                           class="inline-flex items-center px-3 py-2 border border-gray-600 text-sm leading-4 font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none">
-                            <i class="fas fa-eye mr-2"></i>View
-                        </a>
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-1">{{ request.request_no }}</h3>
+                        <div class="flex items-center space-x-4 text-sm text-gray-300">
+                            <span><i class="fas fa-user text-blue-400 mr-1"></i>{{ request.requester.full_name }}</span>
+                            <span><i class="fas fa-building text-green-400 mr-1"></i>{{ request.department.name }}</span>
+                            <span><i class="fas fa-map-marker-alt text-purple-400 mr-1"></i>{{ request.location.office }} - {{ request.location.room }}</span>
+                        </div>
+                        <div class="mt-2">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200">
+                                <i class="fas fa-clock mr-1"></i>{{ request.status.value }}
+                            </span>
+                            <span class="ml-2 text-xs text-gray-500">
+                                Requested: {{ request.created_at.strftime('%Y-%m-%d %H:%M') }}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Request Items Preview -->
-                <div class="mt-4 ml-12">
-                    <h4 class="text-sm font-medium text-gray-300 mb-2">Requested Items:</h4>
-                    <div class="bg-gray-700 rounded-md p-3">
-                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {% for line in request.issue_lines %}
-                            <div class="text-sm text-gray-300">
-                                <div>
-                                    <span class="font-medium">{{ line.item.code }}</span> - 
-                                    <span>{{ line.quantity_requested }} units</span>
+                <!-- Action Buttons -->
+                <div class="flex space-x-2">
+                    <button onclick="openApprovalModal({{ request.id }}, '{{ request.request_no }}', 'approve')" 
+                            class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm">
+                        <i class="fas fa-check mr-2"></i>Approve
+                    </button>
+                    <button onclick="openApprovalModal({{ request.id }}, '{{ request.request_no }}', 'reject')" 
+                            class="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm">
+                        <i class="fas fa-times mr-2"></i>Reject
+                    </button>
+                    <a href="{{ url_for('stock_issue.view_request', request_id=request.id) }}" 
+                       class="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm">
+                        <i class="fas fa-eye mr-2"></i>View Details
+                    </a>
+                </div>
+            </div>
+
+            <!-- Request Purpose -->
+            <div class="mb-4">
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Purpose:</h4>
+                <p class="text-white bg-gray-700/50 rounded-lg p-3">{{ request.purpose }}</p>
+            </div>
+
+            <!-- Request Items -->
+            <div>
+                <h4 class="text-sm font-medium text-gray-300 mb-3 flex items-center">
+                    <i class="fas fa-boxes text-blue-400 mr-2"></i>
+                    Requested Items ({{ request.issue_lines|length }} items)
+                </h4>
+                <div class="bg-gray-700/30 rounded-lg p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for line in request.issue_lines %}
+                        <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-600">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="font-medium text-white">{{ line.item.code }}</p>
+                                    <p class="text-sm text-gray-300 mt-1">{{ line.item.name }}</p>
+                                    {% if line.item.description %}
+                                    <p class="text-xs text-gray-500 mt-1">{{ line.item.description }}</p>
+                                    {% endif %}
+                                    {% if line.remarks %}
+                                    <p class="text-xs text-yellow-400 mt-1"><i class="fas fa-comment mr-1"></i>{{ line.remarks }}</p>
+                                    {% endif %}
                                 </div>
-                                <div class="text-xs text-gray-400">{{ line.item.name }}</div>
-                                {% if line.item.description %}
-                                <div class="text-xs text-gray-500">{{ line.item.description }}</div>
-                                {% endif %}
+                                <div class="text-right ml-3">
+                                    <p class="text-lg font-bold text-blue-400">{{ line.quantity_requested }}</p>
+                                    <p class="text-xs text-gray-500">units</p>
+                                </div>
                             </div>
-                            {% endfor %}
                         </div>
+                        {% endfor %}
                     </div>
                 </div>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <div class="px-4 py-8 text-center">
-            <i class="fas fa-check-circle text-gray-400 text-4xl mb-4"></i>
-            <p class="text-gray-400 text-lg">No pending approvals</p>
-            <p class="text-gray-500 text-sm mt-2">All requests from your department have been processed</p>
+            </div>
         </div>
-        {% endif %}
+        {% endfor %}
     </div>
+    {% else %}
+    <div class="glass-effect rounded-2xl p-12 text-center">
+        <div class="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-check-circle text-green-400 text-4xl"></i>
+        </div>
+        <h3 class="text-xl font-semibold text-white mb-2">No Pending Approvals</h3>
+        <p class="text-gray-400 mb-6">All requests from your department have been processed</p>
+        <a href="{{ url_for('main.dashboard') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <i class="fas fa-home mr-2"></i>Back to Dashboard
+        </a>
+    </div>
+    {% endif %}
 </div>
 
-<!-- Approval Modal -->
-<div id="approvalModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
-        <div class="mt-3">
-            <h3 class="text-lg font-medium text-white mb-4" id="modalTitle">Approve Request</h3>
-            <form method="POST" id="approvalForm">
-                <div class="mb-4">
-                    <p class="text-sm text-gray-300 mb-2">Request: <span id="modalRequestNo" class="font-medium text-white"></span></p>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-gray-300 text-sm font-bold mb-2" id="remarksLabel">Approval Remarks</label>
-                    <textarea name="remarks" id="remarksField" rows="3" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Optional remarks..."></textarea>
-                </div>
-                <div class="flex justify-end space-x-2">
-                    <button type="button" onclick="closeApprovalModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
-                    <button type="submit" id="submitButton" class="px-4 py-2 rounded-md text-white">Approve</button>
-                </div>
-            </form>
+<!-- Enhanced Approval Modal -->
+<div id="approvalModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-gray-600">
+        <div class="flex items-center mb-4">
+            <div id="modalIcon" class="w-12 h-12 rounded-xl flex items-center justify-center mr-4">
+                <i id="modalIconClass" class="text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-semibold text-white" id="modalTitle">Approve Request</h3>
+                <p class="text-sm text-gray-400">Request: <span id="modalRequestNo" class="font-medium text-white"></span></p>
+            </div>
         </div>
+
+        <form method="POST" id="approvalForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-6">
+                <label class="block text-gray-300 text-sm font-medium mb-2" id="remarksLabel">Approval Remarks</label>
+                <textarea name="remarks" id="remarksField" rows="4" 
+                         class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" 
+                         placeholder="Optional remarks..."></textarea>
+                <p class="text-xs text-gray-500 mt-1" id="remarksHint">Optional approval remarks</p>
+            </div>
+
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="closeApprovalModal()" 
+                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" id="submitButton" 
+                        class="px-4 py-2 rounded-lg text-white font-medium transition-colors">
+                    Approve
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -126,34 +173,58 @@ function openApprovalModal(requestId, requestNo, action) {
     const requestNoSpan = document.getElementById('modalRequestNo');
     const remarksLabel = document.getElementById('remarksLabel');
     const remarksField = document.getElementById('remarksField');
+    const remarksHint = document.getElementById('remarksHint');
     const submitButton = document.getElementById('submitButton');
-    
+    const modalIcon = document.getElementById('modalIcon');
+    const modalIconClass = document.getElementById('modalIconClass');
+
     requestNoSpan.textContent = requestNo;
-    
+
     if (action === 'approve') {
         title.textContent = 'Approve Request';
         remarksLabel.textContent = 'Approval Remarks';
         remarksField.placeholder = 'Optional approval remarks...';
+        remarksHint.textContent = 'Optional approval remarks';
         remarksField.required = false;
-        submitButton.textContent = 'Approve';
-        submitButton.className = 'px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700';
+        submitButton.textContent = 'Approve Request';
+        submitButton.className = 'px-4 py-2 rounded-lg text-white font-medium transition-colors bg-green-600 hover:bg-green-700';
+        modalIcon.className = 'w-12 h-12 rounded-xl flex items-center justify-center mr-4 bg-green-500/20';
+        modalIconClass.className = 'fas fa-check text-2xl text-green-400';
         form.action = '/approvals/' + requestId + '/approve';
     } else {
         title.textContent = 'Reject Request';
         remarksLabel.textContent = 'Rejection Reason*';
         remarksField.placeholder = 'Please provide a reason for rejection...';
+        remarksHint.textContent = 'Rejection reason is required';
         remarksField.required = true;
-        submitButton.textContent = 'Reject';
-        submitButton.className = 'px-4 py-2 rounded-md text-white bg-red-600 hover:bg-red-700';
+        submitButton.textContent = 'Reject Request';
+        submitButton.className = 'px-4 py-2 rounded-lg text-white font-medium transition-colors bg-red-600 hover:bg-red-700';
+        modalIcon.className = 'w-12 h-12 rounded-xl flex items-center justify-center mr-4 bg-red-500/20';
+        modalIconClass.className = 'fas fa-times text-2xl text-red-400';
         form.action = '/approvals/' + requestId + '/reject';
     }
-    
+
     remarksField.value = '';
     modal.classList.remove('hidden');
+    remarksField.focus();
 }
 
 function closeApprovalModal() {
     document.getElementById('approvalModal').classList.add('hidden');
 }
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeApprovalModal();
+    }
+});
+
+// Close modal on backdrop click
+document.getElementById('approvalModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeApprovalModal();
+    }
+});
 </script>
 {% endblock %}

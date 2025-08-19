@@ -21,6 +21,7 @@
     <div class="bg-gray-800 shadow rounded-lg">
         <div class="px-4 py-5 sm:p-6">
             <form method="POST" action="{{ url_for('stock_issue.search_request') }}" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div>
                     <label for="request_id" class="block text-sm font-medium text-gray-300 mb-2">
                         Request ID or Request Number

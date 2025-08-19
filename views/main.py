@@ -20,24 +20,33 @@ def index():
 def dashboard():
     # Get dashboard statistics based on user role
     stats = {}
-    low_stock = [] # Initialize low_stock for all roles
+    low_stock_alerts = []
+    recent_requests = []
+    approved_requests = []
+    
+    from datetime import date
+    today = date.today()
 
     if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
         # Admin users see all requests
         stats = {
-            'total_users': User.query.filter_by(is_active=True).count(),
-            'total_departments': Department.query.count(),
-            'total_items': Item.query.count(),
-            'total_locations': Location.query.count(),
-            'pending_requests': StockIssueRequest.query.filter_by(status=RequestStatus.PENDING).count(),
+            'todays_requests': StockIssueRequest.query.filter(
+                func.date(StockIssueRequest.created_at) == today
+            ).count(),
             'approved_requests': StockIssueRequest.query.filter_by(status=RequestStatus.APPROVED).count(),
-            'total_stock_value': db.session.query(func.sum(StockBalance.quantity)).scalar() or 0,
+            'todays_issued': StockIssueRequest.query.filter(
+                func.date(StockIssueRequest.issued_at) == today,
+                StockIssueRequest.status == RequestStatus.ISSUED
+            ).count(),
+            'low_stock_items': db.session.query(Item).join(StockBalance).filter(
+                StockBalance.quantity <= Item.low_stock_threshold
+            ).distinct().count(),
         }
 
         # Recent requests (all requests for admin/manager)
         recent_requests = StockIssueRequest.query.order_by(
             StockIssueRequest.created_at.desc()
-        ).limit(10).all()
+        ).limit(5).all()
 
         # Approved requests ready for issue
         approved_requests = StockIssueRequest.query.filter_by(
@@ -45,9 +54,9 @@ def dashboard():
         ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
 
         # Get low stock items (items below their threshold)
-        low_stock = db.session.query(StockBalance, Item, Location).join(Item).join(Location).filter(
+        low_stock_alerts = db.session.query(Item).join(StockBalance).filter(
             StockBalance.quantity <= Item.low_stock_threshold
-        ).limit(10).all()
+        ).limit(5).all()
 
     elif current_user.role == UserRole.HOD:
         # HOD dashboard - show department statistics
@@ -72,7 +81,7 @@ def dashboard():
             # Recent requests for this department
             recent_requests = StockIssueRequest.query.filter_by(
                 department_id=dept_id
-            ).order_by(StockIssueRequest.created_at.desc()).limit(10).all()
+            ).order_by(StockIssueRequest.created_at.desc()).limit(5).all()
         else:
             stats = {}
             recent_requests = []
@@ -94,18 +103,24 @@ def dashboard():
         # My recent requests
         recent_requests = StockIssueRequest.query.filter_by(
             requester_id=current_user.id
-        ).order_by(StockIssueRequest.created_at.desc()).limit(10).all()
+        ).order_by(StockIssueRequest.created_at.desc()).limit(5).all()
 
     # Prepare template variables based on role
     template_vars = {
         'stats': stats,
         'recent_requests': recent_requests,
-        'low_stock': low_stock
+        'low_stock_alerts': low_stock_alerts
     }
 
     # Only pass approved_requests for admin/manager roles
     if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
         template_vars['approved_requests'] = approved_requests
+    elif current_user.role == UserRole.HOD:
+        template_vars['approved_requests'] = StockIssueRequest.query.filter_by(
+            department_id=current_user.managed_department.id if current_user.managed_department else None,
+            status=RequestStatus.APPROVED
+        ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
+
 
     return render_template('dashboard.html', **template_vars)
 
@@ -144,6 +159,7 @@ def new_stock_request():
         db.session.add(new_request)
         db.session.commit()
 
+        flash('Stock request created successfully.', 'success')
         return redirect(url_for('main.dashboard')) # Redirect to dashboard after creation
 
     # For GET requests, render the form
@@ -255,7 +271,7 @@ def list_locations():
 @login_required
 def low_stock_alerts():
     # Get low stock items (items below their threshold)
-    low_stock_items = db.session.query(StockBalance, Item, Location).join(Item).join(Location).filter(
+    low_stock_items = db.session.query(Item, Location).join(StockBalance).join(Location).filter(
         StockBalance.quantity <= Item.low_stock_threshold
     ).all()
     return render_template('low_stock_alerts.html', low_stock_items=low_stock_items)
