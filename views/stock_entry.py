@@ -12,10 +12,18 @@ stock_entry_bp = Blueprint('stock_entry', __name__)
 @login_required
 def entry_form():
     # Check if user has permission
-    if current_user.role.value not in ['superadmin', 'manager'] and not (current_user.role.value == 'hod' and current_user.managed_department):
+    if current_user.role.value not in ['superadmin', 'manager','hod'] and not (current_user.role.value == 'hod' and current_user.managed_department):
         flash('You do not have permission to create stock entries.', 'error')
         return redirect(url_for('main.dashboard'))
-    items = Item.query.all()
+    
+    # Filter items based on user's department for HODs
+    if current_user.role.value == 'hod' and current_user.managed_department:
+        items = Item.query.filter(
+            db.or_(Item.department_id == current_user.managed_department.id, Item.department_id.is_(None))
+        ).all()
+    else:
+        items = Item.query.all()
+    
     locations = Location.query.all()
     
     # Get pre-selected values from URL parameters
@@ -32,7 +40,7 @@ def entry_form():
 @login_required
 def create_entry():
     # Check if user has permission
-    if current_user.role.value not in ['superadmin', 'manager'] and not (current_user.role.value == 'hod' and current_user.managed_department):
+    if current_user.role.value not in ['superadmin', 'manager','hod'] and not (current_user.role.value == 'hod' and current_user.managed_department):
         flash('You do not have permission to create stock entries.', 'error')
         return redirect(url_for('main.dashboard'))
     item_id = request.form.get('item_id')
@@ -108,6 +116,26 @@ def balances():
 
     query = db.session.query(StockBalance).join(Item).join(Location)
 
+    # Filter by user department for HOD and Employee users
+    if current_user.role.value == 'hod':
+        # HOD can see items from their managed department or items without department
+        if current_user.managed_department:
+            query = query.filter(
+                db.or_(Item.department_id == current_user.managed_department.id, Item.department_id.is_(None))
+            )
+        else:
+            # If HOD has no managed department, show nothing
+            query = query.filter(Item.department_id == -1)
+    elif current_user.role.value == 'employee':
+        # Employee can only see items from their department or items without department
+        if current_user.department_id:
+            query = query.filter(
+                db.or_(Item.department_id == current_user.department_id, Item.department_id.is_(None))
+            )
+        else:
+            # If employee has no department, show nothing
+            query = query.filter(Item.department_id == -1)
+
     if location_id:
         query = query.filter(StockBalance.location_id == location_id)
 
@@ -118,7 +146,25 @@ def balances():
     balances = query.all()
 
     locations = Location.query.all()
-    items = Item.query.all()
+    
+    # Filter items based on user's department for dropdown
+    if current_user.role.value == 'hod':
+        if current_user.managed_department:
+            items = Item.query.filter(
+                db.or_(Item.department_id == current_user.managed_department.id, Item.department_id.is_(None))
+            ).all()
+        else:
+            items = []
+    elif current_user.role.value == 'employee':
+        if current_user.department_id:
+            items = Item.query.filter(
+                db.or_(Item.department_id == current_user.department_id, Item.department_id.is_(None))
+            ).all()
+        else:
+            items = []
+    else:
+        # Superadmin and Manager can see all items
+        items = Item.query.all()
 
     return render_template('stock/balances.html',
                          balances=balances,
@@ -129,7 +175,7 @@ def balances():
 
 @stock_entry_bp.route('/entries')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin', 'manager','hod')
 def entries():
     page = request.args.get('page', 1, type=int)
     entries = StockEntry.query.order_by(
