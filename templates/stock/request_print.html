@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Request {{ request.request_no }} - Print</title>
+    <style>
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none !important; }
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #000;
+            background: white;
+            margin: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .document-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        
+        .request-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .info-section {
+            width: 48%;
+        }
+        
+        .info-row {
+            margin-bottom: 8px;
+        }
+        
+        .label {
+            font-weight: bold;
+            display: inline-block;
+            width: 120px;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .items-table th,
+        .items-table td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .items-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        
+        .signature-section {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .signature-box {
+            width: 30%;
+            text-align: center;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-top: 40px;
+            padding-top: 5px;
+        }
+        
+        .print-button {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .print-button:hover {
+            background: #0056b3;
+        }
+        
+        .status-approved {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        @media print {
+            .print-button { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <button class="print-button no-print" onclick="window.print()">
+        <i class="fas fa-print"></i> Print
+    </button>
+
+    <div class="header">
+        <div class="company-name">Stock Management System</div>
+        <div class="document-title">APPROVED STOCK REQUEST</div>
+    </div>
+
+    <div class="request-info">
+        <div class="info-section">
+            <div class="info-row">
+                <span class="label">Request No:</span>
+                <strong>{{ request.request_no }}</strong>
+            </div>
+            <div class="info-row">
+                <span class="label">Status:</span>
+                <span class="status-approved">{{ request.status.value }}</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Requester:</span>
+                {{ request.requester.full_name }}
+            </div>
+            <div class="info-row">
+                <span class="label">Department:</span>
+                {{ request.department.name }}
+            </div>
+            <div class="info-row">
+                <span class="label">Location:</span>
+                {{ request.location.code }} - {{ request.location.office }}, {{ request.location.room }}
+            </div>
+        </div>
+        <div class="info-section">
+            <div class="info-row">
+                <span class="label">Created Date:</span>
+                {{ request.created_at.strftime('%d/%m/%Y %H:%M') }}
+            </div>
+            {% if request.approved_at %}
+            <div class="info-row">
+                <span class="label">Approved Date:</span>
+                {{ request.approved_at.strftime('%d/%m/%Y %H:%M') }}
+            </div>
+            <div class="info-row">
+                <span class="label">Approved By:</span>
+                {{ request.approver.full_name }}
+            </div>
+            {% endif %}
+            {% if request.issued_at %}
+            <div class="info-row">
+                <span class="label">Issued Date:</span>
+                {{ request.issued_at.strftime('%d/%m/%Y %H:%M') }}
+            </div>
+            <div class="info-row">
+                <span class="label">Issued By:</span>
+                {{ request.issuer.full_name }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="info-row">
+        <span class="label">Purpose:</span>
+        {{ request.purpose }}
+    </div>
+
+    {% if request.remarks %}
+    <div class="info-row" style="margin-top: 10px;">
+        <span class="label">Remarks:</span>
+        <div style="margin-top: 5px; white-space: pre-line;">{{ request.remarks }}</div>
+    </div>
+    {% endif %}
+
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 15%;">Item Code</th>
+                <th style="width: 25%;">Item Name</th>
+                <th style="width: 30%;">Description</th>
+                <th style="width: 10%;">Requested</th>
+                {% if request.status.value == 'Issued' %}
+                <th style="width: 10%;">Issued</th>
+                {% endif %}
+                <th style="width: 10%;">Remarks</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for line in request.issue_lines %}
+            <tr>
+                <td>{{ line.item.code }}</td>
+                <td>{{ line.item.name }}</td>
+                <td>{{ line.item.description or '-' }}</td>
+                <td style="text-align: center;">{{ line.quantity_requested }}</td>
+                {% if request.status.value == 'Issued' %}
+                <td style="text-align: center;">
+                    {% if line.quantity_issued is not none %}
+                        {{ line.quantity_issued }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                {% endif %}
+                <td>{{ line.remarks or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="signature-section">
+        <div class="signature-box">
+            <div class="signature-line">Requested By</div>
+            <div style="margin-top: 5px;">{{ request.requester.full_name }}</div>
+        </div>
+        {% if request.approver %}
+        <div class="signature-box">
+            <div class="signature-line">Approved By</div>
+            <div style="margin-top: 5px;">{{ request.approver.full_name }}</div>
+        </div>
+        {% endif %}
+        {% if request.issuer %}
+        <div class="signature-box">
+            <div class="signature-line">Issued By</div>
+            <div style="margin-top: 5px;">{{ request.issuer.full_name }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #666;">
+        Generated on {{ current_time.strftime('%d/%m/%Y %H:%M') }} by Stock Management System
+    </div>
+
+    <script>
+        // Auto-print when page loads (optional)
+        // window.onload = function() { window.print(); }
+    </script>
+</body>
+</html>
