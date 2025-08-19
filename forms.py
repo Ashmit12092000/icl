@@ -119,8 +119,8 @@ class StockIssueItemForm(FlaskForm):
 
         # Filter locations based on user's assigned warehouses
         if user and user.is_authenticated:
-            if user.role in ['admin', 'superadmin']:
-                # Admin can see all locations
+            if user.role.value == 'superadmin':
+                # Superadmin can see all locations
                 allowed_locations = Location.query.all()
             else:
                 # Users can only see their assigned warehouses
@@ -137,7 +137,6 @@ class UserForm(FlaskForm):
     role = SelectField('Role', choices=[
         ('employee', 'Employee'),
         ('hod', 'Head of Department'),
-        ('manager', 'Manager'),
         ('superadmin', 'Super Administrator')
     ], validators=[DataRequired()])
     department_id = SelectField('Department', coerce=int, validators=[Optional()])

@@ -15,7 +15,12 @@
                 Analytics and insights for stock management
             </p>
         </div>
-        <div class="mt-4 flex md:mt-0 md:ml-4">
+        <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+            <a href="{{ url_for('reports.full_balance_report') }}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-clipboard-list mr-2"></i>
+                Full Balance Report
+            </a></div_str>
             <div class="relative inline-block text-left">
                 <button type="button" onclick="toggleExportMenu()" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     <i class="fas fa-download mr-2"></i>

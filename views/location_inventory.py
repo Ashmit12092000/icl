@@ -28,7 +28,7 @@ def location_inventory():
                                      Item, StockBalance.item_id == Item.id)
 
     # Apply user access restrictions
-    if current_user.role.value not in ['superadmin', 'manager']:
+    if current_user.role.value not in ['superadmin']:
         accessible_warehouses = current_user.get_accessible_warehouses()
         if accessible_warehouses:
             warehouse_ids = [w.id for w in accessible_warehouses]
@@ -94,7 +94,7 @@ def location_inventory():
         locations_inventory[location_key]['total_items'] += 1
 
     # Get filter options based on user permissions
-    if current_user.role.value in ['superadmin', 'manager']:
+    if current_user.role.value == 'superadmin':
         locations = Location.query.all()
     else:
         locations = current_user.get_accessible_warehouses()

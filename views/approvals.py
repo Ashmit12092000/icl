@@ -10,28 +10,34 @@ approvals_bp = Blueprint('approvals', __name__)
 
 @approvals_bp.route('/pending')
 @login_required
-@role_required('hod')
+@role_required('hod', 'superadmin')
 def pending():
-    if not current_user.managed_department:
-        flash('You are not assigned as HOD of any department.', 'error')
-        return redirect(url_for('main.dashboard'))
+    if current_user.role == UserRole.SUPERADMIN:
+        # Superadmin can see all pending requests
+        requests = StockIssueRequest.query.filter_by(
+            status=RequestStatus.PENDING
+        ).order_by(StockIssueRequest.created_at.desc()).all()
+    else:
+        # HOD can only see their department's requests
+        if not current_user.managed_department:
+            flash('You are not assigned as HOD of any department.', 'error')
+            return redirect(url_for('main.dashboard'))
 
-    # Get pending requests for HOD's department
-    requests = StockIssueRequest.query.filter_by(
-        department_id=current_user.managed_department.id,
-        status=RequestStatus.PENDING
-    ).order_by(StockIssueRequest.created_at.desc()).all()
+        requests = StockIssueRequest.query.filter_by(
+            department_id=current_user.managed_department.id,
+            status=RequestStatus.PENDING
+        ).order_by(StockIssueRequest.created_at.desc()).all()
 
     return render_template('approvals/pending.html', requests=requests)
 
 @approvals_bp.route('/<int:request_id>/approve', methods=['POST'])
 @login_required
-@role_required('hod')
+@role_required('hod', 'superadmin')
 def approve_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
 
     # Check if user can approve this request
-    if not request_obj.can_be_approved_by(current_user):
+    if current_user.role != UserRole.SUPERADMIN and not request_obj.can_be_approved_by(current_user):
         flash('You do not have permission to approve this request.', 'error')
         return redirect(url_for('approvals.pending'))
 
@@ -72,12 +78,12 @@ def approve_request(request_id):
 
 @approvals_bp.route('/<int:request_id>/reject', methods=['POST'])
 @login_required
-@role_required('hod')
+@role_required('hod', 'superadmin')
 def reject_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
 
     # Check if user can reject this request
-    if not request_obj.can_be_approved_by(current_user):
+    if current_user.role != UserRole.SUPERADMIN and not request_obj.can_be_approved_by(current_user):
         flash('You do not have permission to reject this request.', 'error')
         return redirect(url_for('approvals.pending'))
 
@@ -119,20 +125,28 @@ def reject_request(request_id):
 
 @approvals_bp.route('/history')
 @login_required
-@role_required('hod')
+@role_required('hod', 'superadmin')
 def approval_history():
-    if not current_user.managed_department:
-        flash('You are not assigned as HOD of any department.', 'error')
-        return redirect(url_for('main.dashboard'))
-
     page = request.args.get('page', 1, type=int)
 
-    # Get all requests for HOD's department (approved/rejected)
-    requests = StockIssueRequest.query.filter(
-        StockIssueRequest.department_id == current_user.managed_department.id,
-        StockIssueRequest.status.in_([RequestStatus.APPROVED, RequestStatus.REJECTED, RequestStatus.ISSUED])
-    ).order_by(StockIssueRequest.updated_at.desc()).paginate(
-        page=page, per_page=20, error_out=False
-    )
+    if current_user.role == UserRole.SUPERADMIN:
+        # Superadmin can see all processed requests
+        requests = StockIssueRequest.query.filter(
+            StockIssueRequest.status.in_([RequestStatus.APPROVED, RequestStatus.REJECTED, RequestStatus.ISSUED])
+        ).order_by(StockIssueRequest.updated_at.desc()).paginate(
+            page=page, per_page=20, error_out=False
+        )
+    else:
+        # HOD can only see their department's requests
+        if not current_user.managed_department:
+            flash('You are not assigned as HOD of any department.', 'error')
+            return redirect(url_for('main.dashboard'))
+
+        requests = StockIssueRequest.query.filter(
+            StockIssueRequest.department_id == current_user.managed_department.id,
+            StockIssueRequest.status.in_([RequestStatus.APPROVED, RequestStatus.REJECTED, RequestStatus.ISSUED])
+        ).order_by(StockIssueRequest.updated_at.desc()).paginate(
+            page=page, per_page=20, error_out=False
+        )
 
     return render_template('approvals/history.html', requests=requests)

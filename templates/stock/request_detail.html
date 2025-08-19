@@ -47,7 +47,7 @@
             </button>
             {% endif %}
 
-            {% if current_user.role.value in ['superadmin', 'manager'] and request.status.value == 'Approved' %}
+            {% if (current_user.role.value == 'superadmin' or request.requester_id == current_user.id) and request.status.value == 'Approved' %}
             <a href="{{ url_for('stock_issue.issue_form', request_id=request.id) }}" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none">
                 <i class="fas fa-shipping-fast mr-2"></i>Issue Stock
             </a>

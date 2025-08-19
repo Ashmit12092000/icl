@@ -15,7 +15,7 @@ reports_bp = Blueprint('reports', __name__)
 
 @reports_bp.route('/reports')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def dashboard():
     # Get date range from request or default to last 30 days (in IST)
     end_date = get_ist_now()
@@ -168,7 +168,7 @@ def dashboard():
 
 @reports_bp.route('/reports/export')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def export_data():
     export_type = request.args.get('type', 'requests')
     format_type = request.args.get('format', 'csv')
@@ -307,9 +307,188 @@ def export_department_stats(format_type):
         response.headers['Content-Disposition'] = 'attachment; filename=department_stats.csv'
         return response
 
+@reports_bp.route('/full-balance')
+@login_required
+@role_required('superadmin', 'hod')
+def full_balance_report():
+    """Full stock balance report showing all items with departments and locations"""
+    
+    # Get filter parameters
+    department_filter = request.args.get('department_id', type=int)
+    location_filter = request.args.get('location_id', type=int)
+    show_zero_stock = request.args.get('show_zero_stock', 'no') == 'yes'
+    
+    # Base query
+    query = db.session.query(
+        Item.code.label('item_code'),
+        Item.name.label('item_name'),
+        Item.make,
+        Item.variant,
+        Item.low_stock_threshold,
+        Department.name.label('department_name'),
+        Location.office.label('location_office'),
+        Location.room.label('location_room'),
+        StockBalance.quantity,
+        StockBalance.last_updated
+    ).select_from(Item).outerjoin(
+        Department, Item.department_id == Department.id
+    ).join(
+        StockBalance, Item.id == StockBalance.item_id
+    ).join(
+        Location, StockBalance.location_id == Location.id
+    )
+    
+    # Apply filters
+    if department_filter:
+        query = query.filter(Item.department_id == department_filter)
+    
+    if location_filter:
+        query = query.filter(StockBalance.location_id == location_filter)
+    
+    if not show_zero_stock:
+        query = query.filter(StockBalance.quantity > 0)
+    
+    # Filter based on user role
+    if current_user.role == UserRole.HOD:
+        if current_user.managed_department:
+            query = query.filter(
+                db.or_(
+                    Item.department_id == current_user.managed_department.id,
+                    Item.department_id.is_(None)
+                )
+            )
+        else:
+            # HOD with no managed department sees nothing
+            query = query.filter(Item.department_id == -1)
+    
+    # Order by department, then item name
+    balance_data = query.order_by(
+        Department.name.asc().nullslast(),
+        Item.name.asc(),
+        Location.office.asc(),
+        Location.room.asc()
+    ).all()
+    
+    # Get filter options
+    if current_user.role == UserRole.HOD and current_user.managed_department:
+        departments = [current_user.managed_department]
+    else:
+        departments = Department.query.order_by(Department.name).all()
+    
+    locations = Location.query.order_by(Location.office, Location.room).all()
+    
+    # Calculate totals
+    total_items = len(set([(row.item_code, row.item_name) for row in balance_data]))
+    total_stock_value = sum([float(row.quantity) for row in balance_data])
+    low_stock_count = sum([1 for row in balance_data if row.quantity <= row.low_stock_threshold])
+    
+    return render_template('reports/full_balance.html',
+                         balance_data=balance_data,
+                         departments=departments,
+                         locations=locations,
+                         selected_department=department_filter,
+                         selected_location=location_filter,
+                         show_zero_stock=show_zero_stock,
+                         total_items=total_items,
+                         total_stock_value=int(total_stock_value),
+                         low_stock_count=low_stock_count,
+                         current_date=get_ist_now())
+
+@reports_bp.route('/full-balance/export')
+@login_required
+@role_required('superadmin', 'hod')
+def export_full_balance():
+    """Export full balance report as CSV"""
+    
+    # Get same filters as the main report
+    department_filter = request.args.get('department_id', type=int)
+    location_filter = request.args.get('location_id', type=int)
+    show_zero_stock = request.args.get('show_zero_stock', 'no') == 'yes'
+    
+    # Same query as full_balance_report
+    query = db.session.query(
+        Item.code.label('item_code'),
+        Item.name.label('item_name'),
+        Item.make,
+        Item.variant,
+        Item.low_stock_threshold,
+        Department.name.label('department_name'),
+        Location.office.label('location_office'),
+        Location.room.label('location_room'),
+        StockBalance.quantity,
+        StockBalance.last_updated
+    ).select_from(Item).outerjoin(
+        Department, Item.department_id == Department.id
+    ).join(
+        StockBalance, Item.id == StockBalance.item_id
+    ).join(
+        Location, StockBalance.location_id == Location.id
+    )
+    
+    # Apply same filters
+    if department_filter:
+        query = query.filter(Item.department_id == department_filter)
+    
+    if location_filter:
+        query = query.filter(StockBalance.location_id == location_filter)
+    
+    if not show_zero_stock:
+        query = query.filter(StockBalance.quantity > 0)
+    
+    if current_user.role == UserRole.HOD:
+        if current_user.managed_department:
+            query = query.filter(
+                db.or_(
+                    Item.department_id == current_user.managed_department.id,
+                    Item.department_id.is_(None)
+                )
+            )
+        else:
+            query = query.filter(Item.department_id == -1)
+    
+    balance_data = query.order_by(
+        Department.name.asc().nullslast(),
+        Item.name.asc(),
+        Location.office.asc(),
+        Location.room.asc()
+    ).all()
+    
+    # Create CSV
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Headers
+    writer.writerow([
+        'Item Code', 'Item Name', 'Make', 'Variant', 'Department', 
+        'Location Office', 'Location Room', 'Current Stock', 
+        'Low Stock Threshold', 'Stock Status', 'Last Updated'
+    ])
+    
+    # Data
+    for row in balance_data:
+        stock_status = 'Low Stock' if row.quantity <= row.low_stock_threshold else 'Normal'
+        writer.writerow([
+            row.item_code,
+            row.item_name,
+            row.make or '',
+            row.variant or '',
+            row.department_name or 'No Department',
+            row.location_office,
+            row.location_room,
+            float(row.quantity),
+            row.low_stock_threshold,
+            stock_status,
+            convert_to_ist(row.last_updated).strftime('%Y-%m-%d %H:%M IST') if row.last_updated else ''
+        ])
+    
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = f'attachment; filename=full_balance_report_{get_ist_now().strftime("%Y%m%d_%H%M")}.csv'
+    return response
+
 @reports_bp.route('/reports/api/chart-data')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def chart_data():
     chart_type = request.args.get('type')
 

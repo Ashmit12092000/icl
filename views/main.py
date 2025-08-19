@@ -27,13 +27,14 @@ def dashboard():
     from datetime import date
     today = get_ist_now().date()
 
-    if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+    if current_user.role in [UserRole.SUPERADMIN]:
         # Admin users see all requests
         stats = {
             'todays_requests': StockIssueRequest.query.filter(
                 func.date(StockIssueRequest.created_at) == today
             ).count(),
             'approved_requests': StockIssueRequest.query.filter_by(status=RequestStatus.APPROVED).count(),
+            'pending_approvals': StockIssueRequest.query.filter_by(status=RequestStatus.PENDING).count(),
             'todays_issued': StockIssueRequest.query.filter(
                 func.date(StockIssueRequest.issued_at) == today,
                 StockIssueRequest.status == RequestStatus.ISSUED
@@ -48,10 +49,13 @@ def dashboard():
             StockIssueRequest.created_at.desc()
         ).limit(5).all()
 
-        # Approved requests ready for issue
-        approved_requests = StockIssueRequest.query.filter_by(
-            status=RequestStatus.APPROVED
-        ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
+        # Approved requests ready for issue (only for superadmin)
+        if current_user.role == UserRole.SUPERADMIN:
+            approved_requests = StockIssueRequest.query.filter_by(
+                status=RequestStatus.APPROVED
+            ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
+        else:
+            approved_requests = []
 
         # Get low stock items (items below their threshold)
         low_stock_alerts = db.session.query(Item).join(StockBalance).filter(
@@ -113,11 +117,17 @@ def dashboard():
     }
 
     # Only pass approved_requests for admin/manager roles
-    if current_user.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+    if current_user.role in [UserRole.SUPERADMIN]:
         template_vars['approved_requests'] = approved_requests
     elif current_user.role == UserRole.HOD:
         template_vars['approved_requests'] = StockIssueRequest.query.filter_by(
             department_id=current_user.managed_department.id if current_user.managed_department else None,
+            status=RequestStatus.APPROVED
+        ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
+    else:
+        # Employee - show their approved requests ready for issue
+        template_vars['approved_requests'] = StockIssueRequest.query.filter_by(
+            requester_id=current_user.id,
             status=RequestStatus.APPROVED
         ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
 

@@ -802,7 +802,7 @@ def stock_report():
     query = db.session.query(StockBalance, Item, Location).join(Item).join(Location)
 
     # Filter based on user's assigned warehouses
-    if current_user.role.value not in ['superadmin', 'manager']:
+    if current_user.role.value not in ['superadmin']:
         # Non-admin users only see stock from their assigned warehouses
         accessible_warehouses = current_user.get_accessible_warehouses()
         if accessible_warehouses:

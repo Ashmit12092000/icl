@@ -178,7 +178,7 @@ def balances():
 
 @stock_entry_bp.route('/entries')
 @login_required
-@role_required('superadmin', 'manager','hod')
+@role_required('superadmin','hod')
 def entries():
     page = request.args.get('page', 1, type=int)
     entries = StockEntry.query.order_by(
@@ -241,6 +241,7 @@ def stock_history(item_id, location_id):
 
     return render_template('stock/history.html',
                          item=item,
+                         location=location,
                          stock_entries=stock_entries,
                          stock_issues=stock_issues,
                          current_balance=current_balance)

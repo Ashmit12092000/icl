@@ -245,8 +245,8 @@
                             </div>
                             {% endif %}
 
-                            {% if current_user.role.value == 'hod' %}
-                            <!-- Approvals for HOD -->
+                            {% if current_user.role.value in ['hod', 'superadmin'] %}
+                            <!-- Approvals for HOD and Superadmin -->
                             <div class="dropdown">
                                 <button class="nav-link">
                                     <i class="fas fa-user-check mr-2"></i>

@@ -15,7 +15,7 @@ masters_bp = Blueprint('masters', __name__)
 
 @masters_bp.route('/departments')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def departments():
     departments = Department.query.all()
     # Fetch users who are HODs and active for department creation dropdown
@@ -24,7 +24,7 @@ def departments():
 
 @masters_bp.route('/departments/create', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def create_department():
     code = request.form.get('code', '').strip().upper()
     name = request.form.get('name', '').strip()
@@ -86,7 +86,7 @@ def create_department():
 
 @masters_bp.route('/departments/<int:dept_id>/update', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def update_department(dept_id):
     department = Department.query.get_or_404(dept_id)
 
@@ -144,7 +144,7 @@ def update_department(dept_id):
 
 @masters_bp.route('/departments/<int:dept_id>/assign_hod', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def assign_hod_to_department(dept_id):
     department = Department.query.get_or_404(dept_id)
     hod_id = request.form.get('hod_id')
@@ -199,14 +199,14 @@ def assign_hod_to_department(dept_id):
 
 @masters_bp.route('/locations')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def locations():
     locations = Location.query.all()
     return render_template('masters/locations.html', locations=locations)
 
 @masters_bp.route('/locations/create', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def create_location():
     office = request.form.get('office', '').strip()
     room = request.form.get('room', '').strip()
@@ -229,7 +229,7 @@ def create_location():
 
         # Auto-assign all superadmins and managers to this new warehouse
         superadmins_and_managers = User.query.filter(
-            User.role.in_([UserRole.SUPERADMIN, UserRole.MANAGER]),
+            User.role.in_([UserRole.SUPERADMIN]),
             User.is_active == True
         ).all()
 
@@ -242,11 +242,11 @@ def create_location():
             entity_id=location.id,
             action='CREATE',
             user_id=current_user.id,
-            details=f'Created location {code} and auto-assigned to {len(superadmins_and_managers)} superadmin/manager users'
+            details=f'Created location {code} and auto-assigned to {len(superadmins_and_managers)} superadmin'
         )
 
         db.session.commit()
-        flash('Location created successfully and auto-assigned to superadmins/managers.', 'success')
+        flash('Location created successfully and auto-assigned to superadmins.', 'success')
     except Exception as e:
         db.session.rollback()
         flash('Error creating location.', 'error')
@@ -255,7 +255,7 @@ def create_location():
 
 @masters_bp.route('/locations/<int:location_id>/update', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def update_location(location_id):
     location = Location.query.get_or_404(location_id)
 
@@ -299,7 +299,7 @@ def update_location(location_id):
 
 @masters_bp.route('/locations/<int:location_id>/delete', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def delete_location(location_id):
     location = Location.query.get_or_404(location_id)
 
@@ -324,7 +324,7 @@ def delete_location(location_id):
 
 @masters_bp.route('/employees')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin','hod')
 def employees():
     if current_user.role == UserRole.HOD:
         # HOD can only see employees from their department
@@ -343,7 +343,7 @@ def employees():
 
 @masters_bp.route('/employees/create', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def create_employee():
     emp_id = request.form.get('emp_id', '').strip()
     name = request.form.get('name', '').strip()
@@ -385,7 +385,7 @@ def create_employee():
 
 @masters_bp.route('/employees/<int:employee_id>/update', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def update_employee(employee_id):
     employee = Employee.query.get_or_404(employee_id)
 
@@ -445,7 +445,7 @@ def update_employee(employee_id):
 
 @masters_bp.route('/employees/<int:employee_id>/delete', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin', 'hod')
 def delete_employee(employee_id):
     employee = Employee.query.get_or_404(employee_id)
 
@@ -477,7 +477,7 @@ def delete_employee(employee_id):
 
 @masters_bp.route('/items')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def items():
     items = Item.query.all()
     departments = Department.query.all()
@@ -485,7 +485,7 @@ def items():
 
 @masters_bp.route('/items/create', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin' )
 def create_item():
     form = ItemForm()
 
@@ -523,7 +523,7 @@ def create_item():
 
 @masters_bp.route('/items/edit/<int:item_id>', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def edit_item(item_id):
     item = Item.query.get_or_404(item_id)
     form = ItemForm(obj=item)
@@ -559,7 +559,7 @@ def edit_item(item_id):
 
 @masters_bp.route('/items/delete/<int:item_id>', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def delete_item(item_id):
     item = Item.query.get_or_404(item_id)
 

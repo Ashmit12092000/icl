@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Full Balance Report - Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Full Stock Balance Report
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Comprehensive inventory report as of {{ current_date.strftime('%Y-%m-%d %H:%M IST') }}
+            </p>
+        </div>
+        <div class="mt-4 flex space-x-3 md:mt-0 md:ml-4">
+            <a href="{{ url_for('reports.export_full_balance', department_id=selected_department, location_id=selected_location, show_zero_stock='yes' if show_zero_stock else 'no') }}"
+               class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-download mr-2"></i>
+                Export CSV
+            </a>
+            <button onclick="window.print()"
+                    class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm bg-gray-700 text-sm font-medium text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-print mr-2"></i>
+                Print
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-boxes text-blue-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ total_items }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-cubes text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Stock Units</dt>
+                            <dd class="text-lg font-medium text-white">{{ total_stock_value }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-red-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Low Stock Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ low_stock_count }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-warehouse text-purple-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Locations</dt>
+                            <dd class="text-lg font-medium text-white">{{ locations|length }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-800 shadow rounded-lg p-6">
+        <h3 class="text-lg leading-6 font-medium text-white mb-4">Filters</h3>
+        <form method="GET" class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div>
+                <label for="department_id" class="block text-sm font-medium text-gray-300">Department</label>
+                <select name="department_id" id="department_id" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if selected_department == dept.id %}selected{% endif %}>
+                        {{ dept.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="location_id" class="block text-sm font-medium text-gray-300">Location</label>
+                <select name="location_id" id="location_id" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">All Locations</option>
+                    {% for location in locations %}
+                    <option value="{{ location.id }}" {% if selected_location == location.id %}selected{% endif %}>
+                        {{ location.office }} - {{ location.room }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-end">
+                <div class="flex items-center">
+                    <input type="checkbox" name="show_zero_stock" value="yes" id="show_zero_stock"
+                           {% if show_zero_stock %}checked{% endif %}
+                           class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-600 rounded bg-gray-700">
+                    <label for="show_zero_stock" class="ml-2 block text-sm text-gray-300">
+                        Include Zero Stock
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Balance Data Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-white">Stock Balance Details</h3>
+            <p class="text-gray-400 mb-6">Complete inventory breakdown by item, department, and location</p>
+            <p class="text-gray-400 mb-6">Report generated on: {{ current_date.strftime('%Y-%m-%d %H:%M IST') }}</p>
+        </div>
+
+        {% if balance_data %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Details</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Current Stock</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Threshold</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    {% for row in balance_data %}
+                    <tr {% if row.quantity <= row.low_stock_threshold %}class="bg-red-900 bg-opacity-20"{% endif %}>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-white">{{ row.item_name }}</div>
+                            <div class="text-sm text-gray-400">{{ row.item_code }}</div>
+                            {% if row.make or row.variant %}
+                            <div class="text-xs text-gray-500">
+                                {% if row.make %}{{ row.make }}{% endif %}
+                                {% if row.variant %}{% if row.make %} - {% endif %}{{ row.variant }}{% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            {{ row.department_name or 'No Department' }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-300">{{ row.location_office }}</div>
+                            <div class="text-sm text-gray-400">{{ row.location_room }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-lg font-medium {% if row.quantity <= row.low_stock_threshold %}text-red-400{% else %}text-white{% endif %}">
+                                {{ row.quantity|float|int }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {{ row.low_stock_threshold|float|int }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if row.quantity <= row.low_stock_threshold %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-200">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                Low Stock
+                            </span>
+                            {% elif row.quantity == 0 %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300">
+                                Out of Stock
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">
+                                <i class="fas fa-check-circle mr-1"></i>
+                                Normal
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                            {{ row.last_updated | ist_datetime if row.last_updated else 'Never' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fas fa-boxes text-gray-600 text-6xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-400 mb-2">No stock data found</h3>
+            <p class="text-sm text-gray-500">Try adjusting your filters or add some stock entries first.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: black !important;
+    }
+
+    .bg-gray-800, .bg-gray-700 {
+        background: white !important;
+        border: 1px solid #ccc !important;
+    }
+
+    .text-white, .text-gray-300, .text-gray-400 {
+        color: black !important;
+    }
+
+    .bg-red-900 {
+        background: #fee2e2 !important;
+    }
+
+    .text-red-400 {
+        color: #dc2626 !important;
+    }
+
+    .text-green-200, .bg-green-900 {
+        color: #16a34a !important;
+        background: #dcfce7 !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-submit form when filters change
+document.querySelectorAll('#department_id, #location_id, #show_zero_stock').forEach(element => {
+    element.addEventListener('change', function() {
+        this.form.submit();
+    });
+});
+</script>
+{% endblock %}

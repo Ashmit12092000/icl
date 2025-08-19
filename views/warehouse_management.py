@@ -9,7 +9,7 @@ warehouse_management_bp = Blueprint('warehouse_management', __name__)
 
 @warehouse_management_bp.route('/warehouse-assignments')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def warehouse_assignments():
     """View and manage warehouse assignments"""
     users = User.query.filter_by(is_active=True).all()
@@ -27,7 +27,7 @@ def warehouse_assignments():
 
 @warehouse_management_bp.route('/users/<int:user_id>/assign-warehouses', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def assign_warehouses(user_id):
     """Assign multiple warehouses to a user"""
     user = User.query.get_or_404(user_id)

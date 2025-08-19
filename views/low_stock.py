@@ -78,7 +78,7 @@ def summary():
 
 @low_stock_bp.route('/update-threshold/<int:item_id>', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def update_threshold(item_id):
     """Update low stock threshold for an item"""
     item = Item.query.get_or_404(item_id)

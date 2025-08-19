@@ -9,7 +9,6 @@ from utils import get_ist_now
 
 class UserRole(Enum):
     SUPERADMIN = 'superadmin'
-    MANAGER = 'manager'
     HOD = 'hod'
     EMPLOYEE = 'employee'
 
@@ -64,13 +63,13 @@ class User(UserMixin, db.Model):
 
     def get_accessible_warehouses(self):
         """Get all warehouses user can access"""
-        if self.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+        if self.role == UserRole.SUPERADMIN:
             return Location.query.all()
         return self.assigned_warehouses
 
     def can_access_warehouse(self, location_id):
         """Check if user can access specific warehouse"""
-        if self.role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+        if self.role == UserRole.SUPERADMIN:
             return True
         return any(w.id == location_id for w in self.assigned_warehouses)
 

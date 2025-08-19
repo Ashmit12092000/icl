@@ -69,8 +69,9 @@ def create_user():
         final_department_id = int(department_id)
 
     # Managers should not have department assignments
-    if user_role == UserRole.MANAGER:
-        final_department_id = None
+    # This block is kept for potential future use or if the UserRole enum is not fully refactored.
+    # However, since the 'manager' role is being removed, this condition will not be met.
+    
 
     # Department validation
     if user_role in [UserRole.HOD, UserRole.EMPLOYEE]:
@@ -115,9 +116,9 @@ def create_user():
 
         # Handle warehouse assignments
         warehouse_ids = request.form.getlist('warehouse_ids')
-        
-        # If user is a superadmin or manager, assign all warehouses automatically
-        if user_role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+
+        # If user is a superadmin, assign all warehouses automatically
+        if user_role == UserRole.SUPERADMIN:
             all_warehouses = Location.query.all()
             for warehouse in all_warehouses:
                 user.assigned_warehouses.append(warehouse)
@@ -217,9 +218,9 @@ def update_user(user_id):
         # Handle warehouse assignments
         user.assigned_warehouses.clear()  # Remove existing assignments
         warehouse_ids = request.form.getlist('warehouse_ids')
-        
-        # If user is a superadmin or manager, assign all warehouses automatically
-        if user_role in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+
+        # If user is a superadmin, assign all warehouses automatically
+        if user_role == UserRole.SUPERADMIN:
             all_warehouses = Location.query.all()
             for warehouse in all_warehouses:
                 user.assigned_warehouses.append(warehouse)
@@ -286,7 +287,7 @@ def reset_password(user_id):
 
 @user_management_bp.route('/users/<int:user_id>/assign_department', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin') # Changed from ('superadmin', 'manager') to only 'superadmin'
 def assign_department(user_id):
     user = User.query.get_or_404(user_id)
     department_id = request.form.get('department_id')

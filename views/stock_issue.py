@@ -12,7 +12,7 @@ stock_issue_bp = Blueprint('stock_issue', __name__)
 @stock_issue_bp.route('/create')
 @login_required
 def create_request():
-    if not current_user.department_id and current_user.role not in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+    if not current_user.department_id and current_user.role not in [UserRole.SUPERADMIN]:
         flash('You must be assigned to a department to create requests.', 'error')
         return redirect(url_for('main.dashboard'))
 
@@ -26,7 +26,7 @@ def create_request():
 @stock_issue_bp.route('/create', methods=['POST'])
 @login_required
 def submit_request():
-    if not current_user.department_id and current_user.role not in [UserRole.SUPERADMIN, UserRole.MANAGER]:
+    if not current_user.department_id and current_user.role not in [UserRole.SUPERADMIN]:
         flash('You must be assigned to a department to create requests.', 'error')
         return redirect(url_for('main.dashboard'))
 
@@ -139,7 +139,7 @@ def submit_request():
             db.session.add(line)
 
         # Auto-approve if requester is Manager/Executive or Superadmin
-        if current_user.role in [UserRole.MANAGER, UserRole.SUPERADMIN]:
+        if current_user.role in [UserRole.SUPERADMIN]:
             request_obj.status = RequestStatus.APPROVED
             request_obj.approved_by = current_user.id
             request_obj.approved_at = datetime.utcnow()
@@ -229,9 +229,15 @@ def submit_for_approval(request_id):
 
 @stock_issue_bp.route('/<int:request_id>/issue')
 @login_required
-@role_required('superadmin', 'manager')
+# Removed @role_required('superadmin', 'manager') to implement custom logic below
 def issue_form(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
+
+    # Check permissions - only requester or superadmin can issue
+    if (current_user.role != UserRole.SUPERADMIN and 
+        request_obj.requester_id != current_user.id):
+        flash('Only the original requester or superadmin can issue stock.', 'error')
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
 
     if request_obj.status != RequestStatus.APPROVED:
         flash('Only approved requests can be issued.', 'error')
@@ -252,9 +258,15 @@ def issue_form(request_id):
 
 @stock_issue_bp.route('/<int:request_id>/issue', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+# Removed @role_required('superadmin', 'manager') to implement custom logic below
 def process_issue(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
+
+    # Check permissions - only requester or superadmin can issue
+    if (current_user.role != UserRole.SUPERADMIN and 
+        request_obj.requester_id != current_user.id):
+        flash('Only the original requester or superadmin can issue stock.', 'error')
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
 
     if request_obj.status != RequestStatus.APPROVED:
         flash('Only approved requests can be issued.', 'error')
@@ -294,12 +306,12 @@ def process_issue(request_id):
             ).first()
 
             available_qty = stock_balance.quantity if stock_balance else Decimal('0')
-            
+
             # Prevent issuing if no stock or insufficient stock
             if available_qty <= 0:
                 flash(f'{line.item.name} ({line.item.code}) is out of stock at the selected location.', 'error')
                 return redirect(url_for('stock_issue.issue_form', request_id=request_id))
-            
+
             if available_qty < issued_decimal:
                 flash(f'Insufficient stock for {line.item.name} ({line.item.code}). Available: {available_qty}, Requested: {issued_decimal}', 'error')
                 return redirect(url_for('stock_issue.issue_form', request_id=request_id))
@@ -320,10 +332,10 @@ def process_issue(request_id):
                     item_id=line.item_id,
                     location_id=request_obj.location_id
                 ).first()
-                
+
                 if stock_balance and stock_balance.quantity < 0:
                     negative_stock_items.append(line.item.name)
-        
+
         if negative_stock_items:
             db.session.rollback()
             flash(f'Cannot complete issue: would result in negative stock for {", ".join(negative_stock_items)}', 'error')
@@ -526,7 +538,7 @@ def update_request(request_id):
 
         db.session.commit()
         flash(f'Request {request_obj.request_no} updated successfully.', 'success')
-        return redirect(url_for('stock_issue.view_request', request_id=request_obj.id))
+        return redirect(url_for('stock_issue.view_request', request_id=request_id))
 
     except Exception as e:
         db.session.rollback()
@@ -535,7 +547,7 @@ def update_request(request_id):
 
 @stock_issue_bp.route('/<int:request_id>/reject', methods=['POST'])
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin')
 def reject_approved_request(request_id):
     request_obj = StockIssueRequest.query.get_or_404(request_id)
 

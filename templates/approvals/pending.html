@@ -12,7 +12,11 @@
                 Pending Approvals
             </h2>
             <p class="mt-1 text-sm text-gray-400">
+                {% if current_user.role.value == 'superadmin' %}
+                All requests awaiting approval from all departments
+                {% else %}
                 Requests awaiting your approval from {{ current_user.managed_department.name if current_user.managed_department else 'your department' }}
+                {% endif %}
             </p>
         </div>
         <div class="mt-4 flex md:mt-0 md:ml-4 space-x-2">

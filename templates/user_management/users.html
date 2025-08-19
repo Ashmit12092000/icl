@@ -19,7 +19,7 @@
                 <i class="fas fa-plus mr-2"></i>Add User
             </button>
             <button onclick="openNetworkAdminModal()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none">
-                <i class="fas fa-network-wired mr-2"></i>Add Manager/Executive
+                <i class="fas fa-network-wired mr-2"></i>Add Superadmin
             </button>
         </div>
     </div>
@@ -57,7 +57,6 @@
                     <td class="px-6 py-4 whitespace-nowrap">
                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                             {% if user.role.value == 'superadmin' %}bg-purple-900 text-purple-200
-                            {% elif user.role.value == 'manager' %}bg-blue-900 text-blue-200
                             {% elif user.role.value == 'hod' %}bg-green-900 text-green-200
                             {% else %}bg-gray-900 text-gray-200{% endif %}">
                             {{ user.role.value.replace('_', ' ').title() }}
@@ -79,7 +78,7 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ user.created_at.strftime('%Y-%m-%d') }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <div class="flex space-x-2">
-                            <button onclick="openEditModal({{ user.id }}, '{{ user.username }}', '{{ user.email }}', '{{ user.role.value }}', {{ user.department_id if user.department_id else 'null' }}, {{ user.is_active|lower }}, {{ user.assigned_warehouses|map(attribute='id')|list|tojson }})"
+                            <button onclick="openEditModal({{ user.id }}, '{{ user.full_name }}', '{{ user.email }}', '{{ user.role.value }}', {{ user.department_id if user.department_id else 'null' }}, {{ user.is_active|lower }}, {{ user.assigned_warehouses|map(attribute='id')|list|tojson }})"
                                     class="text-indigo-400 hover:text-indigo-300">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -109,7 +108,7 @@
             <h3 class="text-lg font-medium text-white mb-4">Add New User</h3>
             <form method="POST" action="{{ url_for('user_management.create_user') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                
+
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Link to Employee (Optional)</label>
                     <select name="employee_id" id="createEmployeeSelect" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white" onchange="updateDepartmentFromEmployee(this, 'createDepartment')">
@@ -136,7 +135,6 @@
                         <option value="">Select Role</option>
 
                         <option value="superadmin">Superadmin</option>
-                        <option value="manager">Manager/Executives</option>
                         <option value="hod">HOD</option>
                         <option value="employee">Employee</option>
                     </select>
@@ -198,7 +196,6 @@
                     <label class="block text-gray-300 text-sm font-bold mb-2">Role*</label>
                     <select name="role" id="editRole" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white" onchange="toggleDepartmentField(this, 'editDepartment')">
                         <option value="superadmin">Superadmin</option>
-                        <option value="manager">Manager/Executive</option>
                         <option value="hod">HOD</option>
                         <option value="employee">Employee</option>
                     </select>
@@ -240,14 +237,14 @@
     </div>
 </div>
 
-<!-- Network Admin Modal -->
+<!-- Superadmin Creation Modal -->
 <div id="networkAdminModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
     <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
         <div class="mt-3">
-            <h3 class="text-lg font-medium text-white mb-4">Add Manager/Executive</h3>
-            <form method="POST" action="{{ url_for('user_management.create_user') }}" id="managerForm">
+            <h3 class="text-lg font-medium text-white mb-4">Add Superadmin</h3>
+            <form method="POST" action="{{ url_for('user_management.create_user') }}" id="superadminForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <input type="hidden" name="role" value="manager">
+                <input type="hidden" name="role" value="superadmin">
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Name</label>
                     <input type="text" name="full_name" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
@@ -266,17 +263,17 @@
                     <input type="email" name="email" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                 </div>
                 <div class="mb-4">
-                    <div class="bg-blue-900 border border-blue-700 rounded-md p-3">
+                    <div class="blue-900 border border-blue-700 rounded-md p-3">
                         <div class="flex">
                             <div class="flex-shrink-0">
                                 <i class="fas fa-info-circle text-blue-400"></i>
                             </div>
                             <div class="ml-3">
                                 <h3 class="text-sm font-medium text-blue-200">
-                                    Manager/Executive Access
+                                    Superadmin Access
                                 </h3>
                                 <div class="mt-2 text-sm text-blue-300">
-                                    <p>Managers/Executives will automatically have access to all warehouses and do not belong to any specific department.</p>
+                                    <p>Superadmins will automatically have access to all warehouses and do not belong to any specific department.</p>
                                 </div>
                             </div>
                         </div>
@@ -288,7 +285,7 @@
                 {% endfor %}
                 <div class="flex justify-end space-x-2">
                     <button type="button" onclick="closeNetworkAdminModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Create Manager/Executive</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Create Superadmin</button>
                 </div>
             </form>
         </div>
@@ -417,12 +414,12 @@ function toggleDepartmentField(selectElement, departmentFieldId) {
                     departmentNote.textContent = 'You can assign departments later or select an employee to auto-populate';
                     departmentNote.className = 'text-gray-400 text-xs mt-1';
                 }
-            } else { // superadmin, manager
+            } else { // superadmin
                 if (employeeSection) employeeSection.style.display = 'none';
                 departmentField.style.display = 'none';
                 departmentField.querySelector('select').required = false;
                 if (departmentNote) {
-                    departmentNote.textContent = 'Superadmin and Managers do not have specific departments';
+                    departmentNote.textContent = 'Superadmins do not have specific departments';
                     departmentNote.className = 'text-gray-400 text-xs mt-1';
                 }
             }
@@ -434,7 +431,7 @@ function toggleDepartmentField(selectElement, departmentFieldId) {
         const autoAssignNoteId = departmentFieldId.replace('Department', 'AutoAssignNote');
         const autoAssignNote = document.getElementById(autoAssignNoteId);
 
-        if (role === 'superadmin' || role === 'manager') {
+        if (role === 'superadmin') {
             if (warehouseSection) warehouseSection.style.display = 'none';
             autoAssignNote.classList.remove('hidden');
         } else {
@@ -512,17 +509,17 @@ function initializeUserForm(modalId, roleFieldId, departmentFieldId) {
                 departmentSelect.required = false;
                 departmentNote.textContent = 'You can assign departments later or select an employee to auto-populate';
                 departmentNote.className = 'text-gray-400 text-xs mt-1';
-            } else { // superadmin, manager
+            } else { // superadmin
                 employeeSection.style.display = 'none';
                 departmentField.style.display = 'none';
                 departmentSelect.required = false;
-                departmentNote.textContent = 'Superadmin and Managers do not have specific departments';
+                departmentNote.textContent = 'Superadmins do not have specific departments';
                 departmentNote.className = 'text-gray-400 text-xs mt-1';
             }
         }
 
         // Warehouse visibility
-        if (role === 'superadmin' || role === 'manager') {
+        if (role === 'superadmin') {
             if (warehouseSection) warehouseSection.style.display = 'none';
             autoAssignNote.classList.remove('hidden');
         } else {
