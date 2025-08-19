@@ -140,7 +140,7 @@ class Item(db.Model):
     make = db.Column(db.String(50))
     variant = db.Column(db.String(50))
     description = db.Column(db.Text)
-    low_stock_threshold = db.Column(db.Numeric(10, 2), nullable=False, default=5)
+    low_stock_threshold = db.Column(db.Numeric(10, 2), nullable=False, default=10)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
