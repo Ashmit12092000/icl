@@ -1,95 +1,191 @@
+
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %} Stock Management{% endblock %}</title>
+    <title>{% block title %}Stock Management System{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/feather-icons"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-effect {
+            background: rgba(31, 41, 55, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(75, 85, 99, 0.3);
+        }
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar-item {
+            position: relative;
+            overflow: hidden;
+        }
+        .sidebar-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: #6366f1;
+            transform: scaleY(0);
+            transition: transform 0.3s ease;
+        }
+        .sidebar-item:hover::before,
+        .sidebar-item.active::before {
+            transform: scaleY(1);
+        }
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .notification-enter {
+            animation: slideInRight 0.3s ease-out;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-gray-100">
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-gray-100 min-h-screen">
     {% if current_user.is_authenticated %}
-    <!-- Navigation -->
-    <nav class="bg-gray-800 shadow-lg">
+    <!-- Enhanced Navigation -->
+    <nav class="glass-effect shadow-xl sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <h1 class="text-xl font-bold text-white">Stock Management</h1>
+                    <div class="flex-shrink-0 flex items-center">
+                        <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fas fa-boxes text-white text-sm"></i>
+                        </div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                            Stock Management
+                        </h1>
                     </div>
-                    <div class="hidden md:ml-10 md:flex md:space-x-8">
-                        <a href="{{ url_for('main.dashboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                    <div class="hidden md:ml-10 md:flex md:space-x-2">
+                        <a href="{{ url_for('main.dashboard') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
                             <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
                         </a>
 
                         {% if current_user.role.value in ['superadmin', 'manager'] %}
                         <div class="relative group">
-                            <button class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                            <button class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-all duration-200 hover:bg-gray-700/50">
                                 <i class="fas fa-cog mr-2"></i>Masters
-                                <i class="fas fa-chevron-down ml-1"></i>
+                                <i class="fas fa-chevron-down ml-1 transform group-hover:rotate-180 transition-transform"></i>
                             </button>
-                            <div class="absolute left-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
-                                <a href="{{ url_for('masters.departments') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Departments</a>
-                                <a href="{{ url_for('masters.locations') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Locations</a>
-                                <a href="{{ url_for('masters.employees') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Employees</a>
-                                <a href="{{ url_for('masters.items') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Items</a>
+                            <div class="absolute left-0 mt-2 w-56 glass-effect rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 overflow-hidden">
+                                <div class="py-2">
+                                    <a href="{{ url_for('masters.departments') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-building mr-3 text-blue-400"></i>Departments
+                                    </a>
+                                    <a href="{{ url_for('masters.locations') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-map-marker-alt mr-3 text-green-400"></i>Locations
+                                    </a>
+                                    <a href="{{ url_for('masters.employees') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-users mr-3 text-purple-400"></i>Employees
+                                    </a>
+                                    <a href="{{ url_for('masters.items') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-tags mr-3 text-yellow-400"></i>Items
+                                    </a>
+                                </div>
                             </div>
                         </div>
 
-                        <a href="{{ url_for('reports.dashboard') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <a href="{{ url_for('reports.dashboard') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
                             <i class="fas fa-chart-bar mr-2"></i>Reports
                         </a>
                         {% endif %}
 
                         {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
-                        <a href="{{ url_for('masters.employees') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <a href="{{ url_for('masters.employees') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
                             <i class="fas fa-users mr-2"></i>Employees
                         </a>
                         {% endif %}
 
                         <div class="relative group">
-                            <button class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                            <button class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-all duration-200 hover:bg-gray-700/50">
                                 <i class="fas fa-boxes mr-2"></i>Stock
+                                <i class="fas fa-chevron-down ml-1 transform group-hover:rotate-180 transition-transform"></i>
                             </button>
-                            <div class="absolute left-0 mt-2 w-48 bg-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
-                                {% if current_user.role.value in ['superadmin', 'manager'] %}
-                                <a href="{{ url_for('stock_entry.entry_form') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Stock Entry</a>
-                                {% endif %}
-                                <a href="{{ url_for('stock_entry.balances') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-                                <i class="fas fa-boxes text-gray-400 group-hover:text-gray-300 mr-3"></i>
-                                Stock Balances
-                            </a>
-                            <a href="{{ url_for('low_stock.alerts') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white group flex items-center px-2 py-2 text-sm font-medium rounded-md">
-                                <i class="fas fa-exclamation-triangle text-yellow-400 group-hover:text-yellow-300 mr-3"></i>
-                                Low Stock Alerts
-                            </a>
-                            <a href="{{ url_for('location_inventory.location_inventory') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white">Location Inventory</a>
-                                <a href="{{ url_for('stock_issue.create_request') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">Create Request</a>
-                                <a href="{{ url_for('stock_issue.my_requests') }}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600">My Requests</a>
-                                <a href="{{ url_for('stock_issue.request_tracker') }}" class="text-gray-300 hover:bg-gray-700 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Track Request</a>
+                            <div class="absolute left-0 mt-2 w-56 glass-effect rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 overflow-hidden">
+                                <div class="py-2">
+                                    {% if current_user.role.value in ['superadmin', 'manager','hod'] %}
+                                    <a href="{{ url_for('stock_entry.entry_form') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-plus-circle mr-3 text-green-400"></i>Stock Entry
+                                    </a>
+                                    {% endif %}
+                                    <a href="{{ url_for('stock_entry.balances') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-boxes mr-3 text-blue-400"></i>Stock Balances
+                                    </a>
+                                    <a href="{{ url_for('low_stock.alerts') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-exclamation-triangle mr-3 text-yellow-400"></i>Low Stock Alerts
+                                    </a>
+                                    <a href="{{ url_for('location_inventory.location_inventory') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-warehouse mr-3 text-purple-400"></i>Location Inventory
+                                    </a>
+                                    <div class="border-t border-gray-600 my-2"></div>
+                                    <a href="{{ url_for('stock_issue.create_request') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-paper-plane mr-3 text-indigo-400"></i>Create Request
+                                    </a>
+                                    <a href="{{ url_for('stock_issue.my_requests') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-list mr-3 text-cyan-400"></i>My Requests
+                                    </a>
+                                    <a href="{{ url_for('stock_issue.request_tracker') }}" class="block px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                                        <i class="fas fa-search mr-3 text-orange-400"></i>Track Request
+                                    </a>
+                                </div>
                             </div>
                         </div>
 
                         {% if current_user.role.value == 'hod' %}
-                        <a href="{{ url_for('approvals.pending') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <a href="{{ url_for('approvals.pending') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50 relative">
                             <i class="fas fa-check-circle mr-2"></i>Approvals
+                            <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">!</span>
                         </a>
                         {% endif %}
 
                         {% if current_user.role.value == 'superadmin' %}
-                        <a href="{{ url_for('user_management.users') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                        <a href="{{ url_for('user_management.users') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
                             <i class="fas fa-user-cog mr-2"></i>User Management
                         </a>
-                        <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="block px-4 py-2 text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Warehouse Assignments</a>
+                        <a href="{{ url_for('warehouse_management.warehouse_assignments') }}" class="sidebar-item text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-gray-700/50">
+                            <i class="fas fa-warehouse mr-2"></i>Warehouse
+                        </a>
                         {% endif %}
                     </div>
                 </div>
-                <div class="flex items-center">
-                    <div class="text-gray-300 text-sm mr-4">
-                        {{ current_user.full_name }} ({{ current_user.role.value.title() }})
+                <div class="flex items-center space-x-4">
+                    <div class="hidden md:flex items-center space-x-3">
+                        <div class="text-right">
+                            <div class="text-sm font-medium text-white">{{ current_user.full_name }}</div>
+                            <div class="text-xs text-gray-400">{{ current_user.role.value.title() }}</div>
+                        </div>
+                        <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <span class="text-white font-semibold text-sm">{{ current_user.full_name[:2].upper() }}</span>
+                        </div>
                     </div>
-                    <a href="{{ url_for('auth.logout') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                    <a href="{{ url_for('auth.logout') }}" class="text-gray-300 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:bg-red-600/20">
                         <i class="fas fa-sign-out-alt mr-2"></i>Logout
                     </a>
                 </div>
@@ -98,13 +194,39 @@
     </nav>
     {% endif %}
 
-    <!-- Flash Messages -->
+    <!-- Enhanced Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
+            <div class="fixed top-20 right-4 z-50 space-y-2" id="notifications">
                 {% for category, message in messages %}
-                <div class="flash-message mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-900 text-red-200{% elif category == 'success' %}bg-green-900 text-green-200{% else %}bg-blue-900 text-blue-200{% endif %}">
-                    {{ message }}
+                <div class="notification-enter max-w-sm glass-effect rounded-xl p-4 shadow-2xl border {% if category == 'error' %}border-red-500/50{% elif category == 'success' %}border-green-500/50{% elif category == 'warning' %}border-yellow-500/50{% else %}border-blue-500/50{% endif %}">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            {% if category == 'error' %}
+                                <div class="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                                </div>
+                            {% elif category == 'success' %}
+                                <div class="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check-circle text-green-400"></i>
+                                </div>
+                            {% elif category == 'warning' %}
+                                <div class="w-8 h-8 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                                </div>
+                            {% else %}
+                                <div class="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-info-circle text-blue-400"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="ml-3 flex-1">
+                            <p class="text-sm font-medium text-white">{{ message }}</p>
+                        </div>
+                        <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-gray-400 hover:text-white transition-colors">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -112,24 +234,126 @@
     {% endwith %}
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {% block content %}{% endblock %}
+    <main class="fade-in">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </div>
     </main>
 
-    <script>
-        // Initialize Feather icons
-        feather.replace();
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden">
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="glass-effect rounded-2xl p-8 text-center">
+                <div class="loading-spinner w-12 h-12 border-4 border-gray-600 border-t-blue-500 rounded-full mx-auto mb-4"></div>
+                <p class="text-white font-medium">Processing...</p>
+            </div>
+        </div>
+    </div>
 
-        // Auto-hide flash messages after 5 seconds (only target actual flash message containers)
-        setTimeout(function() {
-            const flashMessages = document.querySelectorAll('.flash-message, [class*="bg-red-900"][class*="mb-4"], [class*="bg-green-900"][class*="mb-4"], [class*="bg-blue-900"][class*="mb-4"]');
-            flashMessages.forEach(function(message) {
-                message.style.opacity = '0';
-                setTimeout(function() {
-                    message.remove();
-                }, 300);
+    <script>
+        // Enhanced JavaScript for better UX
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-hide notifications
+            setTimeout(function() {
+                const notifications = document.querySelectorAll('#notifications > div');
+                notifications.forEach(function(notification) {
+                    notification.style.transition = 'all 0.3s ease-out';
+                    notification.style.transform = 'translateX(100%)';
+                    notification.style.opacity = '0';
+                    setTimeout(function() {
+                        notification.remove();
+                    }, 300);
+                });
+            }, 5000);
+
+            // Form submission loading states
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function() {
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+                        submitBtn.disabled = true;
+                        
+                        // Show loading overlay for longer operations
+                        setTimeout(() => {
+                            document.getElementById('loadingOverlay').classList.remove('hidden');
+                        }, 500);
+                    }
+                });
             });
-        }, 5000);
+
+            // Enhanced table interactions
+            const tables = document.querySelectorAll('table');
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach(row => {
+                    row.addEventListener('mouseenter', function() {
+                        this.style.backgroundColor = 'rgba(75, 85, 99, 0.3)';
+                    });
+                    row.addEventListener('mouseleave', function() {
+                        this.style.backgroundColor = '';
+                    });
+                });
+            });
+
+            // Convert any UTC timestamps to IST display
+            const timeElements = document.querySelectorAll('.timestamp');
+            timeElements.forEach(function(element) {
+                const utcTime = element.textContent;
+                if (utcTime && utcTime !== '') {
+                    const date = new Date(utcTime);
+                    if (!isNaN(date.getTime())) {
+                        const istTime = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+                        element.textContent = istTime.toLocaleString('en-IN', {
+                            timeZone: 'Asia/Kolkata',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }) + ' IST';
+                    }
+                }
+            });
+        });
+
+        // Utility functions
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notifications') || document.body;
+            const notification = document.createElement('div');
+            notification.className = `notification-enter max-w-sm glass-effect rounded-xl p-4 shadow-2xl border border-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-500/50`;
+            notification.innerHTML = `
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-500/20 rounded-full flex items-center justify-center">
+                            <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} text-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-400"></i>
+                        </div>
+                    </div>
+                    <div class="ml-3 flex-1">
+                        <p class="text-sm font-medium text-white">${message}</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-gray-400 hover:text-white transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 300);
+            }, 5000);
+        }
     </script>
 
     {% block scripts %}{% endblock %}
