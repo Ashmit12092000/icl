@@ -1,4 +1,3 @@
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, make_response
 from flask_login import login_required, current_user
 from models import *
@@ -19,7 +18,7 @@ def dashboard():
     # Get date range from request or default to last 30 days
     end_date = datetime.now()
     start_date = end_date - timedelta(days=30)
-    
+
     # Override with custom dates if provided
     if request.args.get('start_date'):
         start_date = datetime.strptime(request.args.get('start_date'), '%Y-%m-%d')
@@ -44,17 +43,17 @@ def dashboard():
     for i in range(12):
         month_start = (datetime.now().replace(day=1) - timedelta(days=i*30)).replace(day=1)
         month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
+
         count = StockIssueRequest.query.filter(
             StockIssueRequest.created_at >= month_start,
             StockIssueRequest.created_at <= month_end
         ).count()
-        
+
         monthly_data.append({
             'month': month_start.strftime('%b %Y'),
             'requests': count
         })
-    
+
     monthly_data.reverse()
 
     # Department-wise statistics
@@ -66,7 +65,7 @@ def dashboard():
             department_id=dept.id, 
             status=RequestStatus.ISSUED
         ).count()
-        
+
         department_stats.append({
             'name': dept.name,
             'total_requests': dept_requests,
@@ -122,7 +121,7 @@ def dashboard():
 def export_data():
     export_type = request.args.get('type', 'requests')
     format_type = request.args.get('format', 'csv')
-    
+
     if export_type == 'requests':
         return export_requests(format_type)
     elif export_type == 'stock':
@@ -150,11 +149,11 @@ def export_requests(format_type):
     if format_type == 'csv':
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Headers
         writer.writerow(['Request No', 'Created Date', 'Requester', 'Department', 
                         'Purpose', 'Status', 'Approved Date', 'Issued Date'])
-        
+
         # Data
         for req in requests:
             writer.writerow([
@@ -167,41 +166,46 @@ def export_requests(format_type):
                 req.approved_at.strftime('%Y-%m-%d %H:%M') if req.approved_at else '',
                 req.issued_at.strftime('%Y-%m-%d %H:%M') if req.issued_at else ''
             ])
-        
+
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv'
         response.headers['Content-Disposition'] = 'attachment; filename=stock_requests.csv'
         return response
 
 def export_stock_balances(format_type):
-    balances = db.session.query(
-        Item.code,
-        Item.name,
-        Location.office,
-        Location.room,
-        StockBalance.quantity,
-        Item.low_stock_threshold
-    ).join(Item).join(Location).all()
+    # Build query for stock data with filters
+    query = db.session.query(
+        Item.code.label('item_code'),
+        Item.name.label('item_name'),
+        Department.name.label('department_name'),
+        Location.name.label('location_name'),
+        StockBalance.quantity.label('quantity'),
+        (StockBalance.quantity * 0).label('value')  # Placeholder for value calculation
+    ).join(StockBalance, Item.id == StockBalance.item_id
+    ).join(Location, StockBalance.location_id == Location.id
+    ).outerjoin(Department, Item.department_id == Department.id)
+    
+    balances = query.all()
 
     if format_type == 'csv':
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Headers
-        writer.writerow(['Item Code', 'Item Name', 'Location Office', 'Location Room', 
+        writer.writerow(['Item Code', 'Item Name', 'Department', 'Location Office', 'Location Room', 
                         'Current Stock', 'Low Stock Threshold'])
-        
+
         # Data
         for balance in balances:
             writer.writerow([
-                balance.code,
-                balance.name,
-                balance.office,
-                balance.room,
+                balance.item_code,
+                balance.item_name,
+                balance.department_name,
+                balance.location_name,
                 balance.quantity,
                 balance.low_stock_threshold
             ])
-        
+
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv'
         response.headers['Content-Disposition'] = 'attachment; filename=stock_balances.csv'
@@ -220,10 +224,10 @@ def export_department_stats(format_type):
     if format_type == 'csv':
         output = StringIO()
         writer = csv.writer(output)
-        
+
         # Headers
         writer.writerow(['Department', 'Total Requests', 'Pending', 'Approved', 'Issued', 'Rejected'])
-        
+
         # Data
         for stat in dept_stats:
             writer.writerow([
@@ -234,7 +238,7 @@ def export_department_stats(format_type):
                 stat.issued or 0,
                 stat.rejected or 0
             ])
-        
+
         response = make_response(output.getvalue())
         response.headers['Content-Type'] = 'text/csv'
         response.headers['Content-Disposition'] = 'attachment; filename=department_stats.csv'
@@ -245,31 +249,31 @@ def export_department_stats(format_type):
 @role_required('superadmin', 'manager', 'hod')
 def chart_data():
     chart_type = request.args.get('type')
-    
+
     if chart_type == 'monthly_requests':
         # Monthly request trends
         monthly_data = []
         for i in range(12):
             month_start = (datetime.now().replace(day=1) - timedelta(days=i*30)).replace(day=1)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-            
+
             count = StockIssueRequest.query.filter(
                 StockIssueRequest.created_at >= month_start,
                 StockIssueRequest.created_at <= month_end
             ).count()
-            
+
             monthly_data.append({
                 'month': month_start.strftime('%b'),
                 'requests': count
             })
-        
+
         monthly_data.reverse()
         return jsonify(monthly_data)
-    
+
     elif chart_type == 'status_distribution':
         status_data = []
         total_requests = StockIssueRequest.query.count()
-        
+
         for status in RequestStatus:
             count = StockIssueRequest.query.filter_by(status=status).count()
             status_data.append({
@@ -277,25 +281,25 @@ def chart_data():
                 'count': count,
                 'percentage': round((count / total_requests * 100) if total_requests > 0 else 0, 1)
             })
-        
+
         return jsonify(status_data)
-    
+
     elif chart_type == 'department_efficiency':
         dept_data = []
         departments = Department.query.all()
-        
+
         for dept in departments:
             total_requests = StockIssueRequest.query.filter_by(department_id=dept.id).count()
             issued_requests = StockIssueRequest.query.filter_by(
                 department_id=dept.id, 
                 status=RequestStatus.ISSUED
             ).count()
-            
+
             dept_data.append({
                 'department': dept.name,
                 'efficiency': round((issued_requests / total_requests * 100) if total_requests > 0 else 0, 1)
             })
-        
+
         return jsonify(dept_data)
-    
+
     return jsonify([])
