@@ -14,7 +14,7 @@ reports_bp = Blueprint('reports', __name__)
 
 @reports_bp.route('/reports')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin', 'manager', 'hod')
 def dashboard():
     # Get date range from request or default to last 30 days
     end_date = datetime.now()
@@ -118,7 +118,7 @@ def dashboard():
 
 @reports_bp.route('/reports/export')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin', 'manager', 'hod')
 def export_data():
     export_type = request.args.get('type', 'requests')
     format_type = request.args.get('format', 'csv')
@@ -242,7 +242,7 @@ def export_department_stats(format_type):
 
 @reports_bp.route('/reports/api/chart-data')
 @login_required
-@role_required('superadmin', 'manager')
+@role_required('superadmin', 'manager', 'hod')
 def chart_data():
     chart_type = request.args.get('type')
     
