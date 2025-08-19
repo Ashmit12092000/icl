@@ -3,6 +3,7 @@ import logging
 from flask import Flask, render_template, redirect, url_for
 from flask_migrate import Migrate
 from flask_login import LoginManager
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from database import db
 
@@ -11,6 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 migrate = Migrate()
 login_manager = LoginManager()
+csrf = CSRFProtect()
 
 def create_app():
     app = Flask(__name__)
@@ -26,6 +28,7 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
+    csrf.init_app(app)
 
     # Import models to ensure they're registered
     from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, Audit
