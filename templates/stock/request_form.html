@@ -60,9 +60,11 @@
                         <table class="min-w-full divide-y divide-gray-700">
                             <thead class="bg-gray-800">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Quantity</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Code</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Requested Qty</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Remarks</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Action</th>
                                 </tr>
@@ -74,6 +76,16 @@
                                         <select name="item_id[]" class="item-select w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
                                             <option value="">Select Location First</option>
                                         </select>
+                                        <span class="item-code text-xs text-gray-400 mt-1 block"></span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-300">
+                                        <span class="item-name"></span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-300">
+                                        <span class="item-description"></span>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-gray-300">
+                                        <span class="item-department"></span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <input type="number"
@@ -82,15 +94,15 @@
                                                min="0.01"
                                                class="quantity-input w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                                                placeholder="Qty"
-                                               required></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                                        <span class="stock-info text-xs"></span>
+                                               required>
+                                        <span class="stock-info text-xs text-gray-400 mt-1 block"></span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                                         <input type="text"
                                                name="item_remarks[]"
                                                class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                                               placeholder="Remarks (optional)"></td>
+                                               placeholder="Remarks (optional)">
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <button type="button" onclick="removeItemRow(this)" class="text-red-500 hover:text-red-700 focus:outline-none">
                                             <i class="fas fa-trash"></i>
@@ -188,6 +200,11 @@ async function fetchItemsForLocation(locationId, itemSelectElement) {
                 const option = document.createElement('option');
                 option.value = item.id;
                 option.textContent = `${item.code} - ${item.name}`;
+                // Store item data as data attributes for easy access
+                option.dataset.itemCode = item.code;
+                option.dataset.itemName = item.name;
+                option.dataset.itemDescription = item.description || '';
+                option.dataset.itemDepartment = item.department ? item.department.name : '';
                 itemSelectElement.appendChild(option);
             });
         } else {
@@ -196,6 +213,29 @@ async function fetchItemsForLocation(locationId, itemSelectElement) {
     } catch (error) {
         console.error('Error fetching items:', error);
         itemSelectElement.innerHTML = '<option value="">Error loading items</option>';
+    }
+}
+
+// Function to update item details when an item is selected
+function updateItemDetails(selectElement) {
+    const row = selectElement.closest('tr');
+    const selectedOption = selectElement.selectedOptions[0];
+    
+    const itemCodeSpan = row.querySelector('.item-code');
+    const itemNameSpan = row.querySelector('.item-name');
+    const itemDescriptionSpan = row.querySelector('.item-description');
+    const itemDepartmentSpan = row.querySelector('.item-department');
+    
+    if (selectedOption && selectedOption.value) {
+        itemCodeSpan.textContent = selectedOption.dataset.itemCode || '';
+        itemNameSpan.textContent = selectedOption.dataset.itemName || '';
+        itemDescriptionSpan.textContent = selectedOption.dataset.itemDescription || '-';
+        itemDepartmentSpan.textContent = selectedOption.dataset.itemDepartment || '-';
+    } else {
+        itemCodeSpan.textContent = '';
+        itemNameSpan.textContent = '';
+        itemDescriptionSpan.textContent = '';
+        itemDepartmentSpan.textContent = '';
     }
 }
 
@@ -210,6 +250,7 @@ function setupStockValidation(row) {
     function validateStock() {
         const itemId = itemSelect.value;
         const locationId = locationSelect.value;
+        updateItemDetails(itemSelect);
         checkStockAvailability(itemId, locationId, quantityInput, stockInfoSpan);
     }
 
@@ -223,6 +264,8 @@ function setupStockValidation(row) {
         // Clear stock info and reset validity when location changes
         stockInfoSpan.textContent = '';
         quantityInput.setCustomValidity('');
+        // Clear item details
+        updateItemDetails(itemSelect);
         // Also, trigger validation for the new items once they are loaded
         itemSelect.addEventListener('change', validateStock, { once: true });
     });
@@ -244,6 +287,16 @@ function addItemRow() {
     if (stockInfo) stockInfo.textContent = '';
     const quantityInput = newRow.querySelector('.quantity-input');
     if (quantityInput) quantityInput.setCustomValidity('');
+
+    // Clear item details
+    const itemCodeSpan = newRow.querySelector('.item-code');
+    const itemNameSpan = newRow.querySelector('.item-name');
+    const itemDescriptionSpan = newRow.querySelector('.item-description');
+    const itemDepartmentSpan = newRow.querySelector('.item-department');
+    if (itemCodeSpan) itemCodeSpan.textContent = '';
+    if (itemNameSpan) itemNameSpan.textContent = '';
+    if (itemDescriptionSpan) itemDescriptionSpan.textContent = '';
+    if (itemDepartmentSpan) itemDepartmentSpan.textContent = '';
 
     // Set the default option for the new item select
     const itemSelect = newRow.querySelector('.item-select');
