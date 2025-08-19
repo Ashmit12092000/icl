@@ -28,6 +28,7 @@
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Date</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Quantity</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created By</th>
@@ -46,6 +47,15 @@
                             <div class="text-gray-400">{{ entry.item.name }}</div>
                         </div>
                     </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {% if entry.item.department %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {{ entry.item.department.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-gray-400">No Department</span>
+                        {% endif %}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {{ entry.location.code }}
                     </td>
@@ -63,7 +73,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" class="px-6 py-4 text-center text-gray-400">No stock entries found.</td>
+                    <td colspan="7" class="px-6 py-4 text-center text-gray-400">No stock entries found.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -99,7 +109,7 @@
                             <i class="fas fa-chevron-left"></i>
                         </a>
                         {% endif %}
-                        
+
                         {% for page_num in entries.iter_pages() %}
                             {% if page_num %}
                                 {% if page_num != entries.page %}
@@ -117,7 +127,7 @@
                             </span>
                             {% endif %}
                         {% endfor %}
-                        
+
                         {% if entries.has_next %}
                         <a href="{{ url_for('stock_entry.entries', page=entries.next_num) }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-600 bg-gray-800 text-sm font-medium text-gray-400 hover:bg-gray-700">
                             <i class="fas fa-chevron-right"></i>
