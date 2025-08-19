@@ -15,6 +15,7 @@ class ItemForm(FlaskForm):
     make = StringField('Make', validators=[Optional(), Length(max=100)])
     variant = StringField('Variant', validators=[Optional(), Length(max=100)])
     description = TextAreaField('Description', validators=[Optional()])
+    department_id = SelectField('Department', coerce=int, validators=[Optional()])
     low_stock_threshold = IntegerField('Low Stock Threshold', validators=[DataRequired(), NumberRange(min=0)], default=5)
 
 class DepartmentForm(FlaskForm):
