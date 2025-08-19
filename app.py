@@ -34,6 +34,13 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
+    # Add template filters
+    from utils import format_ist_datetime
+    
+    @app.template_filter('ist_datetime')
+    def ist_datetime_filter(dt):
+        return format_ist_datetime(dt)
+    
     # Register blueprints
     from auth import auth_bp
     from views.main import main_bp
