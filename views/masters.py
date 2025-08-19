@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from models import User, Department, Location, Item, Employee, UserRole
 from auth import role_required
 from database import db
+from forms import ItemForm # Assuming ItemForm is defined in forms.py
 
 # Mock Audit class for demonstration if not imported
 class Audit:
@@ -459,78 +460,79 @@ def delete_employee(employee_id):
 @role_required('superadmin', 'manager')
 def items():
     items = Item.query.all()
-    return render_template('masters/items.html', items=items)
+    departments = Department.query.all()
+    return render_template('masters/items.html', items=items, departments=departments)
 
 @masters_bp.route('/items/create', methods=['POST'])
 @login_required
 @role_required('superadmin', 'manager')
 def create_item():
-    code = request.form.get('code', '').strip()
-    name = request.form.get('name', '').strip()
-    make = request.form.get('make', '').strip()
-    variant = request.form.get('variant', '').strip()
-    description = request.form.get('description', '').strip()
+    form = ItemForm()
 
-    if not code or not name:
-        flash('Code and name are required.', 'error')
-        return redirect(url_for('masters.items'))
+    # Populate department choices
+    form.department_id.choices = [(0, 'No Department')] + [(d.id, f"{d.code} - {d.name}") for d in Department.query.all()]
 
-    # Check if code already exists
-    if Item.query.filter_by(code=code).first():
-        flash('Item code already exists.', 'error')
-        return redirect(url_for('masters.items'))
+    if form.validate_on_submit():
+        # Check if code already exists
+        existing_item = Item.query.filter_by(code=form.code.data).first()
+        if existing_item:
+            flash('Item code already exists.', 'error')
+            return redirect(url_for('masters.items'))
 
-    item = Item(
-        code=code,
-        name=name,
-        make=make if make else None,
-        variant=variant if variant else None,
-        description=description if description else None
-    )
+        # Create new item
+        item = Item(
+            code=form.code.data,
+            name=form.name.data,
+            make=form.make.data if form.make.data else None,
+            variant=form.variant.data if form.variant.data else None,
+            description=form.description.data if form.description.data else None,
+            department_id=form.department_id.data if form.department_id.data != 0 else None,
+            low_stock_threshold=form.low_stock_threshold.data
+        )
 
-    try:
         db.session.add(item)
         db.session.commit()
+
         flash('Item created successfully.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error creating item.', 'error')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
 
     return redirect(url_for('masters.items'))
 
-@masters_bp.route('/items/<int:item_id>/update', methods=['POST'])
+@masters_bp.route('/items/edit/<int:item_id>', methods=['POST'])
 @login_required
 @role_required('superadmin', 'manager')
-def update_item(item_id):
+def edit_item(item_id):
     item = Item.query.get_or_404(item_id)
+    form = ItemForm(obj=item)
 
-    code = request.form.get('code', '').strip()
-    name = request.form.get('name', '').strip()
-    make = request.form.get('make', '').strip()
-    variant = request.form.get('variant', '').strip()
-    description = request.form.get('description', '').strip()
+    # Populate department choices
+    form.department_id.choices = [(0, 'No Department')] + [(d.id, f"{d.code} - {d.name}") for d in Department.query.all()]
 
-    if not code or not name:
-        flash('Code and name are required.', 'error')
-        return redirect(url_for('masters.items'))
+    if form.validate_on_submit():
+        # Check if code already exists (excluding current item)
+        existing_item = Item.query.filter(Item.code == form.code.data, Item.id != item_id).first()
+        if existing_item:
+            flash('Item code already exists.', 'error')
+            return redirect(url_for('masters.items'))
 
-    # Check if code already exists (excluding current item)
-    existing = Item.query.filter(Item.code == code, Item.id != item_id).first()
-    if existing:
-        flash('Item code already exists.', 'error')
-        return redirect(url_for('masters.items'))
+        # Update item
+        item.code = form.code.data
+        item.name = form.name.data
+        item.make = form.make.data if form.make.data else None
+        item.variant = form.variant.data if form.variant.data else None
+        item.description = form.description.data if form.description.data else None
+        item.department_id = form.department_id.data if form.department_id.data != 0 else None
+        item.low_stock_threshold = form.low_stock_threshold.data
 
-    item.code = code
-    item.name = name
-    item.make = make if make else None
-    item.variant = variant if variant else None
-    item.description = description if description else None
-
-    try:
         db.session.commit()
+
         flash('Item updated successfully.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error updating item.', 'error')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
 
     return redirect(url_for('masters.items'))
