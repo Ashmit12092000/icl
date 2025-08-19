@@ -51,6 +51,12 @@
                 <i class="fas fa-shipping-fast mr-2"></i>Issue Stock
             </a>
             {% endif %}
+
+            {% if request.status.value in ['Approved', 'Issued'] %}
+            <a href="{{ url_for('stock_issue.print_approved_request', request_id=request.id) }}" target="_blank" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none">
+                <i class="fas fa-print mr-2"></i>Print Request
+            </a>
+            {% endif %}
         </div>
     </div>
 
@@ -137,6 +143,9 @@
                             <div>
                                 <div class="font-medium">{{ line.item.code }}</div>
                                 <div class="text-gray-400">{{ line.item.name }}</div>
+                                {% if line.item.description %}
+                                <div class="text-gray-500 text-xs mt-1">{{ line.item.description }}</div>
+                                {% endif %}
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ line.quantity_requested }}</td>
