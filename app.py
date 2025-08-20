@@ -97,7 +97,16 @@ def create_app():
 
     @app.errorhandler(500)
     def internal_error(error):
-        db.session.rollback()
+        try:
+            db.session.rollback()
+        except:
+            pass
+        
+        # Log the error for debugging
+        import traceback
+        print(f"Internal Server Error: {str(error)}")
+        print(traceback.format_exc())
+        
         return render_template('500.html'), 500
 
     return app

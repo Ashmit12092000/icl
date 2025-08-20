@@ -1,0 +1,275 @@
+
+{% extends "base.html" %}
+
+{% block title %}Item Details - {{ item.code }} - Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header with breadcrumb -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+            <a href="{{ url_for('masters.items') }}" class="text-indigo-400 hover:text-indigo-300">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Items
+            </a>
+            <span class="text-gray-400">/</span>
+            <span class="text-white font-medium">{{ item.code }}</span>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="openEditModal()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
+                <i class="fas fa-edit mr-2"></i>Edit Item
+            </button>
+            <button onclick="confirmDelete()" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none">
+                <i class="fas fa-trash mr-2"></i>Delete Item
+            </button>
+        </div>
+    </div>
+
+    <!-- Item Details Card -->
+    <div class="bg-gray-800 shadow-lg rounded-lg overflow-hidden">
+        <div class="px-6 py-4 bg-gray-700 border-b border-gray-600">
+            <h1 class="text-2xl font-bold text-white">{{ item.name }}</h1>
+            <p class="text-sm text-gray-300 mt-1">Item Code: {{ item.code }}</p>
+        </div>
+        
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Basic Information -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-white mb-3 flex items-center">
+                        <i class="fas fa-info-circle text-blue-400 mr-2"></i>
+                        Basic Information
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Code</label>
+                            <p class="text-white">{{ item.code }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Name</label>
+                            <p class="text-white">{{ item.name }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Make</label>
+                            <p class="text-white">{{ item.make or '-' }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Variant</label>
+                            <p class="text-white">{{ item.variant or '-' }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Department & Threshold -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-white mb-3 flex items-center">
+                        <i class="fas fa-building text-green-400 mr-2"></i>
+                        Department & Settings
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Department</label>
+                            {% if item.department %}
+                                <div class="flex items-center space-x-2">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-200">
+                                        {{ item.department.code }}
+                                    </span>
+                                    <span class="text-white">{{ item.department.name }}</span>
+                                </div>
+                            {% else %}
+                                <span class="text-gray-400">All Departments</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Low Stock Threshold</label>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-lg font-semibold text-yellow-400">{{ item.low_stock_threshold }}</span>
+                                <span class="text-sm text-gray-400">units</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timestamps -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-white mb-3 flex items-center">
+                        <i class="fas fa-clock text-purple-400 mr-2"></i>
+                        Timestamps
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Created At</label>
+                            <p class="text-white">{{ item.created_at.strftime('%B %d, %Y at %I:%M %p') }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-400">Created Date</label>
+                            <p class="text-sm text-gray-300">{{ item.created_at.strftime('%A') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description Section -->
+            {% if item.description %}
+            <div class="mt-6 bg-gray-700 rounded-lg p-4">
+                <h3 class="text-lg font-semibold text-white mb-3 flex items-center">
+                    <i class="fas fa-file-text text-orange-400 mr-2"></i>
+                    Description
+                </h3>
+                <p class="text-gray-300 leading-relaxed">{{ item.description }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Stock Information -->
+            <div class="mt-6 bg-gray-700 rounded-lg p-4">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                    <i class="fas fa-warehouse text-cyan-400 mr-2"></i>
+                    Stock Information
+                </h3>
+                {% if stock_balances %}
+                <div class="overflow-x-auto">
+                    <table class="w-full divide-y divide-gray-600">
+                        <thead>
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Location</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Current Stock</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-600">
+                            {% for balance in stock_balances %}
+                            <tr>
+                                <td class="px-4 py-3 text-sm text-white">
+                                    <div>
+                                        <div class="font-medium">{{ balance.location.code }}</div>
+                                        <div class="text-gray-400 text-xs">{{ balance.location.office }}, {{ balance.location.room }}</div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span class="text-lg font-semibold {% if balance.quantity <= item.low_stock_threshold %}text-yellow-400{% else %}text-green-400{% endif %}">
+                                        {{ balance.quantity }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3">
+                                    {% if balance.quantity == 0 %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-200">
+                                        <i class="fas fa-times-circle mr-1"></i>Out of Stock
+                                    </span>
+                                    {% elif balance.quantity <= item.low_stock_threshold %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900 text-yellow-200">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>Low Stock
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900 text-green-200">
+                                        <i class="fas fa-check-circle mr-1"></i>In Stock
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-300">
+                                    {{ balance.last_updated.strftime('%Y-%m-%d %H:%M') }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-8">
+                    <i class="fas fa-box-open text-4xl text-gray-500 mb-4"></i>
+                    <p class="text-gray-400">No stock records found for this item.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white mb-4">Edit Item</h3>
+            <form method="POST" action="{{ url_for('masters.edit_item', item_id=item.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Code*</label>
+                    <input type="text" name="code" value="{{ item.code }}" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Name*</label>
+                    <input type="text" name="name" value="{{ item.name }}" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
+                    <select name="department_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if item.department_id == dept.id %}selected{% endif %}>{{ dept.code }} - {{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Make</label>
+                    <input type="text" name="make" value="{{ item.make or '' }}" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Variant</label>
+                    <input type="text" name="variant" value="{{ item.variant or '' }}" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Description</label>
+                    <textarea name="description" rows="3" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">{{ item.description or '' }}</textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Low Stock Threshold*</label>
+                    <input type="number" name="low_stock_threshold" value="{{ item.low_stock_threshold }}" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <i class="fas fa-exclamation-triangle text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-medium text-white text-center mb-4">Delete Item</h3>
+            <p class="text-gray-300 text-center mb-4">
+                Are you sure you want to delete item <strong>{{ item.code }}</strong>? This action cannot be undone.
+            </p>
+            <form method="POST" action="{{ url_for('masters.delete_item', item_id=item.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="flex justify-center space-x-4">
+                    <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openEditModal() {
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.add('hidden');
+}
+
+function confirmDelete() {
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+}
+</script>
+{% endblock %}
