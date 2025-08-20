@@ -19,7 +19,15 @@ def format_ist_datetime(dt):
     """Format datetime in IST for display"""
     if dt is None:
         return ''
-    ist_dt = convert_to_ist(dt)
+    
+    # If datetime is naive (no timezone info), assume it's already in IST
+    if dt.tzinfo is None:
+        # Assume the naive datetime is already in IST
+        ist_dt = dt.replace(tzinfo=Config.IST_TIMEZONE)
+    else:
+        # Convert timezone-aware datetime to IST
+        ist_dt = dt.astimezone(Config.IST_TIMEZONE)
+    
     return ist_dt.strftime('%Y-%m-%d %H:%M IST')
 
 def datetime_now_ist():

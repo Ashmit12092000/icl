@@ -1,0 +1,355 @@
+
+{% extends "base.html" %}
+
+{% block title %}Transaction History - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header Section -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-white flex items-center">
+                <i class="fas fa-exchange-alt text-blue-400 mr-4"></i>
+                Complete Transaction History
+            </h1>
+            <p class="text-gray-400 mt-2">View all stock movements across the entire system</p>
+        </div>
+        <div class="mt-4 lg:mt-0 flex space-x-3">
+            <button onclick="exportTransactions()" class="glass-effect hover:bg-gray-700/50 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300">
+                <i class="fas fa-download mr-2"></i>Export Data
+            </button>
+            <button onclick="refreshSummary()" class="glass-effect hover:bg-gray-700/50 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div id="summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Summary cards will be loaded here -->
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-effect rounded-2xl p-6">
+        <h2 class="text-xl font-semibold text-white mb-4 flex items-center">
+            <i class="fas fa-filter text-blue-400 mr-3"></i>
+            Filters
+        </h2>
+        
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">From Date</label>
+                <input type="date" name="date_from" value="{{ filters.date_from or '' }}" 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">To Date</label>
+                <input type="date" name="date_to" value="{{ filters.date_to or '' }}" 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Transaction Type</label>
+                <select name="transaction_type" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="all" {% if filters.transaction_type == 'all' %}selected{% endif %}>All Transactions</option>
+                    <option value="entries" {% if filters.transaction_type == 'entries' %}selected{% endif %}>Stock Entries Only</option>
+                    <option value="issues" {% if filters.transaction_type == 'issues' %}selected{% endif %}>Stock Issues Only</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Location</label>
+                <select name="location_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Locations</option>
+                    {% for location in locations %}
+                    <option value="{{ location.id }}" {% if filters.location_id == location.id %}selected{% endif %}>
+                        {{ location.office }} - {{ location.room }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Item</label>
+                <select name="item_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Items</option>
+                    {% for item in items %}
+                    <option value="{{ item.id }}" {% if filters.item_id == item.id %}selected{% endif %}>
+                        {{ item.code }} - {{ item.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="flex items-end">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200">
+                    <i class="fas fa-search mr-2"></i>Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Transaction History Table -->
+    <div class="glass-effect rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-gray-700">
+            <h2 class="text-xl font-semibold text-white flex items-center">
+                <i class="fas fa-list text-blue-400 mr-3"></i>
+                Transaction Timeline
+                <span class="ml-3 text-sm text-gray-400">({{ transactions.total }} total records)</span>
+            </h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-700/50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Date & Time</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Reference</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Quantity</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700">
+                    {% for transaction in transactions.items %}
+                    <tr class="hover:bg-gray-700/30 transition-colors duration-200">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-white">{{ transaction.date|ist_datetime }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                {% if transaction.type == 'entry' %}bg-green-500/20 text-green-300 border border-green-500/30
+                                {% else %}bg-red-500/20 text-red-300 border border-red-500/30
+                                {% endif %}">
+                                {% if transaction.type == 'entry' %}
+                                <i class="fas fa-plus mr-1"></i>Stock In
+                                {% else %}
+                                <i class="fas fa-minus mr-1"></i>Stock Out
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-white font-medium">{{ transaction.reference }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-white font-medium">{{ transaction.item_code }}</div>
+                            <div class="text-xs text-gray-400">{{ transaction.item_name }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-300">{{ transaction.location }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-lg font-bold
+                                {% if transaction.type == 'entry' %}text-green-400
+                                {% else %}text-red-400
+                                {% endif %}">
+                                {% if transaction.type == 'entry' %}+{% else %}-{% endif %}{{ transaction.quantity }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-300">{{ transaction.user }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm text-gray-300">{{ transaction.department or 'N/A' }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-300">{{ transaction.description or 'N/A' }}</div>
+                            {% if transaction.remarks %}
+                            <div class="text-xs text-gray-500 mt-1">{{ transaction.remarks }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="px-6 py-12 text-center">
+                            <i class="fas fa-inbox text-gray-600 text-6xl mb-4"></i>
+                            <h3 class="text-xl font-medium text-gray-400 mb-2">No Transactions Found</h3>
+                            <p class="text-gray-500">No transactions match the selected filters.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if transactions.pages > 1 %}
+        <div class="bg-gray-700/30 px-6 py-4 flex items-center justify-between border-t border-gray-700">
+            <div class="flex-1 flex justify-between items-center">
+                <div class="text-sm text-gray-400">
+                    Showing {{ ((transactions.page - 1) * transactions.per_page + 1) }} to 
+                    {{ ((transactions.page - 1) * transactions.per_page + transactions.items|length) }} of 
+                    {{ transactions.total }} results
+                </div>
+                
+                <div class="flex space-x-1">
+                    {% if transactions.has_prev %}
+                    <a href="{{ url_for('admin_transactions.transaction_history', page=transactions.prev_num, **filters) }}" 
+                       class="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors duration-200">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                    {% endif %}
+                    
+                    {% for page_num in range(max(1, transactions.page - 2), min(transactions.pages + 1, transactions.page + 3)) %}
+                    <a href="{{ url_for('admin_transactions.transaction_history', page=page_num, **filters) }}" 
+                       class="px-3 py-2 {% if page_num == transactions.page %}bg-blue-600{% else %}bg-gray-600 hover:bg-gray-500{% endif %} text-white rounded-lg transition-colors duration-200">
+                        {{ page_num }}
+                    </a>
+                    {% endfor %}
+                    
+                    {% if transactions.has_next %}
+                    <a href="{{ url_for('admin_transactions.transaction_history', page=transactions.next_num, **filters) }}" 
+                       class="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors duration-200">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Load summary statistics
+function refreshSummary() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const dateFrom = urlParams.get('date_from') || '';
+    const dateTo = urlParams.get('date_to') || '';
+    
+    fetch(`{{ url_for('admin_transactions.transaction_summary') }}?date_from=${dateFrom}&date_to=${dateTo}`)
+        .then(response => response.json())
+        .then(data => {
+            const summaryCards = document.getElementById('summary-cards');
+            summaryCards.innerHTML = `
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-plus text-green-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold text-white">${data.entries_count}</div>
+                            <div class="text-sm text-gray-400">Stock Entries</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-minus text-red-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold text-white">${data.issues_count}</div>
+                            <div class="text-sm text-gray-400">Stock Issues</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-arrow-up text-blue-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold text-green-400">+${data.total_quantity_in}</div>
+                            <div class="text-sm text-gray-400">Total Quantity In</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-arrow-down text-purple-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-2xl font-bold text-red-400">-${data.total_quantity_out}</div>
+                            <div class="text-sm text-gray-400">Total Quantity Out</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('Error fetching summary:', error);
+            showNotification('Error loading summary data', 'error');
+        });
+}
+
+// Export transactions
+function exportTransactions() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const filters = {
+        date_from: urlParams.get('date_from') || '',
+        date_to: urlParams.get('date_to') || '',
+        transaction_type: urlParams.get('transaction_type') || 'all',
+        location_id: urlParams.get('location_id') || '',
+        item_id: urlParams.get('item_id') || ''
+    };
+    
+    // Create CSV content
+    let csvContent = 'Date,Type,Reference,Item Code,Item Name,Location,Quantity,User,Department,Description,Remarks\n';
+    
+    // Get visible transactions and export them
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length > 1) { // Skip empty state row
+            const date = cells[0].textContent.trim();
+            const type = cells[1].textContent.trim().replace(/\s+/g, ' ');
+            const reference = cells[2].textContent.trim();
+            const itemCode = cells[3].querySelector('.font-medium').textContent.trim();
+            const itemName = cells[3].querySelector('.text-xs').textContent.trim();
+            const location = cells[4].textContent.trim();
+            const quantity = cells[5].textContent.trim();
+            const user = cells[6].textContent.trim();
+            const department = cells[7].textContent.trim();
+            const description = cells[8].querySelector('.text-sm').textContent.trim();
+            const remarks = cells[8].querySelector('.text-xs') ? cells[8].querySelector('.text-xs').textContent.trim() : '';
+            
+            csvContent += `"${date}","${type}","${reference}","${itemCode}","${itemName}","${location}","${quantity}","${user}","${department}","${description}","${remarks}"\n`;
+        }
+    });
+    
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transaction_history_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    showNotification('Transaction history exported successfully!', 'success');
+}
+
+// Show notification function
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+        type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Load summary on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshSummary();
+});
+</script>
+{% endblock %}

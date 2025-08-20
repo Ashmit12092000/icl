@@ -188,7 +188,7 @@ class StockBalance(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
     quantity = db.Column(db.Numeric(10, 2), nullable=False, default=0)
-    last_updated = db.Column(db.DateTime, default=lambda: get_ist_now(), onupdate=lambda: get_ist_now())
+    last_updated = db.Column(db.DateTime, default=get_ist_now, onupdate=get_ist_now)
 
     # Relationships
     item = db.relationship('Item', back_populates='stock_balances')

@@ -56,6 +56,8 @@ def create_app():
     from views.low_stock import low_stock_bp
     from views.location_inventory import location_inventory_bp
     from views.reports import reports_bp
+    from views.admin_transactions import admin_transactions_bp
+    from views.hod_transactions import hod_transactions_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp)
@@ -68,6 +70,8 @@ def create_app():
     app.register_blueprint(low_stock_bp, url_prefix='/low-stock')
     app.register_blueprint(location_inventory_bp, url_prefix='/location-inventory')
     app.register_blueprint(reports_bp, url_prefix='/reports')
+    app.register_blueprint(admin_transactions_bp, url_prefix='/admin')
+    app.register_blueprint(hod_transactions_bp, url_prefix='/hod')
 
     # Create tables and create single superadmin demo account
     with app.app_context():

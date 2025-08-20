@@ -315,6 +315,9 @@
                                     <a href="{{ url_for('user_management.users') }}" class="dropdown-item">
                                         <i class="fas fa-users-cog text-cyan-400"></i>User Management
                                     </a>
+                                    <a href="{{ url_for('admin_transactions.transaction_history') }}" class="dropdown-item">
+                                        <i class="fas fa-exchange-alt mr-2"></i>Transaction History
+                                    </a>
                                 </div>
                             </div>
                             {% endif %}
@@ -416,6 +419,9 @@
                                 <i class="fas fa-history text-blue-400"></i>
                                 <span>Approval History</span>
                             </a>
+                            <a href="{{ url_for('hod_transactions.department_transactions') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-exchange-alt text-green-400"></i>Transaction History
+                            </a>
                         </div>
                     </div>
                     {% endif %}
@@ -471,6 +477,9 @@
                         <div class="mobile-dropdown-content">
                             <a href="{{ url_for('user_management.users') }}" class="mobile-dropdown-item">
                                 <i class="fas fa-users-cog mr-3"></i>User Management
+                            </a>
+                            <a href="{{ url_for('admin_transactions.transaction_history') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-exchange-alt mr-3"></i>Transaction History
                             </a>
                         </div>
                     </div>

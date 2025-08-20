@@ -22,7 +22,7 @@
 
     <!-- Stats Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {% if current_user.role.value in ['superadmin', 'manager'] %}
+        {% if current_user.role.value in ['superadmin'] %}
         <!-- Today's Requests -->
         <div class="glass-effect rounded-2xl p-6 card-hover">
             <div class="flex items-center justify-between">
@@ -315,7 +315,8 @@
                 </a>
             </div>
             {% endif %}
-
+            
+            {% if current_user.role.value != 'employee' %}
             <a href="{{ url_for('stock_entry.entry_form') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center group-hover:bg-green-500/30 transition-colors">
@@ -327,6 +328,7 @@
                     </div>
                 </div>
             </a>
+            {% endif %}
 
             <a href="{{ url_for('stock_issue.create_request') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
                 <div class="flex items-center space-x-3">
@@ -349,6 +351,18 @@
                     <div>
                         <p class="font-medium text-white">Approvals</p>
                         <p class="text-sm text-gray-400">Review requests</p>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('hod_transactions.department_transactions') }}" class="group glass-effect rounded-xl p-4 hover:bg-gray-700/50 transition-all duration-300 card-hover">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center group-hover:bg-green-500/30 transition-colors">
+                        <i class="fas fa-exchange-alt text-green-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-medium text-white">Transaction History</p>
+                        <p class="text-sm text-gray-400">View dept. transactions</p>
                     </div>
                 </div>
             </a>
