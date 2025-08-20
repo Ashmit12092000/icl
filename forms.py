@@ -16,7 +16,7 @@ class ItemForm(FlaskForm):
     variant = StringField('Variant', validators=[Optional(), Length(max=100)])
     description = TextAreaField('Description', validators=[Optional()])
     department_id = SelectField('Department', coerce=int, validators=[Optional()])
-    low_stock_threshold = IntegerField('Low Stock Threshold', validators=[DataRequired(), NumberRange(min=0)], default=5)
+    low_stock_threshold = IntegerField('Low Stock Threshold', validators=[Optional(), NumberRange(min=0, message="Threshold must be 0 or greater (0 means no low stock alerts)")], default=0)
 
 class DepartmentForm(FlaskForm):
     code = StringField('Department Code', validators=[DataRequired(), Length(max=20)])
@@ -104,7 +104,7 @@ class StockIssueItemForm(FlaskForm):
 
     def __init__(self, user=None, *args, **kwargs):
         super(StockIssueItemForm, self).__init__(*args, **kwargs)
-        
+
         # Filter items based on user's department
         if user and user.is_authenticated and user.department_id:
             # Filter items by user's department or items with no department (available to all)
@@ -114,7 +114,7 @@ class StockIssueItemForm(FlaskForm):
         else:
             # Show all items for admin users or users without department
             items = Item.query.all()
-        
+
         self.item_id.choices = [(i.id, f"{i.code} - {i.name}") for i in items]
 
         # Filter locations based on user's assigned warehouses
