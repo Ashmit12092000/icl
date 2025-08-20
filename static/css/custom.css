@@ -424,48 +424,6 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--gray-50);
 }
 
-/* Enhanced responsive table styles */
-.table-responsive {
-    border-radius: var(--border-radius-lg);
-    overflow: auto;
-    max-width: 100%;
-}
-
-.table-expandable {
-    table-layout: auto;
-    width: 100%;
-    min-width: 800px;
-}
-
-.table-expandable th,
-.table-expandable td {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-    min-width: 100px;
-}
-
-.table-expandable .text-nowrap {
-    white-space: nowrap;
-}
-
-.table-expandable .break-words {
-    word-break: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
-}
-
-/* Specific column width handling */
-.col-code { min-width: 100px; max-width: 120px; }
-.col-name { min-width: 150px; max-width: 200px; }
-.col-department { min-width: 150px; max-width: 200px; }
-.col-make { min-width: 100px; max-width: 150px; }
-.col-variant { min-width: 100px; max-width: 150px; }
-.col-description { min-width: 200px; }
-.col-threshold { min-width: 80px; max-width: 100px; }
-.col-date { min-width: 100px; max-width: 120px; }
-.col-actions { min-width: 80px; max-width: 100px; }
-
 /* Badges */
 .badge {
     font-weight: 600;

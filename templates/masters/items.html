@@ -20,85 +20,63 @@
 
     <!-- Items Table -->
     <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
-        <div class="overflow-x-auto">
-            <table class="w-full divide-y divide-gray-700" style="min-width: 1200px; table-layout: auto;">
-                <thead class="bg-gray-700">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap" style="width: 10%;">Code</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" style="width: 15%;">Name</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" style="width: 15%;">Department</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" style="width: 10%;">Make</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" style="width: 10%;">Variant</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider" style="width: 20%;">Description</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap" style="width: 8%;">Threshold</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap" style="width: 8%;">Created</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap" style="width: 4%;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-gray-800 divide-y divide-gray-700">
-                    {% for item in items %}
-                    <tr>
-                        <td class="px-4 py-4 text-sm font-medium text-white">
-                            <div class="break-words">{{ item.code }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="break-words">{{ item.name }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="break-words">
-                                {% if item.department %}
-                                    {{ item.department.code }} - {{ item.department.name }}
-                                {% else %}
-                                    <span class="text-gray-500">All Departments</span>
-                                {% endif %}
-                            </div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="break-words">{{ item.make or '-' }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="break-words">{{ item.variant or '-' }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="break-words" title="{{ item.description or '' }}">
-                                {% if item.description %}
-                                    {{ item.description }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="whitespace-nowrap">{{ item.low_stock_threshold }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="whitespace-nowrap">{{ item.created_at.strftime('%Y-%m-%d') }}</div>
-                        </td>
-                        <td class="px-4 py-4 text-sm text-gray-300">
-                            <div class="flex space-x-2 whitespace-nowrap">
-                                <a href="{{ url_for('masters.item_detail', item_id=item.id) }}"
-                                   class="text-blue-400 hover:text-blue-300" title="View Details">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', {{ item.department_id or 'null' }}, '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}', {{ item.low_stock_threshold }})"
-                                        class="text-indigo-400 hover:text-indigo-300" title="Edit">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="confirmDelete({{ item.id }}, '{{ item.code }}')"
-                                        class="text-red-400 hover:text-red-300" title="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="9" class="px-6 py-4 text-center text-gray-400">No items found.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <table class="min-w-full divide-y divide-gray-700">
+            <thead class="bg-gray-700">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Code</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Make</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Variant</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Description</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Low Stock Threshold</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-gray-800 divide-y divide-gray-700">
+                {% for item in items %}
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{{ item.code }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {% if item.department %}
+                            {{ item.department.code }} - {{ item.department.name }}
+                        {% else %}
+                            <span class="text-gray-500">All Departments</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.make or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.variant or '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-300">
+                        {% if item.description %}
+                            {{ item.description[:50] }}{% if item.description|length > 50 %}...{% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.low_stock_threshold }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ item.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        <div class="flex space-x-2">
+                            <button onclick="openEditModal({{ item.id }}, '{{ item.code }}', '{{ item.name }}', {{ item.department_id or 'null' }}, '{{ item.make or '' }}', '{{ item.variant or '' }}', '{{ item.description or '' }}', {{ item.low_stock_threshold }})"
+                                    class="text-indigo-400 hover:text-indigo-300" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="confirmDelete({{ item.id }}, '{{ item.code }}')"
+                                    class="text-red-400 hover:text-red-300" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="px-6 py-4 text-center text-gray-400">No items found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -136,18 +114,11 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Description</label>
-                    <textarea name="description" rows="4" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white min-h-[100px] resize-y"></textarea>
+                    <textarea name="description" rows="3" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"></textarea>
                 </div>
                 <div class="mb-4">
-                    <label class="block text-gray-300 text-sm font-bold mb-2">Low Stock Threshold</label>
-                    <div class="flex items-center space-x-2">
-                        <input type="checkbox" id="enableThreshold" name="enable_threshold" class="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out">
-                        <label for="enableThreshold" class="text-gray-300">Low threshold value</label>
-                    </div>
-                </div>
-                <div id="thresholdInput" class="mb-4 hidden">
-                    <label class="block text-gray-300 text-sm font-bold mb-2">Threshold Value*</label>
-                    <input type="number" name="low_stock_threshold" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <label class="block text-gray-300 text-sm font-bold mb-2">Low Stock Threshold*</label>
+                    <input type="number" name="low_stock_threshold" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                 </div>
                 <div class="flex justify-end space-x-2">
                     <button type="button" onclick="closeCreateModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
@@ -192,7 +163,7 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Description</label>
-                    <textarea name="description" id="editDescription" rows="4" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white min-h-[100px] resize-y"></textarea>
+                    <textarea name="description" id="editDescription" rows="3" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"></textarea>
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Low Stock Threshold*</label>
@@ -232,35 +203,11 @@
 <script>
 function openCreateModal() {
     document.getElementById('createModal').classList.remove('hidden');
-    // Reset form state
-    document.getElementById('enableThreshold').checked = false;
-    document.getElementById('thresholdInput').classList.add('hidden');
-    document.querySelector('input[name="low_stock_threshold"]').removeAttribute('required');
 }
 
 function closeCreateModal() {
     document.getElementById('createModal').classList.add('hidden');
 }
-
-// Add event listener for radio button
-document.addEventListener('DOMContentLoaded', function() {
-    const enableThresholdRadio = document.getElementById('enableThreshold');
-    const thresholdInput = document.getElementById('thresholdInput');
-    const thresholdField = document.querySelector('input[name="low_stock_threshold"]');
-
-    if (enableThresholdRadio) {
-        enableThresholdRadio.addEventListener('change', function() {
-            if (this.checked) {
-                thresholdInput.classList.remove('hidden');
-                thresholdField.setAttribute('required', 'required');
-            } else {
-                thresholdInput.classList.add('hidden');
-                thresholdField.removeAttribute('required');
-                thresholdField.value = '';
-            }
-        });
-    }
-});
 
 function openEditModal(id, code, name, departmentId, make, variant, description, low_stock_threshold) {
     document.getElementById('editCode').value = code;

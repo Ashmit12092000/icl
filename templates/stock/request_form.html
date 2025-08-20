@@ -42,13 +42,10 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-2">Location</label>
-                        <select name="location_id" required class="searchable-dropdown location-dropdown w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" data-placeholder="Search and select location...">
+                        <select name="location_id" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                             <option value="">Select Location</option>
                             {% for location in locations %}
-                            <option value="{{ location.id }}" 
-                                data-code="{{ location.code }}" 
-                                data-office="{{ location.office }}" 
-                                data-room="{{ location.room }}">{{ location.office }} - {{ location.room }}</option>
+                            <option value="{{ location.id }}">{{ location.office }} - {{ location.room }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -116,13 +113,10 @@ function addItemRow() {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Item</label>
-                <select name="item_id[]" class="searchable-dropdown item-dropdown w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required onchange="updateStockBalance(this)" data-placeholder="Search and select item...">
+                <select name="item_id[]" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required onchange="updateStockBalance(this)">
                     <option value="">Select Item</option>
                     {% for item in items %}
-                    <option value="{{ item.id }}" 
-                        data-code="{{ item.code }}" 
-                        data-category="{{ item.category }}" 
-                        data-unit="{{ item.unit }}">{{ item.code }} - {{ item.name }}</option>
+                    <option value="{{ item.id }}">{{ item.code }} - {{ item.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -142,11 +136,6 @@ function addItemRow() {
         </div>
     `;
     container.appendChild(itemRow);
-    
-    // Reinitialize searchable dropdowns for the new row
-    if (typeof window.SearchableDropdown !== 'undefined') {
-        window.SearchableDropdown.refresh();
-    }
 }
 
 function removeItemRow(button) {

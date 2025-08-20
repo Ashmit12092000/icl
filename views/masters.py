@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import User, Department, Location, Item, Employee, UserRole, StockBalance, StockEntry, StockIssueLine
+from models import User, Department, Location, Item, Employee, UserRole
 from auth import role_required
 from database import db
 from forms import ItemForm # Assuming ItemForm is defined in forms.py
@@ -15,14 +15,12 @@ masters_bp = Blueprint('masters', __name__)
 
 @masters_bp.route('/departments')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin')
 def departments():
-    try:
-        departments = Department.query.all()
-        return render_template('masters/departments.html', departments=departments)
-    except Exception as e:
-        flash('Error loading departments.', 'error')
-        return redirect(url_for('main.dashboard'))
+    departments = Department.query.all()
+    # Fetch users who are HODs and active for department creation dropdown
+    users = User.query.filter_by(role=UserRole.HOD, is_active=True).all()
+    return render_template('masters/departments.html', departments=departments, users=users)
 
 @masters_bp.route('/departments/create', methods=['POST'])
 @login_required
@@ -201,14 +199,10 @@ def assign_hod_to_department(dept_id):
 
 @masters_bp.route('/locations')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin')
 def locations():
-    try:
-        locations = Location.query.all()
-        return render_template('masters/locations.html', locations=locations)
-    except Exception as e:
-        flash('Error loading locations.', 'error')
-        return redirect(url_for('main.dashboard'))
+    locations = Location.query.all()
+    return render_template('masters/locations.html', locations=locations)
 
 @masters_bp.route('/locations/create', methods=['POST'])
 @login_required
@@ -330,26 +324,22 @@ def delete_location(location_id):
 
 @masters_bp.route('/employees')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin','hod')
 def employees():
-    try:
-        if current_user.role == UserRole.HOD:
-            # HOD can only see employees in their department
-            if current_user.managed_department:
-                employees = Employee.query.filter_by(
-                    department_id=current_user.managed_department.id
-                ).all()
-            else:
-                employees = []
+    if current_user.role == UserRole.HOD:
+        # HOD can only see employees from their department
+        dept_id = current_user.managed_department.id if current_user.managed_department else None
+        if dept_id:
+            employees = Employee.query.filter_by(department_id=dept_id).all()
         else:
-            # Superadmin and Manager can see all employees
-            employees = Employee.query.all()
+            employees = []
+    else:
+        employees = Employee.query.all()
 
-        departments = Department.query.all()
-        return render_template('masters/employees.html', employees=employees, departments=departments)
-    except Exception as e:
-        flash('Error loading employees.', 'error')
-        return redirect(url_for('main.dashboard'))
+    departments = Department.query.all()
+    users = User.query.filter_by(is_active=True).all()
+    return render_template('masters/employees.html', employees=employees, 
+                         departments=departments, users=users)
 
 @masters_bp.route('/employees/create', methods=['POST'])
 @login_required
@@ -487,168 +477,116 @@ def delete_employee(employee_id):
 
 @masters_bp.route('/items')
 @login_required
-@role_required('superadmin', 'manager', 'hod')
+@role_required('superadmin')
 def items():
-    try:
-        items = Item.query.all()
-        departments = Department.query.all()
-        return render_template('masters/items.html', items=items, departments=departments)
-    except Exception as e:
-        flash('Error loading items.', 'error')
-        return redirect(url_for('main.dashboard'))
+    items = Item.query.all()
+    departments = Department.query.all()
+    return render_template('masters/items.html', items=items, departments=departments)
 
 @masters_bp.route('/items/create', methods=['POST'])
 @login_required
 @role_required('superadmin' )
 def create_item():
-    code = request.form.get('code', '').strip()
-    name = request.form.get('name', '').strip()
-    make = request.form.get('make', '').strip()
-    variant = request.form.get('variant', '').strip()
-    description = request.form.get('description', '').strip()
-    department_id = request.form.get('department_id')
-    threshold_option = request.form.get('threshold_option')
-    low_stock_threshold = request.form.get('low_stock_threshold')
+    form = ItemForm()
 
-    if not code or not name:
-        flash('Item code and name are required.', 'error')
-        return redirect(url_for('masters.items'))
+    # Populate department choices
+    form.department_id.choices = [(0, 'No Department')] + [(d.id, f"{d.code} - {d.name}") for d in Department.query.all()]
 
-    # Check if code already exists
-    existing_item = Item.query.filter_by(code=code).first()
-    if existing_item:
-        flash('Item code already exists.', 'error')
-        return redirect(url_for('masters.items'))
-
-    # Handle threshold logic
-    if threshold_option == 'enable' and low_stock_threshold:
-        try:
-            threshold_value = float(low_stock_threshold)
-            if threshold_value < 0:
-                flash('Threshold must be a positive number.', 'error')
-                return redirect(url_for('masters.items'))
-        except ValueError:
-            flash('Invalid threshold value.', 'error')
+    if form.validate_on_submit():
+        # Check if code already exists
+        existing_item = Item.query.filter_by(code=form.code.data).first()
+        if existing_item:
+            flash('Item code already exists.', 'error')
             return redirect(url_for('masters.items'))
-    else:
-        threshold_value = 0
 
-    # Create new item
-    item = Item(
-        code=code,
-        name=name,
-        make=make if make else None,
-        variant=variant if variant else None,
-        description=description if description else None,
-        department_id=int(department_id) if department_id and int(department_id) != 0 else None,
-        low_stock_threshold=threshold_value
-    )
-
-    try:
-        db.session.add(item)
-        db.session.flush()  # Get the item ID
-
-        # Log audit
-        Audit.log(
-            entity_type='Item',
-            entity_id=item.id,
-            action='CREATE',
-            user_id=current_user.id,
-            details=f'Created item {code} - {name} with threshold {threshold_value}'
+        # Create new item
+        item = Item(
+            code=form.code.data,
+            name=form.name.data,
+            make=form.make.data if form.make.data else None,
+            variant=form.variant.data if form.variant.data else None,
+            description=form.description.data if form.description.data else None,
+            department_id=form.department_id.data if form.department_id.data != 0 else None,
+            low_stock_threshold=form.low_stock_threshold.data
         )
 
+        db.session.add(item)
         db.session.commit()
+
         flash('Item created successfully.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error creating item.', 'error')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
 
     return redirect(url_for('masters.items'))
-
-@masters_bp.route('/items/<int:item_id>')
-@login_required
-@role_required('superadmin', 'manager', 'hod')
-def item_detail(item_id):
-    try:
-        item = Item.query.get_or_404(item_id)
-        return render_template('masters/item_detail.html', item=item)
-    except Exception as e:
-        flash('Error loading item details.', 'error')
-        return redirect(url_for('masters.items'))
 
 @masters_bp.route('/items/edit/<int:item_id>', methods=['POST'])
 @login_required
 @role_required('superadmin')
 def edit_item(item_id):
     item = Item.query.get_or_404(item_id)
+    form = ItemForm(obj=item)
 
-    try:
-        code = request.form.get('code', '').strip()
-        name = request.form.get('name', '').strip()
-        make = request.form.get('make', '').strip()
-        variant = request.form.get('variant', '').strip()
-        description = request.form.get('description', '').strip()
-        department_id = request.form.get('department_id')
-        low_stock_threshold = request.form.get('low_stock_threshold')
+    # Populate department choices
+    form.department_id.choices = [(0, 'No Department')] + [(d.id, f"{d.code} - {d.name}") for d in Department.query.all()]
 
-        if not code or not name:
-            flash('Item code and name are required.', 'error')
-            return redirect(url_for('masters.items'))
-
+    if form.validate_on_submit():
         # Check if code already exists (excluding current item)
-        existing = Item.query.filter(
-            Item.code == code, Item.id != item_id
-        ).first()
-        if existing:
+        existing_item = Item.query.filter(Item.code == form.code.data, Item.id != item_id).first()
+        if existing_item:
             flash('Item code already exists.', 'error')
             return redirect(url_for('masters.items'))
 
-        item.code = code
-        item.name = name
-        item.make = make if make else None
-        item.variant = variant if variant else None
-        item.description = description if description else None
-        item.department_id = int(department_id) if department_id and int(department_id) != 0 else None
-        item.low_stock_threshold = float(low_stock_threshold) if low_stock_threshold else 0
-
-        # Log audit
-        Audit.log(
-            entity_type='Item',
-            entity_id=item.id,
-            action='UPDATE',
-            user_id=current_user.id,
-            details=f'Updated item {code} - {name}'
-        )
+        # Update item
+        item.code = form.code.data
+        item.name = form.name.data
+        item.make = form.make.data if form.make.data else None
+        item.variant = form.variant.data if form.variant.data else None
+        item.description = form.description.data if form.description.data else None
+        item.department_id = form.department_id.data if form.department_id.data != 0 else None
+        item.low_stock_threshold = form.low_stock_threshold.data
 
         db.session.commit()
+
         flash('Item updated successfully.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error updating item.', 'error')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
 
     return redirect(url_for('masters.items'))
 
-@masters_bp.route('/items/<int:item_id>/delete', methods=['POST'])
+@masters_bp.route('/items/delete/<int:item_id>', methods=['POST'])
 @login_required
 @role_required('superadmin')
 def delete_item(item_id):
+    item = Item.query.get_or_404(item_id)
+
     try:
-        item = Item.query.get_or_404(item_id)
+        # Check if item has stock balances or entries
+        from models import StockBalance, StockEntry, StockIssueLine
 
-        # Log audit before deletion
-        Audit.log(
-            entity_type='Item',
-            entity_id=item.id,
-            action='DELETE',
-            user_id=current_user.id,
-            details=f'Deleted item {item.code} - {item.name}'
-        )
+        has_balances = StockBalance.query.filter_by(item_id=item_id).first()
+        has_entries = StockEntry.query.filter_by(item_id=item_id).first()
+        has_issues = StockIssueLine.query.filter_by(item_id=item_id).first()
 
-        # Soft delete - mark as inactive
-        item.is_active = False
-        db.session.commit()
+        if has_balances or has_entries or has_issues:
+            flash('Cannot delete item. It has associated stock records, entries, or issue requests.', 'error')
+        else:
+            # Log audit
+            Audit.log(
+                entity_type='Item',
+                entity_id=item.id,
+                action='DELETE',
+                user_id=current_user.id,
+                details=f'Deleted item {item.code} - {item.name}'
+            )
 
-        flash('Item deleted successfully.', 'success')
+            db.session.delete(item)
+            db.session.commit()
+            flash('Item deleted successfully.', 'success')
+
     except Exception as e:
         db.session.rollback()
         flash('Error deleting item. Item may have associated records.', 'error')
