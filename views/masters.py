@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import User, Department, Location, Item, Employee, UserRole
+from models import User, Department, Location, Item, Employee, UserRole, StockBalance, StockEntry, StockIssueRequest, StockIssueLine
 from auth import role_required
 from database import db
 from forms import ItemForm # Assuming ItemForm is defined in forms.py
@@ -507,7 +507,7 @@ def create_item():
             variant=form.variant.data if form.variant.data else None,
             description=form.description.data if form.description.data else None,
             department_id=form.department_id.data if form.department_id.data != 0 else None,
-            low_stock_threshold=form.low_stock_threshold.data
+            low_stock_threshold=form.low_stock_threshold.data if form.low_stock_threshold.data is not None else 0
         )
 
         db.session.add(item)
@@ -545,7 +545,7 @@ def edit_item(item_id):
         item.variant = form.variant.data if form.variant.data else None
         item.description = form.description.data if form.description.data else None
         item.department_id = form.department_id.data if form.department_id.data != 0 else None
-        item.low_stock_threshold = form.low_stock_threshold.data
+        item.low_stock_threshold = form.low_stock_threshold.data if form.low_stock_threshold.data is not None else 0
 
         db.session.commit()
 
@@ -557,6 +557,38 @@ def edit_item(item_id):
 
     return redirect(url_for('masters.items'))
 
+@masters_bp.route('/items/details/<int:item_id>')
+@login_required
+@role_required('superadmin')
+def item_details(item_id):
+    item = Item.query.get_or_404(item_id)
+    
+    # Get stock balances for this item across all locations
+    stock_balances = StockBalance.query.filter_by(item_id=item_id).join(Location).all()
+    
+    # Get recent stock entries for this item
+    recent_entries = StockEntry.query.filter_by(item_id=item_id).order_by(StockEntry.created_at.desc()).limit(10).all()
+    
+    # Get recent issue lines for this item
+    recent_issues = StockIssueLine.query.filter_by(item_id=item_id).join(StockIssueRequest).order_by(StockIssueRequest.created_at.desc()).limit(10).all()
+    
+    # Calculate total stock across all locations
+    total_stock = sum(balance.quantity for balance in stock_balances)
+    
+    # Get low stock locations
+    low_stock_locations = []
+    for balance in stock_balances:
+        if balance.quantity <= item.low_stock_threshold:
+            low_stock_locations.append(balance.location)
+    
+    return render_template('masters/item_details.html', 
+                         item=item,
+                         stock_balances=stock_balances,
+                         recent_entries=recent_entries,
+                         recent_issues=recent_issues,
+                         total_stock=total_stock,
+                         low_stock_locations=low_stock_locations)
+
 @masters_bp.route('/items/delete/<int:item_id>', methods=['POST'])
 @login_required
 @role_required('superadmin')
@@ -565,8 +597,6 @@ def delete_item(item_id):
 
     try:
         # Check if item has stock balances or entries
-        from models import StockBalance, StockEntry, StockIssueLine
-
         has_balances = StockBalance.query.filter_by(item_id=item_id).first()
         has_entries = StockEntry.query.filter_by(item_id=item_id).first()
         has_issues = StockIssueLine.query.filter_by(item_id=item_id).first()
