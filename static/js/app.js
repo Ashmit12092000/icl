@@ -1,6 +1,6 @@
 // IT Stock Management - Enhanced JavaScript functionality
 document.addEventListener('DOMContentLoaded', function() {
-    
+
     // Initialize all components
     initializeModals();
     initializeNotifications();
@@ -8,7 +8,17 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeTableEnhancements();
     initializeConfirmDialogs();
     initializeMobileMenu();
-    
+
+    // Initialize Select2 for all searchable selects globally
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+        $('.searchable-select').select2({
+            placeholder: "Type to search...",
+            allowClear: true,
+            width: '100%',
+            theme: 'default'
+        });
+    }
+
     console.log('IT Stock Management App initialized');
 });
 
@@ -17,7 +27,7 @@ function initializeMobileMenu() {
     const mobileMenuButton = document.getElementById('mobile-menu-button');
     const mobileMenu = document.getElementById('mobile-menu');
     const mobileDropdownToggles = document.querySelectorAll('.mobile-dropdown-toggle');
-    
+
     // Toggle mobile menu
     if (mobileMenuButton && mobileMenu) {
         mobileMenuButton.addEventListener('click', function() {
@@ -29,7 +39,7 @@ function initializeMobileMenu() {
                 icon.className = 'fas fa-times';
             }
         });
-        
+
         // Close mobile menu when clicking outside
         document.addEventListener('click', function(e) {
             if (!mobileMenuButton.contains(e.target) && !mobileMenu.contains(e.target)) {
@@ -38,7 +48,7 @@ function initializeMobileMenu() {
             }
         });
     }
-    
+
     // Handle mobile dropdown toggles
     mobileDropdownToggles.forEach(toggle => {
         toggle.addEventListener('click', function(e) {
@@ -57,7 +67,7 @@ function initializeModals() {
             closeAllModals();
         }
     });
-    
+
     // Close modals with Escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
@@ -97,7 +107,7 @@ function showNotification(message, type = 'info') {
         warning: 'bg-yellow-900 text-yellow-200 border-yellow-800',
         info: 'bg-blue-900 text-blue-200 border-blue-800'
     };
-    
+
     const notification = document.createElement('div');
     notification.className = `fixed top-4 right-4 max-w-sm p-4 rounded-md border ${colors[type]} shadow-lg z-50 flash-message`;
     notification.innerHTML = `
@@ -115,9 +125,9 @@ function showNotification(message, type = 'info') {
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (notification.parentNode) {
@@ -130,15 +140,15 @@ function showNotification(message, type = 'info') {
 // Form Validation Enhancement
 function initializeFormValidation() {
     const forms = document.querySelectorAll('form');
-    
+
     forms.forEach(form => {
         const submitButton = form.querySelector('button[type="submit"]');
-        
+
         form.addEventListener('submit', function(e) {
             if (submitButton) {
                 submitButton.classList.add('loading');
                 submitButton.disabled = true;
-                
+
                 // Re-enable after 3 seconds to prevent permanent disable on validation errors
                 setTimeout(() => {
                     submitButton.classList.remove('loading');
@@ -146,14 +156,14 @@ function initializeFormValidation() {
                 }, 3000);
             }
         });
-        
+
         // Real-time validation for required fields
         const requiredFields = form.querySelectorAll('[required]');
         requiredFields.forEach(field => {
             field.addEventListener('blur', function() {
                 validateField(field);
             });
-            
+
             field.addEventListener('input', function() {
                 if (field.classList.contains('form-error')) {
                     validateField(field);
@@ -166,9 +176,9 @@ function initializeFormValidation() {
 function validateField(field) {
     const value = field.value.trim();
     const isValid = field.checkValidity() && value !== '';
-    
+
     field.classList.remove('form-error', 'form-success');
-    
+
     if (!isValid) {
         field.classList.add('form-error');
         showFieldError(field, getValidationMessage(field));
@@ -176,7 +186,7 @@ function validateField(field) {
         field.classList.add('form-success');
         hideFieldError(field);
     }
-    
+
     return isValid;
 }
 
@@ -213,11 +223,11 @@ function hideFieldError(field) {
 // Table Enhancements
 function initializeTableEnhancements() {
     const tables = document.querySelectorAll('table');
-    
+
     tables.forEach(table => {
         // Add hover effects
         table.classList.add('table-hover');
-        
+
         // Make tables responsive
         if (!table.parentNode.classList.contains('overflow-x-auto')) {
             const wrapper = document.createElement('div');
@@ -225,7 +235,7 @@ function initializeTableEnhancements() {
             table.parentNode.insertBefore(wrapper, table);
             wrapper.appendChild(table);
         }
-        
+
         // Add sorting capability to headers (if not already implemented)
         const headers = table.querySelectorAll('th');
         headers.forEach((header, index) => {
@@ -240,31 +250,31 @@ function initializeTableEnhancements() {
 function sortTable(table, columnIndex) {
     const tbody = table.querySelector('tbody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    
+
     const isAscending = table.dataset.sortDirection !== 'asc';
     table.dataset.sortDirection = isAscending ? 'asc' : 'desc';
-    
+
     rows.sort((a, b) => {
         const aValue = a.cells[columnIndex]?.textContent.trim() || '';
         const bValue = b.cells[columnIndex]?.textContent.trim() || '';
-        
+
         // Try to parse as numbers first
         const aNum = parseFloat(aValue);
         const bNum = parseFloat(bValue);
-        
+
         if (!isNaN(aNum) && !isNaN(bNum)) {
             return isAscending ? aNum - bNum : bNum - aNum;
         }
-        
+
         // String comparison
         return isAscending ? 
             aValue.localeCompare(bValue) : 
             bValue.localeCompare(aValue);
     });
-    
+
     // Update table
     rows.forEach(row => tbody.appendChild(row));
-    
+
     // Update sort indicators
     table.querySelectorAll('th .sort-icon').forEach(icon => icon.remove());
     const header = table.querySelectorAll('th')[columnIndex];
@@ -277,7 +287,7 @@ function sortTable(table, columnIndex) {
 function initializeConfirmDialogs() {
     // Add confirmation to destructive actions
     const destructiveActions = document.querySelectorAll('[data-confirm]');
-    
+
     destructiveActions.forEach(element => {
         element.addEventListener('click', function(e) {
             const message = this.dataset.confirm || 'Are you sure?';
@@ -296,7 +306,7 @@ function searchTable(input, tableId) {
     const table = document.getElementById(tableId);
     const rows = table.querySelectorAll('tbody tr');
     const searchTerm = input.value.toLowerCase();
-    
+
     rows.forEach(row => {
         const text = row.textContent.toLowerCase();
         row.style.display = text.includes(searchTerm) ? '' : 'none';
@@ -329,7 +339,7 @@ function formatDate(dateString, options = {}) {
         hour: '2-digit',
         minute: '2-digit'
     };
-    
+
     return new Intl.DateTimeFormat('en-US', { ...defaultOptions, ...options })
         .format(new Date(dateString));
 }
@@ -370,11 +380,11 @@ function printPage() {
 function printElement(elementId) {
     const element = document.getElementById(elementId);
     const originalContent = document.body.innerHTML;
-    
+
     document.body.innerHTML = element.innerHTML;
     window.print();
     document.body.innerHTML = originalContent;
-    
+
     // Reinitialize after print
     location.reload();
 }
@@ -389,7 +399,7 @@ function toggleDarkMode() {
 function exportTableToCSV(tableId, filename = 'export.csv') {
     const table = document.getElementById(tableId);
     const rows = Array.from(table.querySelectorAll('tr'));
-    
+
     const csvContent = rows.map(row => {
         const cells = Array.from(row.querySelectorAll('th, td'));
         return cells.map(cell => {
@@ -401,15 +411,15 @@ function exportTableToCSV(tableId, filename = 'export.csv') {
             return text;
         }).join(',');
     }).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     a.click();
-    
+
     window.URL.revokeObjectURL(url);
 }
 

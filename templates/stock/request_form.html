@@ -42,7 +42,7 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-300 mb-2">Location</label>
-                        <select name="location_id" required class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <select name="location_id" required class="w-full searchable-select">
                             <option value="">Select Location</option>
                             {% for location in locations %}
                             <option value="{{ location.id }}">{{ location.office }} - {{ location.room }}</option>
@@ -113,9 +113,9 @@ function addItemRow() {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Item</label>
-                <select name="item_id[]" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" required onchange="updateStockBalance(this)">
+                <select name="item_id[]" class="w-full item-select" required onchange="updateStockBalance(this)">
                     <option value="">Select Item</option>
-                    {% for item in items %}
+                    {% for item in items|sort(attribute='code') %}
                     <option value="{{ item.id }}">{{ item.code }} - {{ item.name }}</option>
                     {% endfor %}
                 </select>
@@ -136,14 +136,33 @@ function addItemRow() {
         </div>
     `;
     container.appendChild(itemRow);
+    
+    // Initialize Select2 for the new item dropdown
+    $(itemRow).find('.item-select').select2({
+        placeholder: "Type to search items...",
+        allowClear: true,
+        width: '100%',
+        theme: 'default'
+    });
 }
 
 function removeItemRow(button) {
-    button.closest('.glass-effect').remove();
+    const row = button.closest('.glass-effect');
+    // Destroy Select2 instance before removing
+    $(row).find('.item-select').select2('destroy');
+    row.remove();
 }
 
 // Add initial item row
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Select2 for location dropdown
+    $('.searchable-select').select2({
+        placeholder: "Type to search...",
+        allowClear: true,
+        width: '100%',
+        theme: 'default'
+    });
+    
     addItemRow();
 });
 

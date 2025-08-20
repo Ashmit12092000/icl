@@ -22,9 +22,9 @@ def entry_form():
     if current_user.role.value == 'hod' and current_user.managed_department:
         items = Item.query.filter(
             db.or_(Item.department_id == current_user.managed_department.id, Item.department_id.is_(None))
-        ).all()
+        ).order_by(Item.code).all()
     else:
-        items = Item.query.all()
+        items = Item.query.order_by(Item.code).all()
 
     locations = Location.query.all()
 

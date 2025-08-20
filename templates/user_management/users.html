@@ -63,7 +63,7 @@
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {% if user.department %}
+                        {% if user.department and user.department.name %}
                             {{ user.department.name }}
                         {% else %}
                             <span class="text-gray-500">Not assigned</span>
@@ -75,10 +75,16 @@
                             {% if user.is_active %}Active{% else %}Inactive{% endif %}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {% if user.created_at %}
+                            {{ user.created_at.strftime('%Y-%m-%d') }}
+                        {% else %}
+                            <span class="text-gray-500">Unknown</span>
+                        {% endif %}
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         <div class="flex space-x-2">
-                            <button onclick="openEditModal({{ user.id }}, '{{ user.full_name }}', '{{ user.email }}', '{{ user.role.value }}', {{ user.department_id if user.department_id else 'null' }}, {{ user.is_active|lower }}, {{ user.assigned_warehouses|map(attribute='id')|list|tojson }})"
+                            <button onclick="openEditModal({{ user.id }}, '{{ user.username|e }}', '{{ user.email|e }}', '{{ user.role.value }}', {{ user.department_id if user.department_id else 'null' }}, {{ user.is_active|lower }}, {{ (user.assigned_warehouses|map(attribute='id')|list)|tojson|safe }})"
                                     class="text-indigo-400 hover:text-indigo-300">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -324,15 +330,25 @@ function closeCreateModal() {
 
 function openEditModal(id, username, email, role, departmentId, isActive, warehouseIds = []) {
     try {
-        document.getElementById('editUsername').value = username;
-        document.getElementById('editEmail').value = email;
-        document.getElementById('editRole').value = role;
-        document.getElementById('editDepartmentSelect').value = departmentId || '';
-        document.getElementById('editActive').checked = isActive;
-        document.getElementById('editForm').action = '/admin/users/' + id + '/update';
+        const editUsernameEl = document.getElementById('editUsername');
+        const editEmailEl = document.getElementById('editEmail');
+        const editRoleEl = document.getElementById('editRole');
+        const editDepartmentEl = document.getElementById('editDepartmentSelect');
+        const editActiveEl = document.getElementById('editActive');
+        const editFormEl = document.getElementById('editForm');
+        const editFullNameEl = document.getElementById('editFullName');
 
-        // Set full name
-        document.getElementById('editFullName').value = username; // Assuming username can be used as a placeholder if full_name is not available
+        if (!editUsernameEl || !editEmailEl || !editRoleEl || !editDepartmentEl || !editActiveEl || !editFormEl || !editFullNameEl) {
+            throw new Error('Required form elements not found');
+        }
+
+        editUsernameEl.value = username || '';
+        editEmailEl.value = email || '';
+        editRoleEl.value = role || '';
+        editDepartmentEl.value = departmentId || '';
+        editActiveEl.checked = Boolean(isActive);
+        editFormEl.action = '/admin/users/' + id + '/update';
+        editFullNameEl.value = username || '';
 
         // Reset all warehouse checkboxes
         document.querySelectorAll('.edit-warehouse-checkbox').forEach(checkbox => {
@@ -349,7 +365,7 @@ function openEditModal(id, username, email, role, departmentId, isActive, wareho
             });
         }
 
-        toggleDepartmentField(document.getElementById('editRole'), 'editDepartment');
+        toggleDepartmentField(editRoleEl, 'editDepartment');
         document.getElementById('editModal').classList.remove('hidden');
     } catch (error) {
         console.error('Error opening edit modal:', error);
@@ -381,25 +397,38 @@ function closeNetworkAdminModal() {
 
 function toggleDepartmentField(selectElement, departmentFieldId) {
     try {
+        if (!selectElement) {
+            console.warn('Select element not found');
+            return;
+        }
+
         const departmentField = document.getElementById(departmentFieldId);
+        if (!departmentField) {
+            console.warn('Department field not found:', departmentFieldId);
+            return;
+        }
+        
         const role = selectElement.value;
+        const departmentSelect = departmentField.querySelector('select');
 
         if (role === 'hod' || role === 'employee') {
             departmentField.style.display = 'block';
-            departmentField.querySelector('select').required = false;
+            if (departmentSelect) departmentSelect.required = false;
         } else {
             departmentField.style.display = 'none';
-            departmentField.querySelector('select').required = false;
+            if (departmentSelect) departmentSelect.required = false;
         }
 
         // Update label based on role and handle employee section visibility for create modal
         if (departmentFieldId === 'createDepartment') {
             const employeeSection = document.getElementById('createEmployee');
             const departmentNote = document.getElementById('createDepartmentNote');
+            
             if (role === 'employee') {
                 if (employeeSection) employeeSection.style.display = 'block';
                 departmentField.style.display = 'block'; // Ensure department is visible for employees
-                departmentField.querySelector('select').required = false;
+                const departmentSelect = departmentField.querySelector('select');
+                if (departmentSelect) departmentSelect.required = false;
                 if (departmentNote) {
                     departmentNote.textContent = 'Select an employee to auto-populate the department';
                     departmentNote.className = 'text-gray-400 text-xs mt-1';
@@ -407,7 +436,8 @@ function toggleDepartmentField(selectElement, departmentFieldId) {
             } else if (role === 'hod') {
                 if (employeeSection) employeeSection.style.display = 'none';
                 departmentField.style.display = 'block';
-                departmentField.querySelector('select').required = false;
+                const departmentSelect = departmentField.querySelector('select');
+                if (departmentSelect) departmentSelect.required = false;
                 if (departmentNote) {
                     departmentNote.textContent = 'You can assign departments later or select an employee to auto-populate';
                     departmentNote.className = 'text-gray-400 text-xs mt-1';
@@ -415,7 +445,8 @@ function toggleDepartmentField(selectElement, departmentFieldId) {
             } else { // superadmin
                 if (employeeSection) employeeSection.style.display = 'none';
                 departmentField.style.display = 'none';
-                departmentField.querySelector('select').required = false;
+                const departmentSelect = departmentField.querySelector('select');
+                if (departmentSelect) departmentSelect.required = false;
                 if (departmentNote) {
                     departmentNote.textContent = 'Superadmins do not have specific departments';
                     departmentNote.className = 'text-gray-400 text-xs mt-1';
@@ -429,12 +460,20 @@ function toggleDepartmentField(selectElement, departmentFieldId) {
         const autoAssignNoteId = departmentFieldId.replace('Department', 'AutoAssignNote');
         const autoAssignNote = document.getElementById(autoAssignNoteId);
 
-        if (role === 'superadmin') {
-            if (warehouseSection) warehouseSection.style.display = 'none';
-            autoAssignNote.classList.remove('hidden');
-        } else {
-            if (warehouseSection) warehouseSection.style.display = 'block';
-            autoAssignNote.classList.add('hidden');
+        if (warehouseSection) {
+            if (role === 'superadmin') {
+                warehouseSection.style.display = 'none';
+            } else {
+                warehouseSection.style.display = 'block';
+            }
+        }
+
+        if (autoAssignNote) {
+            if (role === 'superadmin') {
+                autoAssignNote.classList.remove('hidden');
+            } else {
+                autoAssignNote.classList.add('hidden');
+            }
         }
     } catch (error) {
         console.error('Error in toggleDepartmentField:', error);
@@ -473,57 +512,83 @@ function updateDepartmentFromEmployee(employeeSelect, departmentFieldId) {
 
 // Initialize department and warehouse visibility on page load and when role is changed
 function initializeUserForm(modalId, roleFieldId, departmentFieldId) {
-    const roleSelect = document.getElementById(roleFieldId);
-    const departmentField = document.getElementById(departmentFieldId);
-    const departmentSelect = departmentField.querySelector('select');
-    const departmentNote = document.getElementById(departmentFieldId + 'Note');
-    const employeeSection = document.getElementById('createEmployee'); // Assuming employee section is only in create modal
-    const warehouseSection = document.getElementById(departmentFieldId.replace('create', 'edit').replace('edit', 'create') + 'Section');
-    const autoAssignNote = document.getElementById(departmentFieldId.replace('create', 'create').replace('edit', 'edit') + 'AutoAssignNote');
+    try {
+        const roleSelect = document.getElementById(roleFieldId);
+        if (!roleSelect) {
+            console.warn('Role select not found:', roleFieldId);
+            return;
+        }
 
-    if (roleSelect) {
+        const departmentField = document.getElementById(departmentFieldId);
+        if (!departmentField) {
+            console.warn('Department field not found:', departmentFieldId);
+            return;
+        }
+
+        const departmentSelect = departmentField.querySelector('select');
+        const departmentNote = document.getElementById(departmentFieldId + 'Note');
+        const employeeSection = document.getElementById('createEmployee'); // Assuming employee section is only in create modal
+        const warehouseSection = document.getElementById(departmentFieldId.replace('Department', 'WarehouseSection'));
+        const autoAssignNote = document.getElementById(departmentFieldId.replace('Department', 'AutoAssignNote'));
+
         const role = roleSelect.value;
 
         // Department visibility
         if (role === 'hod' || role === 'employee') {
             departmentField.style.display = 'block';
-            departmentSelect.required = false;
+            if (departmentSelect) departmentSelect.required = false;
         } else {
             departmentField.style.display = 'none';
-            departmentSelect.required = false;
+            if (departmentSelect) departmentSelect.required = false;
         }
 
         // Employee section and department note for create modal
         if (modalId === 'createModal') {
             if (role === 'employee') {
-                employeeSection.style.display = 'block';
+                if (employeeSection) employeeSection.style.display = 'block';
                 departmentField.style.display = 'block';
-                departmentSelect.required = false;
-                departmentNote.textContent = 'Select an employee to auto-populate the department';
-                departmentNote.className = 'text-gray-400 text-xs mt-1';
+                if (departmentSelect) departmentSelect.required = false;
+                if (departmentNote) {
+                    departmentNote.textContent = 'Select an employee to auto-populate the department';
+                    departmentNote.className = 'text-gray-400 text-xs mt-1';
+                }
             } else if (role === 'hod') {
-                employeeSection.style.display = 'none';
+                if (employeeSection) employeeSection.style.display = 'none';
                 departmentField.style.display = 'block';
-                departmentSelect.required = false;
-                departmentNote.textContent = 'You can assign departments later or select an employee to auto-populate';
-                departmentNote.className = 'text-gray-400 text-xs mt-1';
+                if (departmentSelect) departmentSelect.required = false;
+                if (departmentNote) {
+                    departmentNote.textContent = 'You can assign departments later or select an employee to auto-populate';
+                    departmentNote.className = 'text-gray-400 text-xs mt-1';
+                }
             } else { // superadmin
-                employeeSection.style.display = 'none';
+                if (employeeSection) employeeSection.style.display = 'none';
                 departmentField.style.display = 'none';
-                departmentSelect.required = false;
-                departmentNote.textContent = 'Superadmins do not have specific departments';
-                departmentNote.className = 'text-gray-400 text-xs mt-1';
+                if (departmentSelect) departmentSelect.required = false;
+                if (departmentNote) {
+                    departmentNote.textContent = 'Superadmins do not have specific departments';
+                    departmentNote.className = 'text-gray-400 text-xs mt-1';
+                }
             }
         }
 
         // Warehouse visibility
-        if (role === 'superadmin') {
-            if (warehouseSection) warehouseSection.style.display = 'none';
-            autoAssignNote.classList.remove('hidden');
-        } else {
-            if (warehouseSection) warehouseSection.style.display = 'block';
-            autoAssignNote.classList.add('hidden');
+        if (warehouseSection) {
+            if (role === 'superadmin') {
+                warehouseSection.style.display = 'none';
+            } else {
+                warehouseSection.style.display = 'block';
+            }
         }
+
+        if (autoAssignNote) {
+            if (role === 'superadmin') {
+                autoAssignNote.classList.remove('hidden');
+            } else {
+                autoAssignNote.classList.add('hidden');
+            }
+        }
+    } catch (error) {
+        console.error('Error in initializeUserForm:', error);
     }
 }
 

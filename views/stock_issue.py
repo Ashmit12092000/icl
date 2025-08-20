@@ -1,12 +1,11 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 from flask_login import login_required, current_user
-from models import (StockIssueRequest, StockIssueLine, Item, Location,
-                   StockBalance, RequestStatus, UserRole, Audit)
-from auth import role_required
+from models import StockIssueRequest, StockIssueLine, Item, Location, Department, StockBalance, RequestStatus, Audit, UserRole
 from database import db
 from decimal import Decimal
-from datetime import datetime
 from utils import get_ist_now
+from auth import role_required
+from datetime import datetime
 stock_issue_bp = Blueprint('stock_issue', __name__)
 
 @stock_issue_bp.route('/create')
@@ -18,7 +17,7 @@ def create_request():
 
     from forms import StockIssueRequestForm
     form = StockIssueRequestForm(user=current_user)
-    items = Item.query.all()
+    items = Item.query.order_by(Item.code).all()
     # Filter locations based on user's warehouse access
     locations = current_user.get_accessible_warehouses()
     return render_template('stock/request_form.html', form=form, items=items, locations=locations)
@@ -423,7 +422,7 @@ def edit_request(request_id):
         flash('Only draft requests can be edited.', 'error')
         return redirect(url_for('stock_issue.view_request', request_id=request_id))
 
-    items = Item.query.all()
+    items = Item.query.order_by(Item.code).all()
     locations = current_user.get_accessible_warehouses()
     return render_template('stock/edit_request.html',
                          request=request_obj,

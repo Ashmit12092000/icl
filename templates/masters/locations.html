@@ -172,7 +172,7 @@
             <div class="flex justify-center space-x-2">
                 <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">Cancel</button>
                 <form method="POST" id="deleteForm" class="inline">
-                    {{ csrf_token() }}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
                 </form>
             </div>

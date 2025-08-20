@@ -12,12 +12,26 @@ user_management_bp = Blueprint('user_management', __name__)
 @login_required
 @role_required('superadmin')
 def users():
-    users = User.query.order_by(User.created_at.desc()).all()
-    departments = Department.query.all()
-    locations = Location.query.all()
-    # Get employees that don't have user accounts assigned
-    unassigned_employees = Employee.query.filter_by(user_id=None).all()
-    return render_template('user_management/users.html', users=users, departments=departments, locations=locations, unassigned_employees=unassigned_employees)
+    try:
+        users = User.query.order_by(User.created_at.desc()).all()
+        departments = Department.query.all()
+        locations = Location.query.all()
+        # Get employees that don't have user accounts assigned
+        unassigned_employees = Employee.query.filter_by(user_id=None).all()
+        
+        # Ensure all users have the required relationships loaded
+        for user in users:
+            if not hasattr(user, 'assigned_warehouses'):
+                user.assigned_warehouses = []
+        
+        return render_template('user_management/users.html', 
+                             users=users, 
+                             departments=departments, 
+                             locations=locations, 
+                             unassigned_employees=unassigned_employees)
+    except Exception as e:
+        flash('Error loading user management page. Please try again.', 'error')
+        return redirect(url_for('main.dashboard'))
 
 @user_management_bp.route('/users/create', methods=['POST'])
 @login_required

@@ -3,6 +3,9 @@
 {% block title %}Edit Request {{ request.request_no }} -  Stock Management{% endblock %}
 
 {% block content %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="{{ url_for('static', filename='css/select2-custom.css') }}" rel="stylesheet" />
 <div class="space-y-6">
     <!-- Header -->
     <div class="md:flex md:items-center md:justify-between">
@@ -25,7 +28,7 @@
                     <!-- Location -->
                     <div>
                         <label for="location_id" class="block text-sm font-medium text-gray-300">Location <span class="text-red-500">*</span></label>
-                        <select id="location_id" name="location_id" required class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <select id="location_id" name="location_id" required class="location-select mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                             <option value="">Select Location</option>
                             {% for location in locations %}
                             <option value="{{ location.id }}" {% if location.id == request.location_id %}selected{% endif %}>
@@ -118,18 +121,48 @@
     </div>
 </div>
 
+<!-- Select2 JS -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
 <script>
+$(document).ready(function() {
+    // Initialize Select2 for location dropdown
+    $('.location-select').select2({
+        placeholder: "Type to search locations...",
+        allowClear: true,
+        width: '100%',
+        theme: 'default'
+    });
+});
+
 function addItemRow() {
     const tbody = document.getElementById('itemTableBody');
     const newRow = document.createElement('tr');
     newRow.className = 'item-row';
+    
+    // Create sorted items array
+    const sortedItems = [
+        {% for item in items|sort(attribute='code') %}
+        {
+            id: "{{ item.id }}",
+            code: "{{ item.code }}",
+            name: "{{ item.name }}",
+            description: "{{ item.description or '' }}",
+            department: "{{ item.department.name if item.department else '' }}"
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    
+    let itemOptions = '<option value="">Select Item</option>';
+    sortedItems.forEach(item => {
+        itemOptions += `<option value="${item.id}" data-code="${item.code}" data-name="${item.name}" data-description="${item.description}" data-department="${item.department}">${item.code} - ${item.name}</option>`;
+    });
+    
     newRow.innerHTML = `
         <td class="px-6 py-4 whitespace-nowrap">
-            <select name="item_id[]" required class="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" onchange="updateEditItemDetails(this)">
-                <option value="">Select Item</option>
-                {% for item in items %}
-                <option value="{{ item.id }}" data-code="{{ item.code }}" data-name="{{ item.name }}" data-description="{{ item.description or '' }}" data-department="{{ item.department.name if item.department else '' }}">{{ item.code }} - {{ item.name }}</option>
-                {% endfor %}
+            <select name="item_id[]" required class="item-select-new w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" onchange="updateEditItemDetails(this)">
+                ${itemOptions}
             </select>
         </td>
         <td class="px-6 py-4 whitespace-nowrap text-sm text-white item-name-display"></td>
@@ -148,6 +181,14 @@ function addItemRow() {
         </td>
     `;
     tbody.appendChild(newRow);
+    
+    // Initialize Select2 for the new dropdown
+    $(newRow).find('.item-select-new').select2({
+        placeholder: "Type to search items...",
+        allowClear: true,
+        width: '100%',
+        theme: 'default'
+    });
 }
 
 function removeItemRowEdit(button) {

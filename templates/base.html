@@ -8,6 +8,10 @@
     <script src="https://unpkg.com/feather-icons"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/select2-custom.css') }}">
     <style>
         body { font-family: 'Inter', sans-serif; }
         .glass-effect {
@@ -55,16 +59,32 @@
         }
 
         .nav-link {
-            @apply text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:bg-white/10 flex items-center relative;
+            color: #ffffff !important;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.3s duration-300;
+            display: flex;
+            align-items: center;
+            position: relative;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        
+        .nav-link:hover {
+            color: #ffffff !important;
+            background-color: rgba(255, 255, 255, 0.1);
         }
 
         .nav-link:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
         }
 
         .nav-link-active {
             @apply text-white bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
         }
 
         .dropdown {
@@ -99,7 +119,7 @@
             padding: 12px 16px;
             text-align: left;
             font-size: 0.875rem;
-            color: #d1d5db;
+            color: #f3f4f6;
             text-decoration: none;
             border-radius: 8px;
             margin-bottom: 2px;
@@ -107,6 +127,7 @@
             border: none;
             background: none;
             cursor: pointer;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .dropdown-item:hover {
@@ -133,7 +154,8 @@
         }
 
         .mobile-nav-link {
-            @apply text-gray-300 hover:bg-white/10 hover:text-white block px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 flex items-center;
+            @apply text-gray-100 hover:bg-white/10 hover:text-white block px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 flex items-center;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .mobile-dropdown-toggle {
@@ -145,7 +167,8 @@
         }
 
         .mobile-dropdown-item {
-            @apply text-gray-400 hover:bg-white/10 hover:text-white block px-3 py-2 rounded-lg text-sm transition-all duration-200 flex items-center;
+            @apply text-gray-200 hover:bg-white/10 hover:text-white block px-3 py-2 rounded-lg text-sm transition-all duration-200 flex items-center;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .mobile-dropdown.active .mobile-dropdown-content {
@@ -195,7 +218,7 @@
 
                             <!-- Stock Management -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-boxes mr-2"></i>Stock
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                 </button>
@@ -223,7 +246,7 @@
                             {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
                             <!-- Management -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-cogs mr-2"></i>Manage
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                 </button>
@@ -248,7 +271,7 @@
                             {% if current_user.role.value in ['hod', 'superadmin'] %}
                             <!-- Approvals for HOD and Superadmin -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-user-check mr-2"></i>
                                     <span>Approvals</span>
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
@@ -269,7 +292,7 @@
                             {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
                             <!-- Reports & Analytics -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-chart-pie mr-2"></i>Reports
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                 </button>
@@ -292,7 +315,7 @@
                             {% if current_user.role.value in ['superadmin', 'manager'] %}
                             <!-- Warehouse -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-warehouse mr-2"></i>Warehouse
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                 </button>
@@ -307,7 +330,7 @@
                             {% if current_user.role.value in ['superadmin'] %}
                             <!-- Administration -->
                             <div class="dropdown">
-                                <button class="nav-link">
+                                <button class="nav-link" style="color: #ffffff !important;">
                                     <i class="fas fa-shield-alt mr-2"></i>Admin
                                     <i class="fas fa-chevron-down ml-2 text-xs"></i>
                                 </button>
@@ -555,136 +578,9 @@
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Mobile menu toggle
-            const mobileMenuButton = document.getElementById('mobile-menu-button');
-            const mobileMenu = document.getElementById('mobile-menu');
-            const mobileDropdownToggles = document.querySelectorAll('.mobile-dropdown-toggle');
-
-            if (mobileMenuButton && mobileMenu) {
-                mobileMenuButton.addEventListener('click', function() {
-                    mobileMenu.classList.toggle('hidden');
-                    const icon = this.querySelector('i');
-                    icon.classList.toggle('fa-bars');
-                    icon.classList.toggle('fa-times');
-                });
-            }
-
-            mobileDropdownToggles.forEach(toggle => {
-                toggle.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const dropdown = this.closest('.mobile-dropdown');
-                    if (dropdown) {
-                        dropdown.classList.toggle('active');
-                        const content = dropdown.querySelector('.mobile-dropdown-content');
-                        if (content) {
-                            content.classList.toggle('hidden');
-                        }
-                    }
-                });
-            });
-
-            // Auto-hide notifications
-            setTimeout(function() {
-                const notifications = document.querySelectorAll('#notifications > div');
-                notifications.forEach(function(notification) {
-                    notification.style.transition = 'all 0.3s ease-out';
-                    notification.style.transform = 'translateX(100%)';
-                    notification.style.opacity = '0';
-                    setTimeout(function() {
-                        notification.remove();
-                    }, 300);
-                });
-            }, 5000);
-
-            // Form submission loading states
-            const forms = document.querySelectorAll('form');
-            forms.forEach(form => {
-                form.addEventListener('submit', function() {
-                    const submitBtn = form.querySelector('button[type="submit"]');
-                    if (submitBtn && !submitBtn.disabled) {
-                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
-                        submitBtn.disabled = true;
-                        setTimeout(() => {
-                            document.getElementById('loadingOverlay').classList.remove('hidden');
-                        }, 500);
-                    }
-                });
-            });
-
-            // Enhanced table interactions
-            const tables = document.querySelectorAll('table');
-            tables.forEach(table => {
-                const rows = table.querySelectorAll('tbody tr');
-                rows.forEach(row => {
-                    row.addEventListener('mouseenter', function() {
-                        this.style.backgroundColor = 'rgba(75, 85, 99, 0.3)';
-                    });
-                    row.addEventListener('mouseleave', function() {
-                        this.style.backgroundColor = '';
-                    });
-                });
-            });
-
-            // Convert any UTC timestamps to IST display
-            const timeElements = document.querySelectorAll('.timestamp');
-            timeElements.forEach(function(element) {
-                const utcTime = element.textContent;
-                if (utcTime && utcTime !== '') {
-                    const date = new Date(utcTime);
-                    if (!isNaN(date.getTime())) {
-                        const istTime = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
-                        element.textContent = istTime.toLocaleString('en-IN', {
-                            timeZone: 'Asia/Kolkata',
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        }) + ' IST';
-                    }
-                }
-            });
-        });
-
-        // Utility functions
-        function showLoading() {
-            document.getElementById('loadingOverlay').classList.remove('hidden');
-        }
-
-        function hideLoading() {
-            document.getElementById('loadingOverlay').classList.add('hidden');
-        }
-
-        function showNotification(message, type = 'info') {
-            const container = document.getElementById('notifications') || document.body;
-            const notification = document.createElement('div');
-            notification.className = `notification-enter max-w-sm glass-effect rounded-xl p-4 shadow-2xl border border-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-500/50`;
-            notification.innerHTML = `
-                <div class="flex items-start">
-                    <div class="flex-shrink-0">
-                        <div class="w-8 h-8 bg-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-500/20 rounded-full flex items-center justify-center">
-                            <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} text-${type === 'error' ? 'red' : type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'}-400"></i>
-                        </div>
-                    </div>
-                    <div class="ml-3 flex-1">
-                        <p class="text-sm font-medium text-white">${message}</p>
-                    </div>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-gray-400 hover:text-white transition-colors">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            `;
-            container.appendChild(notification);
-
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                notification.style.opacity = '0';
-                setTimeout(() => notification.remove(), 300);
-            }, 5000);
-        }
-    </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 
     {% block scripts %}{% endblock %}
 </body>
