@@ -1,0 +1,517 @@
+
+{% extends "base.html" %}
+
+{% block title %}Issue & Return Tracker - Stock Management{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="md:flex md:items-center md:justify-between">
+        <div class="flex-1 min-w-0">
+            <h2 class="text-2xl font-bold leading-7 text-white sm:text-3xl sm:truncate">
+                Issue & Return Tracker
+            </h2>
+            <p class="mt-1 text-sm text-gray-400">
+                Track all issued items and their return status
+                {% if current_user.role.value == 'hod' and current_user.managed_department %}
+                for {{ current_user.managed_department.name }}
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-box text-blue-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Total Items Issued</dt>
+                            <dd class="text-lg font-medium text-white">{{ summary_stats.total_items_issued }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-undo text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Return Rate</dt>
+                            <dd class="text-lg font-medium text-white">{{ summary_stats.return_rate }}%</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Outstanding Qty</dt>
+                            <dd class="text-lg font-medium text-white">{{ "%.2f"|format(summary_stats.outstanding_quantity) }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-clock text-red-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-400 truncate">Overdue Items</dt>
+                            <dd class="text-lg font-medium text-white">{{ summary_stats.overdue_items }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-800 shadow rounded-lg p-6">
+        <h3 class="text-lg font-medium text-white mb-4">Filters</h3>
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Date From</label>
+                <input type="date" name="date_from" value="{{ filters.date_from or '' }}" 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Date To</label>
+                <input type="date" name="date_to" value="{{ filters.date_to or '' }}" 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Return Status</label>
+                <select name="status" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <option value="">All Status</option>
+                    <option value="not_returned" {% if filters.status == 'not_returned' %}selected{% endif %}>Not Returned</option>
+                    <option value="partially_returned" {% if filters.status == 'partially_returned' %}selected{% endif %}>Partially Returned</option>
+                    <option value="fully_returned" {% if filters.status == 'fully_returned' %}selected{% endif %}>Fully Returned</option>
+                    <option value="overdue" {% if filters.status == 'overdue' %}selected{% endif %}>Overdue</option>
+                </select>
+            </div>
+
+            {% if current_user.role.value == 'superadmin' %}
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Department</label>
+                <select name="department_id" id="department-select" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white searchable-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if filters.department_id == dept.id %}selected{% endif %}>
+                        {{ dept.code }} - {{ dept.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">Item</label>
+                <select name="item_id" id="item-select" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white searchable-select">
+                    <option value="">All Items</option>
+                    {% for item in items %}
+                    <option value="{{ item.id }}" {% if filters.item_id == item.id %}selected{% endif %}>
+                        {{ item.code }} - {{ item.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1">User</label>
+                <select name="user_id" id="user-select" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white searchable-select">
+                    <option value="">All Users</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if filters.user_id == user.id %}selected{% endif %}>
+                        {{ user.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-filter mr-1"></i>Filter
+                </button>
+                <a href="{{ url_for('audit.issue_return_tracker') }}" 
+                   class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-times mr-1"></i>Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Audit Data Table -->
+    <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 border-b border-gray-700 sm:px-6">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg leading-6 font-medium text-white">
+                    Issue & Return Details ({{ audit_data.total }} records)
+                </h3>
+                <div class="text-sm text-gray-400">
+                    Page {{ audit_data.page }} of {{ audit_data.pages }}
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-700">
+                <thead class="bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Request</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Issue Date</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Item</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Requester</th>
+                        {% if current_user.role.value == 'superadmin' %}
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Department</th>
+                        {% endif %}
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider text-center">Quantities</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider text-center">Return Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    {% for record in audit_data.items %}
+                    <tr class="{% if record.is_overdue %}bg-red-900 bg-opacity-20{% endif %}">
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            <div class="text-sm">
+                                <div class="text-white font-medium">{{ record.request_no }}</div>
+                                <div class="text-gray-400 text-xs">{{ record.days_since_issue }} days ago</div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
+                            {{ record.issued_at.strftime('%Y-%m-%d') }}
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-sm">
+                                <div class="text-white font-medium">{{ record.item_name }}</div>
+                                <div class="text-gray-400">{{ record.item_code }}</div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">
+                            {{ record.location }}
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-sm">
+                                <div class="text-white">{{ record.requester_name }}</div>
+                                <div class="text-gray-400 text-xs">@{{ record.requester_username }}</div>
+                            </div>
+                        </td>
+                        {% if current_user.role.value == 'superadmin' %}
+                        <td class="px-4 py-4 whitespace-nowrap">
+                            <div class="text-sm">
+                                <div class="text-white">{{ record.department_name }}</div>
+                                <div class="text-gray-400 text-xs">{{ record.department_code }}</div>
+                            </div>
+                        </td>
+                        {% endif %}
+                        <td class="px-4 py-4 text-center">
+                            <div class="text-sm">
+                                <div class="text-white">Issued: <span class="font-medium">{{ "%.2f"|format(record.quantity_issued) }}</span></div>
+                                <div class="text-green-400">Returned: <span class="font-medium">{{ "%.2f"|format(record.total_returned) }}</span></div>
+                                <div class="text-yellow-400">Remaining: <span class="font-medium">{{ "%.2f"|format(record.quantity_remaining) }}</span></div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="space-y-1">
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {{ record.return_status_class }}">
+                                    {{ record.return_status }}
+                                </span>
+                                {% if record.is_overdue %}
+                                <div class="text-red-400 text-xs">
+                                    <i class="fas fa-exclamation-triangle"></i> Overdue
+                                </div>
+                                {% endif %}
+                                {% if record.return_count > 0 %}
+                                <div class="text-gray-400 text-xs">
+                                    {{ record.return_count }} return(s)
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex justify-center space-x-2">
+                                <a href="{{ url_for('stock_issue.view_request', request_id=record.request_id) }}" 
+                                   class="text-blue-400 hover:text-blue-300" title="View Request">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if record.return_count > 0 %}
+                                <button onclick="viewReturnDetails({{ record.line_id }})" 
+                                        class="text-green-400 hover:text-green-300" title="View Returns">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                                {% endif %}
+                                
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user.role.value == 'superadmin' %}9{% else %}8{% endif %}" 
+                            class="px-6 py-4 text-center text-gray-400">
+                            No records found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if audit_data.pages > 1 %}
+        <div class="bg-gray-800 px-4 py-3 border-t border-gray-700 sm:px-6">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 flex justify-between sm:hidden">
+                    {% if audit_data.has_prev %}
+                    <a href="{{ url_for('audit.issue_return_tracker', page=audit_data.prev_num, **filters) }}" 
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600">
+                        Previous
+                    </a>
+                    {% endif %}
+                    {% if audit_data.has_next %}
+                    <a href="{{ url_for('audit.issue_return_tracker', page=audit_data.next_num, **filters) }}" 
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-600 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600">
+                        Next
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm text-gray-400">
+                            Showing <span class="font-medium">{{ ((audit_data.page - 1) * audit_data.per_page) + 1 }}</span>
+                            to <span class="font-medium">{{ ((audit_data.page - 1) * audit_data.per_page) + audit_data.items|length }}</span>
+                            of <span class="font-medium">{{ audit_data.total }}</span> results
+                        </p>
+                    </div>
+                    <div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                            {% if audit_data.has_prev %}
+                            <a href="{{ url_for('audit.issue_return_tracker', page=audit_data.prev_num, **filters) }}" 
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-600 bg-gray-700 text-sm font-medium text-gray-300 hover:bg-gray-600">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                            {% endif %}
+                            
+                            {% for page_num in range(1, audit_data.pages + 1) %}
+                                {% if page_num == audit_data.page %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-indigo-600 text-sm font-medium text-white">
+                                    {{ page_num }}
+                                </span>
+                                {% elif page_num == 1 or page_num == audit_data.pages or (page_num >= audit_data.page - 2 and page_num <= audit_data.page + 2) %}
+                                <a href="{{ url_for('audit.issue_return_tracker', page=page_num, **filters) }}" 
+                                   class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-gray-700 text-sm font-medium text-gray-300 hover:bg-gray-600">
+                                    {{ page_num }}
+                                </a>
+                                {% elif page_num == 2 or page_num == audit_data.pages - 1 %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-600 bg-gray-700 text-sm font-medium text-gray-400">
+                                    ...
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if audit_data.has_next %}
+                            <a href="{{ url_for('audit.issue_return_tracker', page=audit_data.next_num, **filters) }}" 
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-600 bg-gray-700 text-sm font-medium text-gray-300 hover:bg-gray-600">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Return Details Modal -->
+<div id="returnDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-white">Return Details</h3>
+                <button onclick="closeReturnDetailsModal()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="returnDetailsContent">
+                <!-- Return details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Select2 CSS and JS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize Select2 for searchable dropdowns
+    $('.searchable-select').select2({
+        placeholder: function() {
+            return $(this).data('placeholder') || 'Type to search...';
+        },
+        allowClear: true,
+        theme: 'default',
+        width: '100%',
+        dropdownParent: $('body'), // Ensure dropdown appears above modals
+        templateResult: function(data) {
+            if (!data.id) return data.text;
+            
+            // Custom formatting for better readability
+            var $result = $('<span>' + data.text + '</span>');
+            return $result;
+        }
+    });
+
+    // Custom styling for dark theme
+    $('<style>')
+        .prop('type', 'text/css')
+        .html(`
+            .select2-container--default .select2-selection--single {
+                background-color: #374151 !important;
+                border: 1px solid #4B5563 !important;
+                color: #ffffff !important;
+                height: 38px !important;
+            }
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                color: #ffffff !important;
+                line-height: 36px !important;
+            }
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: 36px !important;
+            }
+            .select2-dropdown {
+                background-color: #374151 !important;
+                border: 1px solid #4B5563 !important;
+            }
+            .select2-container--default .select2-results__option {
+                background-color: #374151 !important;
+                color: #ffffff !important;
+            }
+            .select2-container--default .select2-results__option--highlighted[aria-selected] {
+                background-color: #4F46E5 !important;
+            }
+            .select2-container--default .select2-search--dropdown .select2-search__field {
+                background-color: #374151 !important;
+                border: 1px solid #4B5563 !important;
+                color: #ffffff !important;
+            }
+            .select2-container--default .select2-selection--single .select2-selection__placeholder {
+                color: #9CA3AF !important;
+            }
+        `)
+        .appendTo('head');
+});
+
+function viewReturnDetails(lineId) {
+    document.getElementById('returnDetailsModal').classList.remove('hidden');
+    document.getElementById('returnDetailsContent').innerHTML = '<div class="text-center text-gray-400">Loading...</div>';
+    
+    fetch(`{{ url_for('audit.return_details', line_id=0) }}`.replace('0', lineId))
+        .then(response => response.json())
+        .then(data => {
+            let content = `
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <div class="grid grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <span class="text-gray-400">Total Quantity Issued:</span>
+                            <span class="text-white ml-2 font-medium">${data.quantity_issued.toFixed(2)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">Total Returned:</span>
+                            <span class="text-green-400 ml-2 font-medium">${data.total_returned.toFixed(2)}</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400">Remaining:</span>
+                            <span class="text-yellow-400 ml-2 font-medium">${(data.quantity_issued - data.total_returned).toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Return No</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Date</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Quantity</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Reason</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Status</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Returner</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Processor</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700">
+            `;
+            
+            data.returns.forEach(ret => {
+                const statusClass = ret.status === 'Completed' ? 'bg-green-900 text-green-200' : 
+                                  ret.status === 'Rejected' ? 'bg-red-900 text-red-200' : 
+                                  'bg-yellow-900 text-yellow-200';
+                
+                content += `
+                    <tr>
+                        <td class="px-4 py-3 text-sm text-white">${ret.return_no}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">${ret.created_at}</td>
+                        <td class="px-4 py-3 text-sm text-white font-medium">${ret.quantity_returned.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">${ret.return_reason}</td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusClass}">
+                                ${ret.status}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-300">${ret.returner_name}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">${ret.processor_name || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            content += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            if (data.returns.length === 0) {
+                content = '<div class="text-center text-gray-400">No returns found for this item.</div>';
+            }
+            
+            document.getElementById('returnDetailsContent').innerHTML = content;
+        })
+        .catch(error => {
+            document.getElementById('returnDetailsContent').innerHTML = '<div class="text-center text-red-400">Error loading return details</div>';
+        });
+}
+
+function closeReturnDetailsModal() {
+    document.getElementById('returnDetailsModal').classList.add('hidden');
+}
+</script>
+{% endblock %}

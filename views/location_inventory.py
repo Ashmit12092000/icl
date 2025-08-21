@@ -95,11 +95,13 @@ def location_inventory():
 
     # Get filter options based on user permissions
     if current_user.role.value == 'superadmin':
+        # Removed filter for is_active on Location as it does not exist
         locations = Location.query.all()
     else:
         locations = current_user.get_accessible_warehouses()
 
     items = Item.query.all()
+
 
     return render_template('location_inventory/inventory.html',
                            locations_inventory=locations_inventory,

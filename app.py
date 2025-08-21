@@ -59,6 +59,7 @@ def create_app():
     from views.reports import reports_bp
     from views.admin_transactions import admin_transactions_bp
     from views.hod_transactions import hod_transactions_bp
+    from views.audit import audit_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp)
@@ -74,6 +75,7 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(admin_transactions_bp, url_prefix='/admin')
     app.register_blueprint(hod_transactions_bp, url_prefix='/hod')
+    app.register_blueprint(audit_bp, url_prefix='/audit')
 
     # Create tables and create single superadmin demo account
     with app.app_context():

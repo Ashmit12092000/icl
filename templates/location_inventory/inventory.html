@@ -23,23 +23,33 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div>
                     <label class="block text-sm font-medium text-gray-300">Location</label>
-                    <input type="text" name="location" value="{{ location_filter }}"
-                           placeholder="Filter by location..."
-                           class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <select name="location" id="location-select" class="mt-1 block w-full searchable-select">
+                        <option value="">All Locations</option>
+                        {% for location in locations %}
+                        <option value="{{ location.office }}" {% if location_filter == location.office %}selected{% endif %}>
+                            {{ location.office }} - {{ location.room }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-300">Item</label>
-                    <input type="text" name="item" value="{{ item_filter }}"
-                           placeholder="Filter by item name..."
-                           class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <select name="item" id="item-select" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">Filter by item name...</option>
+                        {% for item in items %}
+                        <option value="{{ item.name }}" {% if item_filter == item.name %}selected{% endif %}>
+                            {{ item.code }} - {{ item.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="flex items-end">
                     <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none">
                         <i class="fas fa-filter mr-2"></i>Filter
                     </button>
-                    <a href="{{ url_for('location_inventory.location_inventory') }}" 
+                    <a href="{{ url_for('location_inventory.location_inventory') }}"
                        class="ml-3 inline-flex justify-center py-2 px-4 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none">
                         <i class="fas fa-times mr-2"></i>Clear
                     </a>
@@ -117,8 +127,8 @@
                             {{ location_data.office }} - {{ location_data.room }}
                         </h3>
                         <p class="mt-1 text-sm text-gray-400">
-                            Code: {{ location_data.location_code }} | 
-                            Items: {{ location_data.total_items }} | 
+                            Code: {{ location_data.location_code }} |
+                            Items: {{ location_data.total_items }} |
                             Low Stock: {{ location_data.low_stock_items }}
                         </p>
                     </div>
@@ -205,4 +215,84 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize searchable selects
+    $('.searchable-select').select2({
+        theme: 'default',
+        width: '100%',
+        placeholder: function() {
+            return $(this).data('placeholder') || 'Select an option';
+        },
+        allowClear: true,
+        dropdownCssClass: 'select2-dark-theme',
+        containerCssClass: 'select2-dark-theme'
+    });
+});
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        // Initialize Select2 for searchable dropdowns
+        $('#location-select').select2({
+            theme: 'default',
+            placeholder: 'Filter by location...',
+            allowClear: true,
+            width: '100%'
+        });
+
+        $('#item-select').select2({
+            theme: 'default',
+            placeholder: 'Filter by item name...',
+            allowClear: true,
+            width: '100%'
+        });
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    .select2-container--default .select2-selection--single {
+        background-color: #374151;
+        border: 1px solid #4B5563;
+        border-radius: 0.375rem;
+        height: 42px;
+        color: white;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        color: white;
+        line-height: 40px;
+        padding-left: 12px;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+        height: 40px;
+    }
+
+    .select2-dropdown {
+        background-color: #374151;
+        border: 1px solid #4B5563;
+    }
+
+    .select2-container--default .select2-results__option {
+        color: white;
+    }
+
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #3B82F6;
+    }
+
+    .select2-container--default .select2-search--dropdown .select2-search__field {
+        background-color: #374151;
+        border: 1px solid #4B5563;
+        color: white;
+    }
+</style>
 {% endblock %}

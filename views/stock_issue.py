@@ -176,7 +176,11 @@ def submit_request():
 @stock_issue_bp.route('/<int:request_id>')
 @login_required
 def view_request(request_id):
-    request_obj = StockIssueRequest.query.get_or_404(request_id)
+    from sqlalchemy.orm import joinedload
+    from models import StockIssueLine, StockReturn
+    request_obj = StockIssueRequest.query.options(
+        joinedload(StockIssueRequest.issue_lines).joinedload(StockIssueLine.returns)
+    ).get_or_404(request_id)
 
     # Check access permissions
     if (current_user.role == UserRole.EMPLOYEE and
