@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, RequestStatus, Audit
+from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, RequestStatus, Audit, StockReturn, ReturnStatus
 from auth import role_required
 from database import db
 from sqlalchemy import func, desc, asc
@@ -23,7 +23,7 @@ def dashboard():
     low_stock_alerts = []
     recent_requests = []
     approved_requests = []
-    
+
     from datetime import date
     today = get_ist_now().date()
 
@@ -44,10 +44,10 @@ def dashboard():
             ).distinct().count(),
         }
 
-        # Recent requests (all requests for admin/manager)
+        # Recent requests (last 10)
         recent_requests = StockIssueRequest.query.order_by(
             StockIssueRequest.created_at.desc()
-        ).limit(5).all()
+        ).limit(10).all()
 
         # Approved requests ready for issue (only for superadmin)
         if current_user.role == UserRole.SUPERADMIN:
@@ -61,6 +61,12 @@ def dashboard():
         low_stock_alerts = db.session.query(Item).join(StockBalance).filter(
             StockBalance.quantity <= Item.low_stock_threshold
         ).limit(5).all()
+
+        # Pending returns count (for superadmin)
+        pending_returns_count = StockReturn.query.filter_by(
+            status=ReturnStatus.PENDING
+        ).count()
+
 
     elif current_user.role == UserRole.HOD:
         # HOD dashboard - show department statistics
@@ -130,6 +136,10 @@ def dashboard():
             requester_id=current_user.id,
             status=RequestStatus.APPROVED
         ).order_by(StockIssueRequest.approved_at.desc()).limit(5).all()
+
+    # Add pending returns count to template_vars if it exists for the current role
+    if current_user.role == UserRole.SUPERADMIN:
+        template_vars['pending_returns_count'] = pending_returns_count
 
 
     return render_template('dashboard.html', **template_vars)

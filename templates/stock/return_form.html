@@ -1,0 +1,163 @@
+
+{% extends "base.html" %}
+{% block title %}Create Stock Return{% endblock %}
+
+{% block content %}
+<div class="bg-gray-800 shadow rounded-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-white">Create Stock Return</h1>
+        <a href="{{ url_for('stock_return.my_returns') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            My Returns
+        </a>
+    </div>
+
+    <div class="bg-blue-900 border border-blue-600 rounded-lg p-4 mb-6">
+        <h3 class="text-lg font-semibold text-blue-200 mb-2">Stock Return Guidelines</h3>
+        <ul class="text-blue-100 space-y-1">
+            <li>• Stock can only be returned within 30 days of issue</li>
+            <li>• You can return partial or full quantities</li>
+            <li>• Only the original requester can initiate returns</li>
+            <li>• Returns require approval from administrators</li>
+        </ul>
+    </div>
+
+    <form method="POST" action="{{ url_for('stock_return.select_issue') }}" class="space-y-6">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Select Issued Stock Request</label>
+            <select name="request_id" id="request_select" 
+                    class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                <option value="">Choose an issued stock request...</option>
+                {% for request in issued_requests %}
+                <option value="{{ request.id }}" 
+                        data-request-no="{{ request.request_no }}"
+                        data-issued-date="{{ request.issued_at.strftime('%Y-%m-%d') if request.issued_at }}"
+                        data-location="{{ request.location.office }} - {{ request.location.room }}"
+                        data-days-since="{{ request.days_since_issue if request.issued_at else 0 }}">
+                    {{ request.request_no }} - {{ request.location.office }} ({{ request.issued_at.strftime('%Y-%m-%d') if request.issued_at }})
+                    {% if request.days_since_issue > 25 %}⚠️ {{ request.days_since_issue }} days ago{% endif %}</option>
+                </option>
+                {% endfor %}
+            </select>
+            <p class="text-gray-400 text-sm mt-1">Select from your issued stock requests that are eligible for return</p>
+        </div>
+
+        <!-- Request Details Preview -->
+        <div id="request_preview" class="hidden bg-gray-700 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-2">Selected Request Details</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-400">Request No:</span>
+                    <span class="text-white ml-2" id="preview_request_no"></span>
+                </div>
+                <div>
+                    <span class="text-gray-400">Issued Date:</span>
+                    <span class="text-white ml-2" id="preview_issued_date"></span>
+                </div>
+                <div>
+                    <span class="text-gray-400">Location:</span>
+                    <span class="text-white ml-2" id="preview_location"></span>
+                </div>
+            </div>
+            <div id="overdue_warning" class="hidden bg-yellow-900 border border-yellow-600 rounded-lg p-3 mt-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-400 mr-2"></i>
+                    <span class="text-yellow-100" id="overdue_text"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-md">
+                Continue to Select Items
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Enhanced Select2-like functionality -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize Select2 for better search functionality
+    $('#request_select').select2({
+        placeholder: "Search and select an issued stock request...",
+        allowClear: true,
+        theme: 'dark',
+        width: '100%',
+        templateResult: function(data) {
+            if (!data.id) return data.text;
+            
+            var $result = $(
+                '<div class="select2-result-item">' +
+                    '<div class="font-medium">' + $(data.element).data('request-no') + '</div>' +
+                    '<div class="text-sm text-gray-400">' + 
+                        $(data.element).data('location') + ' • ' + 
+                        $(data.element).data('issued-date') +
+                        ($(data.element).data('days-since') > 25 ? ' • ⚠️ ' + $(data.element).data('days-since') + ' days ago' : '') +
+                    '</div>' +
+                '</div>'
+            );
+            return $result;
+        }
+    });
+
+    // Show preview when selection changes
+    $('#request_select').on('change', function() {
+        var selectedOption = $(this).find(':selected');
+        
+        if (selectedOption.val()) {
+            $('#preview_request_no').text(selectedOption.data('request-no'));
+            $('#preview_issued_date').text(selectedOption.data('issued-date'));
+            $('#preview_location').text(selectedOption.data('location'));
+            
+            var daysSince = selectedOption.data('days-since');
+            if (daysSince > 25) {
+                $('#overdue_text').text('Warning: This stock was issued ' + daysSince + ' days ago. Returns are only allowed within 30 days of issue.');
+                $('#overdue_warning').removeClass('hidden');
+            } else {
+                $('#overdue_warning').addClass('hidden');
+            }
+            
+            $('#request_preview').removeClass('hidden');
+        } else {
+            $('#request_preview').addClass('hidden');
+        }
+    });
+});
+</script>
+
+<style>
+/* Custom Select2 dark theme styles */
+.select2-container--dark .select2-selection--single {
+    background-color: #374151;
+    border: 1px solid #4B5563;
+    color: #ffffff;
+}
+
+.select2-container--dark .select2-selection--single .select2-selection__rendered {
+    color: #ffffff;
+}
+
+.select2-container--dark .select2-dropdown {
+    background-color: #374151;
+    border: 1px solid #4B5563;
+}
+
+.select2-container--dark .select2-results__option {
+    background-color: #374151;
+    color: #ffffff;
+}
+
+.select2-container--dark .select2-results__option--highlighted {
+    background-color: #4F46E5;
+}
+
+.select2-result-item {
+    padding: 4px 0;
+}
+</style>
+{% endblock %}

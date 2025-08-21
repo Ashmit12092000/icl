@@ -1,0 +1,150 @@
+
+{% extends "base.html" %}
+{% block title %}Pending Stock Returns{% endblock %}
+
+{% block content %}
+<div class="bg-gray-800 shadow rounded-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-white">Pending Stock Returns</h1>
+        <a href="{{ url_for('stock_return.return_history') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            View History
+        </a>
+    </div>
+
+    {% if returns.items %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-gray-700 rounded-lg overflow-hidden">
+            <thead class="bg-gray-600">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Return No</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Returned By</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Item</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Quantity</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Original Request</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Created</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-600">
+                {% for return_obj in returns.items %}
+                <tr>
+                    <td class="px-4 py-3">
+                        <span class="text-white font-medium">{{ return_obj.return_no }}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-white">{{ return_obj.returner.full_name }}</div>
+                        <div class="text-gray-400 text-sm">{{ return_obj.returner.username }}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="text-white">{{ return_obj.issue_line.item.name }}</div>
+                        <div class="text-gray-400 text-sm">{{ return_obj.issue_line.item.code }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-white">{{ return_obj.quantity_returned }}</td>
+                    <td class="px-4 py-3">
+                        <span class="text-white">{{ return_obj.issue_line.request.request_no }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-white">{{ return_obj.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex space-x-2">
+                            <a href="{{ url_for('stock_return.view_return', return_id=return_obj.id) }}" 
+                               class="text-indigo-400 hover:text-indigo-300">View</a>
+                            <button onclick="openProcessModal({{ return_obj.id }}, '{{ return_obj.return_no }}')" 
+                                    class="text-green-400 hover:text-green-300">Process</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if returns.pages > 1 %}
+    <div class="mt-6 flex justify-center">
+        <nav class="flex space-x-2">
+            {% if returns.has_prev %}
+                <a href="{{ url_for('stock_return.pending_returns', page=returns.prev_num) }}" 
+                   class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">Previous</a>
+            {% endif %}
+            
+            {% for page_num in returns.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != returns.page %}
+                        <a href="{{ url_for('stock_return.pending_returns', page=page_num) }}" 
+                           class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">{{ page_num }}</a>
+                    {% else %}
+                        <span class="px-3 py-2 bg-indigo-600 text-white rounded">{{ page_num }}</span>
+                    {% endif %}
+                {% else %}
+                    <span class="px-3 py-2 text-gray-400">...</span>
+                {% endif %}
+            {% endfor %}
+            
+            {% if returns.has_next %}
+                <a href="{{ url_for('stock_return.pending_returns', page=returns.next_num) }}" 
+                   class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">Next</a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-8">
+        <div class="flex flex-col items-center">
+            <i class="fas fa-check-circle text-green-400 text-4xl mb-4"></i>
+            <p class="text-gray-400">No pending returns to process.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Process Return Modal -->
+<div id="processModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-gray-800">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-white" id="modalTitle">Process Return</h3>
+            <form id="processForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300">Action</label>
+                    <select name="action" class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                        <option value="">Select Action</option>
+                        <option value="approve">Approve Return</option>
+                        <option value="reject">Reject Return</option>
+                    </select>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300">Remarks</label>
+                    <textarea name="remarks" rows="3" placeholder="Add any remarks..." 
+                              class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                <div class="flex items-center justify-end mt-6 space-x-4">
+                    <button type="button" onclick="closeProcessModal()" 
+                            class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">Process</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openProcessModal(returnId, returnNo) {
+    document.getElementById('processModal').classList.remove('hidden');
+    document.getElementById('modalTitle').textContent = `Process Return - ${returnNo}`;
+    document.getElementById('processForm').action = `/returns/${returnId}/process`;
+}
+
+function closeProcessModal() {
+    document.getElementById('processModal').classList.add('hidden');
+    document.getElementById('processForm').reset();
+}
+
+// Close modal when clicking outside
+document.getElementById('processModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeProcessModal();
+    }
+});
+</script>
+{% endblock %}

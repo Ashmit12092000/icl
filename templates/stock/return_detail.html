@@ -1,0 +1,149 @@
+
+{% extends "base.html" %}
+{% block title %}Return Details - {{ stock_return.return_no }}{% endblock %}
+
+{% block content %}
+<div class="bg-gray-800 shadow rounded-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-white">Return Details - {{ stock_return.return_no }}</h1>
+        <div class="flex space-x-4">
+            <a href="{{ url_for('stock_return.my_returns') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                Back to Returns
+            </a>
+            {% if current_user.role.value == 'superadmin' %}
+            <a href="{{ url_for('stock_return.pending_returns') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                Pending Returns
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Status Alert -->
+    <div class="mb-6">
+        {% if stock_return.status.value == 'Pending' %}
+            <div class="bg-yellow-900 border border-yellow-600 rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-clock text-yellow-400 mr-2"></i>
+                    <span class="text-yellow-100">This return is pending approval from administrators.</span>
+                </div>
+            </div>
+        {% elif stock_return.status.value == 'Completed' %}
+            <div class="bg-green-900 border border-green-600 rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-check-circle text-green-400 mr-2"></i>
+                    <span class="text-green-100">This return has been completed and stock has been updated.</span>
+                </div>
+            </div>
+        {% elif stock_return.status.value == 'Rejected' %}
+            <div class="bg-red-900 border border-red-600 rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-times-circle text-red-400 mr-2"></i>
+                    <span class="text-red-100">This return was rejected.</span>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Return Information -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-gray-700 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4">Return Information</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Return No:</span>
+                    <span class="text-white">{{ stock_return.return_no }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Status:</span>
+                    <span class="text-white">
+                        {% if stock_return.status.value == 'Pending' %}
+                            <span class="px-2 py-1 bg-yellow-900 text-yellow-300 rounded-full text-xs">Pending</span>
+                        {% elif stock_return.status.value == 'Completed' %}
+                            <span class="px-2 py-1 bg-green-900 text-green-300 rounded-full text-xs">Completed</span>
+                        {% elif stock_return.status.value == 'Rejected' %}
+                            <span class="px-2 py-1 bg-red-900 text-red-300 rounded-full text-xs">Rejected</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Returned By:</span>
+                    <span class="text-white">{{ stock_return.returner.full_name }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Created:</span>
+                    <span class="text-white">{{ stock_return.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                {% if stock_return.processed_at %}
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Processed:</span>
+                    <span class="text-white">{{ stock_return.processed_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Processed By:</span>
+                    <span class="text-white">{{ stock_return.processor.full_name if stock_return.processor else 'N/A' }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="bg-gray-700 rounded-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4">Original Issue Information</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Request No:</span>
+                    <span class="text-white">{{ stock_return.issue_line.request.request_no }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Issued Date:</span>
+                    <span class="text-white">{{ stock_return.issue_line.request.issued_at.strftime('%Y-%m-%d %H:%M') if stock_return.issue_line.request.issued_at }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Location:</span>
+                    <span class="text-white">{{ stock_return.issue_line.request.location.office }} - {{ stock_return.issue_line.request.location.room }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Purpose:</span>
+                    <span class="text-white">{{ stock_return.issue_line.request.purpose }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Details -->
+    <div class="bg-gray-700 rounded-lg p-4 mb-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Item Details</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <span class="text-gray-400 block">Item Name:</span>
+                <span class="text-white font-medium">{{ stock_return.issue_line.item.name }}</span>
+            </div>
+            <div>
+                <span class="text-gray-400 block">Item Code:</span>
+                <span class="text-white">{{ stock_return.issue_line.item.code }}</span>
+            </div>
+            <div>
+                <span class="text-gray-400 block">Originally Issued:</span>
+                <span class="text-white">{{ stock_return.issue_line.quantity_issued }}</span>
+            </div>
+            <div>
+                <span class="text-gray-400 block">Return Quantity:</span>
+                <span class="text-white font-medium">{{ stock_return.quantity_returned }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Return Reason -->
+    <div class="bg-gray-700 rounded-lg p-4 mb-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Return Reason</h3>
+        <p class="text-white">{{ stock_return.return_reason }}</p>
+    </div>
+
+    <!-- Admin Remarks -->
+    {% if stock_return.remarks %}
+    <div class="bg-gray-700 rounded-lg p-4">
+        <h3 class="text-lg font-semibold text-white mb-4">Administrator Remarks</h3>
+        <p class="text-white">{{ stock_return.remarks }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

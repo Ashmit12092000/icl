@@ -1,0 +1,126 @@
+
+{% extends "base.html" %}
+{% block title %}Select Items to Return{% endblock %}
+
+{% block content %}
+<div class="bg-gray-800 shadow rounded-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-white">Select Items to Return</h1>
+        <a href="{{ url_for('stock_return.create_return') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            Back to Search
+        </a>
+    </div>
+
+    <!-- Request Info -->
+    <div class="bg-gray-700 rounded-lg p-4 mb-6">
+        <h3 class="text-lg font-semibold text-white mb-2">Request Information</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+                <span class="text-gray-400">Request No:</span>
+                <span class="text-white ml-2">{{ request.request_no }}</span>
+            </div>
+            <div>
+                <span class="text-gray-400">Issued Date:</span>
+                <span class="text-white ml-2">{{ request.issued_at.strftime('%Y-%m-%d %H:%M') if request.issued_at }}</span>
+            </div>
+            <div>
+                <span class="text-gray-400">Location:</span>
+                <span class="text-white ml-2">{{ request.location.office }} - {{ request.location.room }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Days Since Issue Warning -->
+    {% if request.days_since_issue and request.days_since_issue > 25 %}
+    <div class="bg-yellow-900 border border-yellow-600 rounded-lg p-4 mb-6">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-triangle text-yellow-400 mr-2"></i>
+            <span class="text-yellow-100">
+                Warning: This stock was issued {{ request.days_since_issue }} days ago. 
+                Returns are only allowed within 30 days of issue.
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('stock_return.submit_return') }}" class="space-y-6">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="request_id" value="{{ request.id }}"/>
+        
+        <!-- Return Reason -->
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Return Reason *</label>
+            <textarea name="return_reason" rows="3" placeholder="Explain why you are returning this stock..." 
+                      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required></textarea>
+        </div>
+
+        <!-- Items Table -->
+        <div>
+            <h3 class="text-lg font-semibold text-white mb-4">Select Items to Return</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-gray-700 rounded-lg overflow-hidden">
+                    <thead class="bg-gray-600">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Item</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Issued Qty</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Already Returned</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Available to Return</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">Return Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-600">
+                        {% for line in returnable_lines %}
+                        <tr>
+                            <td class="px-4 py-3">
+                                <div class="text-white font-medium">{{ line.item.name }}</div>
+                                <div class="text-gray-400 text-sm">{{ line.item.code }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-white">{{ line.quantity_issued }}</td>
+                            <td class="px-4 py-3 text-white">{{ line.quantity_returned }}</td>
+                            <td class="px-4 py-3 text-white">{{ line.quantity_returnable }}</td>
+                            <td class="px-4 py-3">
+                                <input type="hidden" name="line_id[]" value="{{ line.id }}"/>
+                                <input type="number" name="quantity[]" min="0" max="{{ line.quantity_returnable }}" step="0.01"
+                                       class="w-24 px-3 py-2 bg-gray-600 border border-gray-500 rounded text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                       placeholder="0">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex justify-end space-x-4">
+            <a href="{{ url_for('stock_return.create_return') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded">
+                Cancel
+            </a>
+            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded">
+                Submit Return Request
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add validation to ensure at least one item has quantity > 0
+    const form = document.querySelector('form');
+    const quantityInputs = document.querySelectorAll('input[name="quantity[]"]');
+    
+    form.addEventListener('submit', function(e) {
+        let hasQuantity = false;
+        quantityInputs.forEach(input => {
+            if (parseFloat(input.value || 0) > 0) {
+                hasQuantity = true;
+            }
+        });
+        
+        if (!hasQuantity) {
+            e.preventDefault();
+            alert('Please enter at least one quantity to return.');
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -54,9 +54,16 @@
             {% endif %}
 
             {% if request.status.value in ['Approved', 'Issued'] %}
-            <a href="{{ url_for('stock_issue.print_approved_request', request_id=request.id) }}" target="_blank" class="inline-flex items-center px-4 py-2 border border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none">
-                <i class="fas fa-print mr-2"></i>Print Request
+            <a href="{{ url_for('stock_issue.print_approved_request', request_id=request.id) }}" 
+               class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                Print Request
             </a>
+            {% if current_user.id == request.requester_id or current_user.role.value == 'superadmin' %}
+            <a href="{{ url_for('stock_return.create_return') }}?search_term={{ request.request_no }}" 
+               class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                Return Stock
+            </a>
+            {% endif %}
             {% endif %}
         </div>
     </div>

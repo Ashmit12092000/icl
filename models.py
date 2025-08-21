@@ -19,6 +19,11 @@ class RequestStatus(Enum):
     REJECTED = 'Rejected'
     ISSUED = 'Issued'
 
+class ReturnStatus(Enum):
+    PENDING = 'Pending'
+    COMPLETED = 'Completed'
+    REJECTED = 'Rejected'
+
 # Association table for User-Warehouse many-to-many relationship
 user_warehouse_assignments = db.Table('user_warehouse_assignments',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
@@ -291,9 +296,81 @@ class StockIssueLine(db.Model):
     # Relationships
     request = db.relationship('StockIssueRequest', back_populates='issue_lines')
     item = db.relationship('Item', back_populates='issue_lines')
+    returns = db.relationship('StockReturn', back_populates='issue_line', cascade='all, delete-orphan')
+
+    @property
+    def quantity_returned(self):
+        """Calculate total quantity returned for this issue line"""
+        return sum(return_obj.quantity_returned for return_obj in self.returns if return_obj.status == ReturnStatus.COMPLETED)
+
+    @property
+    def quantity_returnable(self):
+        """Calculate remaining quantity that can be returned"""
+        if not self.quantity_issued:
+            return Decimal('0')
+        return self.quantity_issued - self.quantity_returned
+
+    @property
+    def is_returnable(self):
+        """Check if this issue line is eligible for return (within 30 days and has returnable quantity)"""
+        if not self.request.issued_at or not self.quantity_issued:
+            return False
+        
+        days_since_issue = (datetime.utcnow() - self.request.issued_at).days
+        return days_since_issue <= 30 and self.quantity_returnable > 0
 
     def __repr__(self):
         return f'<StockIssueLine {self.id}>'
+
+class StockReturn(db.Model):
+    __tablename__ = 'stock_returns'
+
+    id = db.Column(db.Integer, primary_key=True)
+    return_no = db.Column(db.String(20), unique=True, nullable=False)
+    issue_line_id = db.Column(db.Integer, db.ForeignKey('stock_issue_lines.id'), nullable=False)
+    returned_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    quantity_returned = db.Column(db.Numeric(10, 2), nullable=False)
+    return_reason = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.Enum(ReturnStatus), nullable=False, default=ReturnStatus.PENDING)
+    processed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    remarks = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: get_ist_now(), nullable=False)
+    updated_at = db.Column(db.DateTime, default=lambda: get_ist_now(), onupdate=lambda: get_ist_now())
+
+    # Relationships
+    issue_line = db.relationship('StockIssueLine', back_populates='returns')
+    returner = db.relationship('User', foreign_keys=[returned_by])
+    processor = db.relationship('User', foreign_keys=[processed_by])
+
+    def generate_return_no(self):
+        """Generate unique return number"""
+        today = datetime.utcnow()
+        prefix = f"RET{today.strftime('%Y%m%d')}"
+
+        # Find the last return number for today
+        last_return = db.session.query(StockReturn).filter(
+            StockReturn.return_no.like(f"{prefix}%")
+        ).order_by(StockReturn.return_no.desc()).first()
+
+        if last_return:
+            last_seq = int(last_return.return_no[-3:])
+            new_seq = last_seq + 1
+        else:
+            new_seq = 1
+
+        return f"{prefix}{new_seq:03d}"
+
+    @property
+    def is_overdue(self):
+        """Check if the original issue is overdue (more than 30 days)"""
+        if not self.issue_line.request.issued_at:
+            return False
+        days_since_issue = (datetime.utcnow() - self.issue_line.request.issued_at).days
+        return days_since_issue > 30
+
+    def __repr__(self):
+        return f'<StockReturn {self.return_no}>'
 
 class Audit(db.Model):
     __tablename__ = 'audits'

@@ -31,7 +31,7 @@ def create_app():
     csrf.init_app(app)
 
     # Import models to ensure they're registered
-    from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, Audit
+    from models import User, UserRole, Department, Location, Employee, Item, StockBalance, StockEntry, StockIssueRequest, StockIssueLine, StockReturn, Audit
 
     @login_manager.user_loader
     def load_user(user_id):
@@ -50,6 +50,7 @@ def create_app():
     from views.masters import masters_bp
     from views.stock_entry import stock_entry_bp
     from views.stock_issue import stock_issue_bp
+    from views.stock_return import stock_return_bp
     from views.approvals import approvals_bp
     from views.user_management import user_management_bp
     from views.warehouse_management import warehouse_management_bp
@@ -64,6 +65,7 @@ def create_app():
     app.register_blueprint(masters_bp, url_prefix='/masters')
     app.register_blueprint(stock_entry_bp, url_prefix='/stock')
     app.register_blueprint(stock_issue_bp, url_prefix='/requests')
+    app.register_blueprint(stock_return_bp, url_prefix='/returns')
     app.register_blueprint(approvals_bp, url_prefix='/approvals')
     app.register_blueprint(user_management_bp, url_prefix='/admin')
     app.register_blueprint(warehouse_management_bp, url_prefix='/warehouse')

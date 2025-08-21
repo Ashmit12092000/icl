@@ -70,7 +70,7 @@
             position: relative;
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
         }
-        
+
         .nav-link:hover {
             color: #ffffff !important;
             background-color: rgba(255, 255, 255, 0.1);
@@ -405,6 +405,15 @@
                             <a href="{{ url_for('stock_issue.my_requests') }}" class="mobile-dropdown-item">
                                 <i class="fas fa-list mr-3"></i>My Requests
                             </a>
+                            <a href="{{ url_for('stock_issue.request_tracker') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-search mr-3"></i>Track Request
+                            </a>
+                            <a href="{{ url_for('stock_return.my_returns') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-undo mr-3"></i>My Returns
+                            </a>
+                            <a href="{{ url_for('stock_return.create_return') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-plus-circle mr-3"></i>Create Return
+                            </a>
                         </div>
                     </div>
 
@@ -430,7 +439,7 @@
                     </div>
                     {% endif %}
 
-                    {% if current_user.role.value == 'hod' %}
+                    {% if current_user.role.value in ['hod', 'superadmin'] %}
                     <div class="mobile-dropdown">
                         <button class="mobile-nav-link mobile-dropdown-toggle">
                             <div class="flex items-center">
@@ -447,9 +456,6 @@
                             <a href="{{ url_for('approvals.approval_history') }}" class="mobile-dropdown-item">
                                 <i class="fas fa-history text-blue-400"></i>
                                 <span>Approval History</span>
-                            </a>
-                            <a href="{{ url_for('hod_transactions.department_transactions') }}" class="mobile-dropdown-item">
-                                <i class="fas fa-exchange-alt text-green-400"></i>Transaction History
                             </a>
                         </div>
                     </div>
@@ -510,6 +516,9 @@
                             <a href="{{ url_for('admin_transactions.transaction_history') }}" class="mobile-dropdown-item">
                                 <i class="fas fa-exchange-alt mr-3"></i>Transaction History
                             </a>
+                            <a href="{{ url_for('stock_return.pending_returns') }}" class="mobile-dropdown-item">
+                                <i class="fas fa-undo-alt mr-3"></i>Pending Returns
+                            </a>
                         </div>
                     </div>
                     {% endif %}
@@ -526,9 +535,9 @@
             </div>
         </div>
     </nav>
-    
+
     <!-- Logout Button Below Navigation (Admin Only) -->
-   
+
     {% endif %}
 
     <!-- Enhanced Flash Messages -->
