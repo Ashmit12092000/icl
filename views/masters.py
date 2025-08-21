@@ -581,13 +581,17 @@ def item_details(item_id):
         if balance.quantity <= item.low_stock_threshold:
             low_stock_locations.append(balance.location)
     
+    # Get departments for edit modal
+    departments = Department.query.all()
+    
     return render_template('masters/item_details.html', 
                          item=item,
                          stock_balances=stock_balances,
                          recent_entries=recent_entries,
                          recent_issues=recent_issues,
                          total_stock=total_stock,
-                         low_stock_locations=low_stock_locations)
+                         low_stock_locations=low_stock_locations,
+                         departments=departments)
 
 @masters_bp.route('/items/delete/<int:item_id>', methods=['POST'])
 @login_required

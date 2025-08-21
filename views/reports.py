@@ -317,6 +317,10 @@ def full_balance_report():
     department_filter = request.args.get('department_id', type=int)
     location_filter = request.args.get('location_id', type=int)
     show_zero_stock = request.args.get('show_zero_stock', 'no') == 'yes'
+    show_low_stock_only = request.args.get('show_low_stock_only', 'no') == 'yes'
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'item_code')
+    sort_order = request.args.get('sort_order', 'asc')
     
     # Base query
     query = db.session.query(
@@ -338,6 +342,19 @@ def full_balance_report():
         Location, StockBalance.location_id == Location.id
     )
     
+    # Apply search filter
+    if search_query:
+        search_filter = db.or_(
+            Item.code.ilike(f'%{search_query}%'),
+            Item.name.ilike(f'%{search_query}%'),
+            Item.make.ilike(f'%{search_query}%'),
+            Item.variant.ilike(f'%{search_query}%'),
+            Department.name.ilike(f'%{search_query}%'),
+            Location.office.ilike(f'%{search_query}%'),
+            Location.room.ilike(f'%{search_query}%')
+        )
+        query = query.filter(search_filter)
+    
     # Apply filters
     if department_filter:
         query = query.filter(Item.department_id == department_filter)
@@ -347,6 +364,9 @@ def full_balance_report():
     
     if not show_zero_stock:
         query = query.filter(StockBalance.quantity > 0)
+    
+    if show_low_stock_only:
+        query = query.filter(StockBalance.quantity <= Item.low_stock_threshold)
     
     # Filter based on user role
     if current_user.role == UserRole.HOD:
@@ -361,13 +381,34 @@ def full_balance_report():
             # HOD with no managed department sees nothing
             query = query.filter(Item.department_id == -1)
     
-    # Order by department, then item name
-    balance_data = query.order_by(
-        Department.name.asc().nullslast(),
-        Item.name.asc(),
-        Location.office.asc(),
-        Location.room.asc()
-    ).all()
+    # Apply sorting
+    sort_column_map = {
+        'item_code': Item.code,
+        'item_name': Item.name,
+        'department': Department.name,
+        'location': Location.office,
+        'quantity': StockBalance.quantity,
+        'threshold': Item.low_stock_threshold,
+        'last_updated': StockBalance.last_updated
+    }
+    
+    if sort_by in sort_column_map:
+        sort_column = sort_column_map[sort_by]
+        if sort_order == 'desc':
+            if sort_by == 'department':
+                query = query.order_by(sort_column.desc().nullslast())
+            else:
+                query = query.order_by(sort_column.desc())
+        else:
+            if sort_by == 'department':
+                query = query.order_by(sort_column.asc().nullslast())
+            else:
+                query = query.order_by(sort_column.asc())
+    else:
+        # Default sort by item code ascending
+        query = query.order_by(Item.code.asc())
+    
+    balance_data = query.all()
     
     # Get filter options
     if current_user.role == UserRole.HOD and current_user.managed_department:
@@ -389,6 +430,10 @@ def full_balance_report():
                          selected_department=department_filter,
                          selected_location=location_filter,
                          show_zero_stock=show_zero_stock,
+                         show_low_stock_only=show_low_stock_only,
+                         search_query=search_query,
+                         sort_by=sort_by,
+                         sort_order=sort_order,
                          total_items=total_items,
                          total_stock_value=int(total_stock_value),
                          low_stock_count=low_stock_count,
@@ -404,6 +449,10 @@ def export_full_balance():
     department_filter = request.args.get('department_id', type=int)
     location_filter = request.args.get('location_id', type=int)
     show_zero_stock = request.args.get('show_zero_stock', 'no') == 'yes'
+    show_low_stock_only = request.args.get('show_low_stock_only', 'no') == 'yes'
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'item_code')
+    sort_order = request.args.get('sort_order', 'asc')
     
     # Same query as full_balance_report
     query = db.session.query(
@@ -425,6 +474,19 @@ def export_full_balance():
         Location, StockBalance.location_id == Location.id
     )
     
+    # Apply search filter
+    if search_query:
+        search_filter = db.or_(
+            Item.code.ilike(f'%{search_query}%'),
+            Item.name.ilike(f'%{search_query}%'),
+            Item.make.ilike(f'%{search_query}%'),
+            Item.variant.ilike(f'%{search_query}%'),
+            Department.name.ilike(f'%{search_query}%'),
+            Location.office.ilike(f'%{search_query}%'),
+            Location.room.ilike(f'%{search_query}%')
+        )
+        query = query.filter(search_filter)
+    
     # Apply same filters
     if department_filter:
         query = query.filter(Item.department_id == department_filter)
@@ -434,6 +496,9 @@ def export_full_balance():
     
     if not show_zero_stock:
         query = query.filter(StockBalance.quantity > 0)
+    
+    if show_low_stock_only:
+        query = query.filter(StockBalance.quantity <= Item.low_stock_threshold)
     
     if current_user.role == UserRole.HOD:
         if current_user.managed_department:
@@ -446,12 +511,34 @@ def export_full_balance():
         else:
             query = query.filter(Item.department_id == -1)
     
-    balance_data = query.order_by(
-        Department.name.asc().nullslast(),
-        Item.name.asc(),
-        Location.office.asc(),
-        Location.room.asc()
-    ).all()
+    # Apply sorting
+    sort_column_map = {
+        'item_code': Item.code,
+        'item_name': Item.name,
+        'department': Department.name,
+        'location': Location.office,
+        'quantity': StockBalance.quantity,
+        'threshold': Item.low_stock_threshold,
+        'last_updated': StockBalance.last_updated
+    }
+    
+    if sort_by in sort_column_map:
+        sort_column = sort_column_map[sort_by]
+        if sort_order == 'desc':
+            if sort_by == 'department':
+                query = query.order_by(sort_column.desc().nullslast())
+            else:
+                query = query.order_by(sort_column.desc())
+        else:
+            if sort_by == 'department':
+                query = query.order_by(sort_column.asc().nullslast())
+            else:
+                query = query.order_by(sort_column.asc())
+    else:
+        # Default sort by item code ascending
+        query = query.order_by(Item.code.asc())
+    
+    balance_data = query.all()
     
     # Create CSV
     output = StringIO()
@@ -483,7 +570,8 @@ def export_full_balance():
     
     response = make_response(output.getvalue())
     response.headers['Content-Type'] = 'text/csv'
-    response.headers['Content-Disposition'] = f'attachment; filename=full_balance_report_{get_ist_now().strftime("%Y%m%d_%H%M")}.csv'
+    filename_suffix = f"_{search_query.replace(' ', '_')}" if search_query else ""
+    response.headers['Content-Disposition'] = f'attachment; filename=full_balance_report{filename_suffix}_{get_ist_now().strftime("%Y%m%d_%H%M")}.csv'
     return response
 
 @reports_bp.route('/reports/api/chart-data')

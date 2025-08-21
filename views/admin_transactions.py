@@ -130,14 +130,14 @@ def transaction_history():
                 'type': 'entry',
                 'id': entry.transaction_id,
                 'date': entry.transaction_date,
-                'quantity': float(entry.quantity),
-                'description': entry.description,
-                'remarks': entry.remarks,
-                'item_code': entry.item_code,
-                'item_name': entry.item_name,
-                'location': f"{entry.location_office} - {entry.location_room}",
-                'user': entry.user_name,
-                'department': entry.department_name,
+                'quantity': float(entry.quantity) if entry.quantity else 0,
+                'description': entry.description or '',
+                'remarks': entry.remarks or '',
+                'item_code': entry.item_code or '',
+                'item_name': entry.item_name or '',
+                'location': f"{entry.location_office or ''} - {entry.location_room or ''}",
+                'user': entry.user_name or '',
+                'department': entry.department_name or '',
                 'reference': f"Stock Entry #{entry.transaction_id}"
             })
     
@@ -148,15 +148,15 @@ def transaction_history():
                 'type': 'issue',
                 'id': issue.transaction_id,
                 'date': issue.transaction_date,
-                'quantity': float(issue.quantity),
-                'description': issue.description,
-                'remarks': issue.remarks,
-                'item_code': issue.item_code,
-                'item_name': issue.item_name,
-                'location': f"{issue.location_office} - {issue.location_room}",
-                'user': issue.user_name,
-                'department': issue.department_name,
-                'reference': getattr(issue, 'request_no', f"Issue #{issue.transaction_id}")
+                'quantity': float(issue.quantity) if issue.quantity else 0,
+                'description': issue.description or '',
+                'remarks': issue.remarks or '',
+                'item_code': issue.item_code or '',
+                'item_name': issue.item_name or '',
+                'location': f"{issue.location_office or ''} - {issue.location_room or ''}",
+                'user': issue.user_name or '',
+                'department': issue.department_name or '',
+                'reference': getattr(issue, 'request_no', None) or f"Issue #{issue.transaction_id}"
             })
     
     # Sort transactions by date (newest first)

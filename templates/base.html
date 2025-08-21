@@ -53,9 +53,9 @@
 
         /* Clean Navigation Styles */
         .nav-container {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
         .nav-link {
@@ -147,7 +147,7 @@
 
         /* Mobile Navigation */
         .mobile-menu {
-            background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
             border-radius: 16px;
             margin: 8px;
             padding: 16px;
@@ -202,10 +202,10 @@
                     <!-- Brand -->
                     <div class="flex-shrink-0">
                         <a href="{{ url_for('main.dashboard') }}" class="flex items-center group">
-                            <div class="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center mr-3 group-hover:scale-110 transition-transform duration-300">
-                                <i class="fas fa-boxes text-white text-lg"></i>
+                            <div class="w-14 h-14 mr-3 group-hover:scale-110 transition-transform duration-300">
+                                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="KSP Logo" class="h-full w-full object-contain drop-shadow-lg">
                             </div>
-                            <span class="text-xl font-bold brand-text hidden sm:block">StockFlow</span>
+                            <span class="text-xl font-bold brand-text hidden sm:block">KSP Stock</span>
                         </a>
                     </div>
 
@@ -356,17 +356,14 @@
                 </div>
 
                 <!-- User Menu -->
-                <div class="hidden lg:flex items-center space-x-4">
-                    <div class="text-right">
-                        <div class="text-sm font-medium text-white">{{ current_user.full_name }}</div>
-                        <div class="text-xs text-gray-400">{{ current_user.role.value.title() }}</div>
+                <div class="hidden lg:flex items-center space-x-3">
+                    <div class="text-right min-w-0">
+                        <div class="text-sm font-medium text-white truncate max-w-[150px]">{{ current_user.full_name }}</div>
+                        <div class="text-xs text-gray-400 whitespace-nowrap">{{ current_user.role.value.title() }}</div>
                     </div>
-                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
                         <i class="fas fa-user text-white text-sm"></i>
                     </div>
-                    <a href="{{ url_for('auth.logout') }}" class="nav-link text-sm">
-                        <i class="fas fa-sign-out-alt mr-2"></i>Logout
-                    </a>
                 </div>
             </div>
 
@@ -493,7 +490,7 @@
                     <div class="mobile-dropdown">
                         <button class="mobile-nav-link mobile-dropdown-toggle">
                             <div class="flex items-center">
-                                <i class="fas fa-shield-alt mr-3"></i>Administration
+                                <i class="fas fa-shield-alt mr-3"></i>Admin
                             </div>
                             <i class="fas fa-chevron-down"></i>
                         </button>
@@ -508,7 +505,7 @@
                     </div>
                     {% endif %}
 
-                    <div class="border-t border-gray-600 pt-4 mt-4">
+                    <div class="border-t border-gray-600 pt-4 mt-4" style="marging-left:20px;">
                         <div class="px-4 py-2 text-sm text-gray-300">
                             {{ current_user.full_name }} ({{ current_user.role.value.title() }})
                         </div>
@@ -520,6 +517,9 @@
             </div>
         </div>
     </nav>
+    
+    <!-- Logout Button Below Navigation (Admin Only) -->
+   
     {% endif %}
 
     <!-- Enhanced Flash Messages -->
