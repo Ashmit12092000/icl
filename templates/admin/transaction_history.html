@@ -195,7 +195,7 @@
                     </a>
                     {% endif %}
                     
-                    {% for page_num in range(max(1, transactions.page - 2), min(transactions.pages + 1, transactions.page + 3)) %}
+                    {% for page_num in range([1, transactions.page - 2]|max, [transactions.pages + 1, transactions.page + 3]|min) %}
                     <a href="{{ url_for('admin_transactions.transaction_history', page=page_num, **filters) }}" 
                        class="px-3 py-2 {% if page_num == transactions.page %}bg-blue-600{% else %}bg-gray-600 hover:bg-gray-500{% endif %} text-white rounded-lg transition-colors duration-200">
                         {{ page_num }}
