@@ -257,11 +257,48 @@ def issue_stock_request(req_id):
     return redirect(url_for('main.dashboard'))
 
 
-@main_bp.route('/stock_balances')
+@main_bp.route('/stock/balances')
 @login_required
 def stock_balances():
-    balances = StockBalance.query.all()
-    return render_template('stock_balances.html', balances=balances)
+    # Get all locations and items for filters, sort departments by code
+    locations = Location.query.order_by(Location.office).all()
+    items = Item.query.join(Department, Item.department_id == Department.id, isouter=True).order_by(Department.code.asc().nullsfirst(), Item.code).all()
+    departments = Department.query.order_by(Department.code).all()
+
+    # Get stock balances with filters
+    location_id = request.args.get('location_id', type=int)
+    item_id = request.args.get('item_id', type=int)
+    department_id = request.args.get('department_id', type=int)
+
+    query = db.session.query(StockBalance).join(Item).join(Location)
+
+    if location_id:
+        query = query.filter(StockBalance.location_id == location_id)
+    if item_id:
+        query = query.filter(StockBalance.item_id == item_id)
+    if department_id:
+        query = query.filter(Item.department_id == department_id)
+
+    balances = query.all()
+
+    # Calculate stock level indicators
+    high_stock = sum(1 for b in balances if b.quantity > b.item.low_stock_threshold * 2)
+    medium_stock = sum(1 for b in balances if b.item.low_stock_threshold < b.quantity <= b.item.low_stock_threshold * 2)
+    low_stock = sum(1 for b in balances if 0 < b.quantity <= b.item.low_stock_threshold)
+    out_of_stock = sum(1 for b in balances if b.quantity == 0)
+
+    return render_template('stock/balances.html',
+                         balances=balances,
+                         locations=locations,
+                         items=items,
+                         departments=departments,
+                         selected_location=location_id,
+                         selected_item=item_id,
+                         selected_department=department_id,
+                         high_stock=high_stock,
+                         medium_stock=medium_stock,
+                         low_stock=low_stock,
+                         out_of_stock=out_of_stock)
 
 @main_bp.route('/users')
 @login_required

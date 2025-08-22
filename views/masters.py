@@ -480,7 +480,7 @@ def delete_employee(employee_id):
 @role_required('superadmin')
 def items():
     items = Item.query.all()
-    departments = Department.query.all()
+    departments = Department.query.order_by(Department.code).all()
     return render_template('masters/items.html', items=items, departments=departments)
 
 @masters_bp.route('/items/create', methods=['POST'])

@@ -2,6 +2,11 @@
 
 {% block title %}Items -  Stock Management{% endblock %}
 
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/select2-custom.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
@@ -18,10 +23,63 @@
         </div>
     </div>
 
+    <!-- Search and Filter Controls -->
+    <div class="bg-gray-800 shadow rounded-md p-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <!-- Search Input -->
+            <div>
+                <label for="searchInput" class="block text-sm font-medium text-gray-300 mb-2">Search Items</label>
+                <input type="text" id="searchInput" placeholder="Search by code or name..." 
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
+            
+            <!-- Department Filter -->
+            <div>
+                <label for="departmentFilter" class="block text-sm font-medium text-gray-300 mb-2">Department</label>
+                <select id="departmentFilter" class="searchable-select w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}">{{ dept.code }} - {{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Sort By -->
+            <div>
+                <label for="sortBy" class="block text-sm font-medium text-gray-300 mb-2">Sort By</label>
+                <select id="sortBy" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="code">Code</option>
+                    <option value="name">Name</option>
+                    <option value="department">Department</option>
+                    <option value="threshold">Threshold</option>
+                    <option value="created">Created Date</option>
+                </select>
+            </div>
+            
+            <!-- Sort Order -->
+            <div>
+                <label for="sortOrder" class="block text-sm font-medium text-gray-300 mb-2">Order</label>
+                <select id="sortOrder" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="mt-4 flex justify-between items-center">
+            <button onclick="clearFilters()" class="text-gray-400 hover:text-white text-sm">
+                <i class="fas fa-times mr-1"></i>Clear Filters
+            </button>
+            <div class="text-sm text-gray-400">
+                Showing <span id="visibleCount">{{ items|length }}</span> of {{ items|length }} items
+            </div>
+        </div>
+    </div>
+
     <!-- Items Table -->
     <div class="bg-gray-800 shadow overflow-hidden sm:rounded-md">
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-700">
+            <table id="itemsTable" class="min-w-full divide-y divide-gray-700">
                 <thead class="bg-gray-700">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap">Code</th>
@@ -37,7 +95,13 @@
                 </thead>
                 <tbody class="bg-gray-800 divide-y divide-gray-700">
                     {% for item in items %}
-                    <tr>
+                    <tr class="item-row" 
+                        data-code="{{ item.code|lower }}" 
+                        data-name="{{ item.name|lower }}" 
+                        data-department="{{ item.department_id or '' }}" 
+                        data-department-name="{{ item.department.name|lower if item.department else '' }}"
+                        data-threshold="{{ item.low_stock_threshold }}"
+                        data-created="{{ item.created_at.timestamp() }}">
                         <td class="px-4 py-4 text-sm font-medium text-white whitespace-nowrap">{{ item.code }}</td>
                         <td class="px-4 py-4 text-sm text-gray-300">
                             
@@ -125,9 +189,9 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
-                    <select name="department_id" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <select name="department_id" class="searchable-select w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                         <option value="">All Departments</option>
-                        {% for dept in departments %}
+                        {% for dept in departments|sort(attribute='code') %}
                         <option value="{{ dept.id }}">{{ dept.code }} - {{ dept.name }}</option>
                         {% endfor %}
                     </select>
@@ -174,9 +238,9 @@
                 </div>
                 <div class="mb-4">
                     <label class="block text-gray-300 text-sm font-bold mb-2">Department</label>
-                    <select name="department_id" id="editDepartment" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
+                    <select name="department_id" id="editDepartment" class="searchable-select w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white">
                         <option value="">All Departments</option>
-                        {% for dept in departments %}
+                        {% for dept in departments|sort(attribute='code') %}
                         <option value="{{ dept.id }}">{{ dept.code }} - {{ dept.name }}</option>
                         {% endfor %}
                     </select>
@@ -228,7 +292,30 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
 <script>
+// Initialize Select2 for searchable dropdowns
+$(document).ready(function() {
+    $('.searchable-select').select2({
+        placeholder: "Select department...",
+        allowClear: true,
+        width: '100%',
+        theme: 'default'
+    });
+    
+    // Re-initialize Select2 when modals open
+    $('#createModal, #editModal').on('shown.bs.modal', function() {
+        $(this).find('.searchable-select').select2({
+            placeholder: "Select department...",
+            allowClear: true,
+            width: '100%',
+            theme: 'default',
+            dropdownParent: $(this)
+        });
+    });
+});
+
 function openCreateModal() {
     document.getElementById('createModal').classList.remove('hidden');
 }
@@ -261,6 +348,120 @@ function confirmDelete(id, code) {
 
 function closeDeleteModal() {
     document.getElementById('deleteModal').classList.add('hidden');
+}
+
+// Search and filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const departmentFilter = document.getElementById('departmentFilter');
+    const sortBy = document.getElementById('sortBy');
+    const sortOrder = document.getElementById('sortOrder');
+
+    // Add event listeners
+    searchInput.addEventListener('input', filterAndSort);
+    departmentFilter.addEventListener('change', filterAndSort);
+    sortBy.addEventListener('change', filterAndSort);
+    sortOrder.addEventListener('change', filterAndSort);
+});
+
+function filterAndSort() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const departmentFilter = document.getElementById('departmentFilter').value;
+    const sortBy = document.getElementById('sortBy').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    const tbody = document.querySelector('#itemsTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('.item-row'));
+    
+    // Filter rows
+    let visibleRows = rows.filter(row => {
+        const code = row.dataset.code;
+        const name = row.dataset.name;
+        const department = row.dataset.department;
+        
+        const matchesSearch = !searchTerm || code.includes(searchTerm) || name.includes(searchTerm);
+        const matchesDepartment = !departmentFilter || department === departmentFilter;
+        
+        return matchesSearch && matchesDepartment;
+    });
+    
+    // Sort rows
+    visibleRows.sort((a, b) => {
+        let aValue, bValue;
+        
+        switch (sortBy) {
+            case 'code':
+                aValue = a.dataset.code;
+                bValue = b.dataset.code;
+                break;
+            case 'name':
+                aValue = a.dataset.name;
+                bValue = b.dataset.name;
+                break;
+            case 'department':
+                aValue = a.dataset.departmentName;
+                bValue = b.dataset.departmentName;
+                break;
+            case 'threshold':
+                aValue = parseFloat(a.dataset.threshold);
+                bValue = parseFloat(b.dataset.threshold);
+                break;
+            case 'created':
+                aValue = parseFloat(a.dataset.created);
+                bValue = parseFloat(b.dataset.created);
+                break;
+            default:
+                return 0;
+        }
+        
+        if (typeof aValue === 'string') {
+            aValue = aValue.toLowerCase();
+            bValue = bValue.toLowerCase();
+        }
+        
+        let comparison = 0;
+        if (aValue > bValue) {
+            comparison = 1;
+        } else if (aValue < bValue) {
+            comparison = -1;
+        }
+        
+        return sortOrder === 'desc' ? comparison * -1 : comparison;
+    });
+    
+    // Hide all rows first
+    rows.forEach(row => {
+        row.style.display = 'none';
+    });
+    
+    // Show and reorder visible rows
+    visibleRows.forEach((row, index) => {
+        row.style.display = '';
+        tbody.appendChild(row);
+    });
+    
+    // Update visible count
+    document.getElementById('visibleCount').textContent = visibleRows.length;
+    
+    // Show/hide no results message
+    const noResultsRow = tbody.querySelector('.no-results');
+    if (visibleRows.length === 0 && !noResultsRow) {
+        const noResults = document.createElement('tr');
+        noResults.className = 'no-results';
+        noResults.innerHTML = '<td colspan="9" class="px-6 py-4 text-center text-gray-400">No items found matching your criteria.</td>';
+        tbody.appendChild(noResults);
+    } else if (visibleRows.length > 0 && noResultsRow) {
+        noResultsRow.remove();
+    }
+}
+
+function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('departmentFilter').value = '';
+    $('#departmentFilter').val('').trigger('change'); // Clear Select2
+    document.getElementById('sortBy').value = 'code';
+    document.getElementById('sortOrder').value = 'asc';
+    filterAndSort();
 }
 </script>
 {% endblock %}

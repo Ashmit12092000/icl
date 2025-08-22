@@ -61,11 +61,11 @@
 
     <!-- Filters -->
     <div class="glass-effect rounded-2xl p-6">
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div>
                 <label for="location_id" class="block text-sm font-medium text-gray-300 mb-2">Location</label>
-                <select name="location_id" id="location_id" class="w-full bg-gray-700/50 border border-gray-600 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                <select name="location_id" id="location_id" class="searchable-select w-full bg-gray-700/50 border border-gray-600 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
                     <option value="">All Locations</option>
                     {% for location in locations %}
                     <option value="{{ location.id }}" {% if selected_location == location.id|string %}selected{% endif %}>
@@ -74,20 +74,38 @@
                     {% endfor %}
                 </select>
             </div>
+
             <div>
-                <label for="item_id" class="block text-sm font-medium text-gray-300 mb-2">Item</label>
-                <select name="item_id" id="item_id" class="w-full bg-gray-700/50 border border-gray-600 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                    <option value="">All Items</option>
-                    {% for item in items %}
-                    <option value="{{ item.id }}" {% if selected_item == item.id|string %}selected{% endif %}>
-                        {{ item.code }} - {{ item.name }}
+                <label for="department_id" class="block text-sm font-medium text-gray-300 mb-2">Department</label>
+                <select name="department_id" id="department_id" class="searchable-select w-full bg-gray-700/50 border border-gray-600 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                    <option value="">All Departments</option>
+                    {% for department in departments %}
+                    <option value="{{ department.id }}" {% if selected_department == department.id|string %}selected{% endif %}>
+                        {{ department.code }} - {{ department.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="flex items-end">
-                <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 card-hover">
+
+            <div>
+                <label for="item_id" class="block text-sm font-medium text-gray-300 mb-2">Item</label>
+                <select name="item_id" id="item_id" class="searchable-select w-full bg-gray-700/50 border border-gray-600 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                    <option value="">All Items</option>
+                    {% for item in items %}
+                    <option value="{{ item.id }}" {% if selected_item == item.id|string %}selected{% endif %}>
+                        {{ item.code }} - {{ item.name }}
+                        {% if item.department %}({{ item.department.code }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex space-x-2">
+                <button type="submit" class="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 card-hover">
                     <i class="fas fa-filter mr-2"></i>Apply Filters
+                </button>
+                <button type="button" onclick="window.location.href='{{ url_for('main.stock_balances') }}'" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300 card-hover">
+                    <i class="fas fa-times mr-2"></i>Clear
                 </button>
             </div>
         </form>
@@ -182,14 +200,14 @@
                         <td class="px-6 py-4 whitespace-nowrap text-center">
                             <div class="flex justify-center space-x-2">
                                 {% if current_user.role.value in ['superadmin', 'manager', 'hod'] %}
-                                <a href="{{ url_for('stock_entry.entry_form', item_id=balance.item.id, location_id=balance.location.id) }}" 
-                                   class="bg-green-500/20 hover:bg-green-500/30 text-green-300 p-2 rounded-lg transition-colors duration-200" 
+                                <a href="{{ url_for('stock_entry.entry_form', item_id=balance.item.id, location_id=balance.location.id) }}"
+                                   class="bg-green-500/20 hover:bg-green-500/30 text-green-300 p-2 rounded-lg transition-colors duration-200"
                                    title="Add Stock">
                                     <i class="fas fa-plus"></i>
                                 </a>
                                 {% endif %}
-                                <a href="{{ url_for('stock_entry.stock_history', item_id=balance.item.id, location_id=balance.location.id) }}" 
-                                   class="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 p-2 rounded-lg transition-colors duration-200" 
+                                <a href="{{ url_for('stock_entry.stock_history', item_id=balance.item.id, location_id=balance.location.id) }}"
+                                   class="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 p-2 rounded-lg transition-colors duration-200"
                                    title="View History">
                                     <i class="fas fa-history"></i>
                                 </a>
@@ -214,6 +232,11 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Select2 CSS and JS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <script>
 function exportTableToCSV(tableId, filename) {
@@ -256,13 +279,43 @@ setInterval(function() {
 
 
 $(document).ready(function() {
-    // Initialize Select2 for all searchable selects
+    // Initialize Select2 for all searchable selects with custom configuration
     $('.searchable-select').select2({
-        placeholder: "Type to search...",
+        placeholder: function() {
+            return $(this).data('placeholder') || 'Type to search...';
+        },
         allowClear: true,
         width: '100%',
-        theme: 'default'
+        theme: 'default',
+        minimumResultsForSearch: 0, // Always show search box
+        dropdownCssClass: 'select2-dark-dropdown',
+        containerCssClass: 'select2-dark-container',
+        escapeMarkup: function (markup) {
+            return markup; // Allow HTML in options
+        }
     });
+
+    // Set specific placeholders
+    $('#location_id').data('placeholder', 'Search locations...');
+    $('#department_id').data('placeholder', 'Search departments...');
+    $('#item_id').data('placeholder', 'Search items...');
 });
+
+function applyFilters() {
+    const locationId = document.getElementById('location_id').value;
+    const departmentId = document.getElementById('department_id').value;
+    const itemId = document.getElementById('item_id').value;
+
+    const params = new URLSearchParams();
+    if (locationId) params.append('location_id', locationId);
+    if (departmentId) params.append('department_id', departmentId);
+    if (itemId) params.append('item_id', itemId);
+
+    window.location.href = '{{ url_for("main.stock_balances") }}?' + params.toString();
+}
+
+function clearFilters() {
+    window.location.href = '{{ url_for("main.stock_balances") }}';
+}
 </script>
 {% endblock %}
