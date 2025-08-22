@@ -3,3 +3,5 @@ i didn't understand this requirement , due to bad grammer used, i'm giving you t
 improve the ui of request page and approvals page , stock issue page
 
 Fix the error and also the dashboard page is coming same for all user role . Manager and superadmin should have the section of stock issue request currently there is no any option for manager and superadmin . Remove uneccessary ui elements from the dashboard which have no use and irrelevent
+
+okay so in print request page currently it showing all the details perfectly . I just want one more deatils which is if there is any stock return request then display that information also in the print request page . Display all the information of stock return request mention whether it is partially returned or fully returned and many more info .
